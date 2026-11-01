@@ -120,6 +120,40 @@ def q37(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
     return env.ids(result), env.corpus.ids_for("review14"), result
 
 
+def _union(env: Env, fact: str, words: list[str]) -> tuple[set[int], set[int], dict[str, Any]]:
+    """What an agent that tries the term in every language would collect."""
+    found: set[int] = set()
+    last: dict[str, Any] = {}
+    for word in words:
+        last = env.ask(query=word, limit=100)
+        found |= env.ids(last)
+    return found, env.corpus.ids_for(fact), {"total": len(found), **last}
+
+
+def q44(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _union(env, "asakusa", ["淺草寺", "浅草寺", "asakusa"])
+
+
+def q45(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _union(env, "ramen", ["ラーメン", "拉麵", "ramen"])
+
+
+def q46(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _union(env, "clinic", ["病院", "醫院", "doctor"])
+
+
+def q47(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _union(env, "moving", ["引っ越", "搬家", "moved"])
+
+
+def q48(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _union(env, "exercise", ["ジム", "筋トレ", "走った", "健身", "gym"])
+
+
+def q49(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _union(env, "shopping", ["ユニクロ", "購入", "買了", "bought"])
+
+
 QUESTIONS: dict[str, tuple[str, Question]] = {
     "Q01": ("去年今天我做了什麼", q01),
     "Q02": ("我第一次去京都是什麼時候", q02),
@@ -129,6 +163,12 @@ QUESTIONS: dict[str, tuple[str, Question]] = {
     "Q15": ("上次頭痛是什麼時候", q15),
     "Q20": ("我多久剪一次頭髮", q20),
     "Q37": ("兩週前我記了什麼（回顧提醒）", q37),
+    "Q44": ("我去過幾次淺草寺（跨語言）", q44),
+    "Q45": ("我吃過幾次拉麵（跨語言）", q45),
+    "Q46": ("我看過醫生嗎（跨語言）", q46),
+    "Q47": ("我什麼時候搬過家（跨語言）", q47),
+    "Q48": ("我運動過幾次（遠義詞）", q48),
+    "Q49": ("我買過幾次衣服鞋子（遠義詞）", q49),
 }
 
 

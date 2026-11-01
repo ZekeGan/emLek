@@ -20,14 +20,42 @@ from emlek.core.permissions import Caller
 from emlek.core.timeutil import utc_now_iso
 
 TODAY = date(2026, 11, 1)
-TARGET_WORDS = ("京都", "小明", "頭痛", "カット", "猫", "量子糾纏")
+TARGET_WORDS = (
+    "京都",
+    "小明",
+    "頭痛",
+    "カット",
+    "猫",
+    "量子糾纏",
+    "ジム",
+    "筋トレ",
+    "走った",
+    "健身",
+    "gym",
+    "ユニクロ",
+    "購入",
+    "買了",
+    "bought",
+    "淺草",
+    "浅草",
+    "asakusa",
+    "ラーメン",
+    "拉麵",
+    "ramen",
+    "病院",
+    "醫院",
+    "doctor",
+    "引っ越",
+    "搬家",
+    "moved",
+)
 FILLER_START = date(2025, 1, 1)
 FILLER_END = date(2026, 10, 31)
 RESERVED_EVENT_DATES = {date(2025, 11, 1)}  # filler never lands on "last year's today"
 RESERVED_CREATED_DATES = {date(2026, 10, 18)}  # ...or on "two weeks ago"
 
-_PLACES = ["東京", "大阪", "新宿", "渋谷", "淺草", "橫濱", "札幌", "名古屋", "神戶", "福岡"]
-_MEALS = ["ラーメン", "寿司", "カレー", "蕎麦", "天ぷら", "牛丼", "うどん", "餃子"]
+_PLACES = ["東京", "大阪", "新宿", "渋谷", "上野", "橫濱", "札幌", "名古屋", "神戶", "福岡"]
+_MEALS = ["寿司", "カレー", "蕎麦", "天ぷら", "牛丼", "うどん", "餃子", "お好み焼き"]
 _VEHICLES = ["電車", "バス", "自転車", "新幹線"]
 _STUDY = ["日本語", "文法", "数学", "プログラミング", "英語", "歴史"]
 _TEMPLATES = [
@@ -150,6 +178,45 @@ def _planted() -> list[Entry]:
     add("前日の記録", "2025-10-31", "near_miss")
     add("翌日の記録", "2025-11-02", "near_miss")
     add("一昨年の同じ日", "2024-11-01", "near_miss")
+    for when, text in [
+        ("2025-04-06", "浅草寺でおみくじを引いた"),
+        ("2025-12-31", "今天去淺草寺拜拜，人很多"),
+        ("2026-03-08", "Walked around Asakusa and visited Senso-ji temple"),
+        ("2026-09-20", "淺草寺の雷門の前で写真を撮った"),
+    ]:
+        add(f"{text} ({when})", when, "asakusa")
+    for when, text in [
+        ("2025-06-14", "ラーメンを食べた。豚骨が濃かった"),
+        ("2025-10-03", "今晚吃了拉麵，湯頭很棒"),
+        ("2026-01-24", "Had ramen near the station, best miso broth so far"),
+        ("2026-08-30", "昼にラーメン、夜はうどん"),
+    ]:
+        add(f"{text} ({when})", when, "ramen")
+    for when, text in [
+        ("2025-07-07", "病院で定期検診を受けた"),
+        ("2026-02-09", "去醫院做健康檢查，一切正常"),
+        ("2026-09-01", "Doctor visit for the yearly check-up, all good"),
+    ]:
+        add(f"{text} ({when})", when, "clinic")
+    for when, text in [
+        ("2025-09-30", "来月の引っ越しの荷造りを始めた"),
+        ("2026-04-01", "今天搬家，整天都在搬箱子"),
+        ("2026-05-02", "We moved the last boxes into the new apartment"),
+    ]:
+        add(f"{text} ({when})", when, "moving")
+    for when, text in [
+        ("2025-05-10", "ジムで筋トレを一時間した"),
+        ("2025-09-14", "朝から10キロ走った、気持ちいい"),
+        ("2026-02-21", "在健身房練了胸和背"),
+        ("2026-08-15", "Went to the gym for a weight session"),
+    ]:
+        add(f"{text} ({when})", when, "exercise")
+    for when, text in [
+        ("2025-03-02", "ユニクロでセーターを購入した"),
+        ("2025-11-23", "今天去百貨公司買了一件外套"),
+        ("2026-06-06", "Bought a new pair of sneakers at the outlet"),
+    ]:
+        add(f"{text} ({when})", when, "shopping")
     for n, event in enumerate(["2026-10-17", None, "2026-10-18", "2026-12-01"]):
         add(f"二週間前に記したメモ {n}", event, "review14", created="2026-10-18T03:00:00.000Z")
     return e

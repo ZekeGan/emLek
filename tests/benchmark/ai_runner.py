@@ -47,6 +47,12 @@ QUESTIONS: dict[str, tuple[str, str, bool]] = {
     "Q15": ("上次頭痛是什麼時候", "headache_last", False),
     "Q20": ("我多久剪一次頭髮", "haircut", True),
     "Q37": ("兩週前我記了什麼", "review14", True),
+    "Q44": ("我去過幾次淺草寺", "asakusa", True),
+    "Q45": ("我吃過幾次拉麵", "ramen", True),
+    "Q46": ("我看過醫生嗎", "clinic", True),
+    "Q47": ("我什麼時候搬過家", "moving", True),
+    "Q48": ("我運動過幾次", "exercise", True),
+    "Q49": ("我買過幾次衣服鞋子", "shopping", True),
 }
 
 
@@ -70,6 +76,8 @@ def ask(
     allowed: list[str],
     builtin_tools: str = "",
     with_rules: bool = True,
+    rules: str | None = None,
+    model: str | None = None,
     timeout: int = 240,
 ) -> dict[str, Any]:
     cwd = OUT / "ai-cwd"
@@ -94,7 +102,9 @@ def ask(
         "1",
     ]
     if with_rules:
-        command += ["--append-system-prompt", RULES]
+        command += ["--append-system-prompt", rules or RULES]
+    if model:
+        command += ["--model", model]
     started = time.perf_counter()
     done = subprocess.run(
         command,

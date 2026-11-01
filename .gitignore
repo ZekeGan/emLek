@@ -1,0 +1,33 @@
+# Python 環境與快取
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+build/
+dist/
+*.egg-info/
+
+# 私人記憶資料：永遠不進 Git（資料庫、備份、匯出、測試 Vault）
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+vault/
+backups/
+exports/
+*.emlek-backup
+*.enc
+
+# 本機設定與編輯器
+.env
+.env.*
+.claude/settings.local.json
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

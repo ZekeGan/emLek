@@ -1,0 +1,48 @@
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14"]
+build-backend = "uv_build"
+
+[project]
+name = "emlek"
+version = "0.0.0"
+description = "Local-first, single-user long-term text memory store for AI agents"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.14"
+dependencies = [
+    "mcp>=2.3,<3",
+    "cryptography>=50,<51",
+]
+
+[project.scripts]
+emlek = "emlek.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2",
+    "hypothesis>=6.170",
+    "ruff>=0.17",
+    "mypy>=2.4",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+mypy_path = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "slow: fault injection and process-kill tests, run at every milestone end",
+    "scale: 36k-row scale tests",
+]

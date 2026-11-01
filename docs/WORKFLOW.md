@@ -2,6 +2,15 @@
 
 進入 MODE B、寫程式、測試或準備發布時才讀。MODE A 只改文件時不必讀。
 
+## 里程碑迴圈
+
+1. 從 [PROGRESS](PROGRESS.md) 取下一個里程碑；讀 DESIGN 相關章節與 [TEST_PLAN](TEST_PLAN.md) 該里程碑的測試。
+2. 先寫測試（不變式與題庫系統層），再實作。一次只做一個里程碑。
+3. 完成標準＝DESIGN「開發順序」表的標準，加上 ruff、mypy、pytest 全綠。
+4. 在 PROGRESS 的「待驗收」寫 3–5 步的 30 秒驗收清單；有取捨時在 DECISIONS 記一行；提交（英文）。待驗收累積超過約 5 批先暫停新功能。
+5. 高風險里程碑（M3 權限與 MCP、M4 備份還原、M6 信任閘門、M8 加密、M9 清除）提交前，用獨立子 Agent 審查一次，只給該次差異與風險點。
+6. **真實資料閘門**：M4（備份）與 M6（信任閘門）完成前，不處理任何真實資料（含舊日記）；之後也須使用者貼出路徑並同意。
+
 ## 修改與驗證
 
 - 最小必要修改，沿用周圍風格；不加沒被要求的功能、設定或抽象；不順手重構。修錯先重現並定位根因。
@@ -9,14 +18,26 @@
 - 驗證依風險選最小有效組：純文件→連結檢查＋看差異；純邏輯→對應測試＋型別檢查；資料寫入、備份還原、清除→在受控測試資料上跑成功、失敗、取消與復原，並確認原檔未動。需求還在變動時不跑完整測試。
 - 失敗先分類（產品／測試資料／環境）再重跑受影響項目。功能移除時同批更新或刪除對應測試。
 - 回報分清「實際執行」「未執行」「限制」；舊結果不算本輪驗證；不確定的標「我推測」。
-- 高風險改動（徹底清除、備份還原、語句權限）提交前用獨立代理審查一次，只給該次差異與風險點。
-- 每個開發步驟完成時，該步驟啟用的題庫題目須通過（見 [BENCHMARK](BENCHMARK.md)）。
 
-## 專案設定（計畫值；步驟 1 建立後才算驗證）
+## 技術決定（D40）
 
-- 環境：Python 3.14（uv 管理，`.python-version` 已固定）。工具：pytest、ruff、mypy。
-- 型別：`uv run mypy src`　格式與檢查：`uv run ruff format --check .`、`uv run ruff check .`　測試：快速＝受影響測試，完整＝`uv run pytest`。
-- 受控測試資料：專案內 `tests/` 的合成資料與暫存目錄；`vault/`、`backups/`、`exports/` 已被 `.gitignore` 排除。
+- **目錄**：`pyproject.toml`、`uv.lock`；`src/emlek/`：`cli/`（`parser.py`、`commands/*.py`、`output.py`）、`mcp_server/`（唯一匯入 `mcp` 的地方）、`core/`（`service.py` 每個操作一個函式、`permissions.py`、`errors.py`、`schemas.py`、`db.py`、`migrations/0001_*.sql…`、`search.py`、`sensitivity.py`、`tags.py`、`backup.py`、`export.py`、`purge.py`）、`config.py`、`logging.py`；`tests/`：`unit/`、`invariants/`（`test_t01_*.py`…）、`benchmark/`（`system/`、`ai/`、`synth/`）。
+- **權限在核心**：`core/permissions.py` 一張「操作×入口（cli、mcp、mcp-readonly）」的表；每個 `service` 函式收 `ctx: Caller(channel, interactive, readonly)`。外殼只做輸入輸出轉換；MCP 依該表註冊工具，唯讀是工具清單的性質，不是每個工具裡的旗標檢查。
+- **封裝**：`[project.scripts] emlek = "emlek.cli:main"`；建置後端用 uv 預設的 `uv_build`。MCP 註冊用安裝後的絕對路徑 `.venv\Scripts\emlek.exe`，不用 `uv run`（啟動慢且受工作目錄影響）；`mcp` 延遲匯入，純 CLI 呼叫保持快速。
+- **CLI**：`argparse`（無依賴、約 30 個子命令足夠，自訂結束碼 0–5 本來就要手動對應）。內文輸入支援 `--body-file` 與標準輸入，明確以 UTF-8 解碼（中文 Windows 終端機可能預設 cp950）。
+- **MCP**：官方 `mcp` 套件包一層約百行的轉接層，版本 `>=2.3,<3`；不自己寫 JSON-RPC。伺服器行程絕不 `print()`，標準輸出只有協定；日誌走檔案或標準錯誤。
+- **遷移**：`PRAGMA user_version` 加編號 `.sql` 檔，每個在單一交易內，只往前；升級前自動 `VACUUM INTO` 備份。每個里程碑才加自己的表，讓遷移機制從 M1 就被使用。
+- **設定**：`tomllib` 讀資料夾內 `config.toml`；優先序為參數、環境變數、檔案、預設。只有 `timezone` 與 `data_dir`。
+- **日誌**：標準庫 `logging`，輪替檔放資料夾 `logs/`，只記操作名稱與編號，不記內容。
+- **加密與權限**：`cryptography` 的 AES-256-GCM＋`hashlib.scrypt`；資料夾權限用 `icacls`（`os.chmod` 在 Windows 無效）。
+- **搜尋**：`revisions.body_norm` 為 NFKC＋casefold 副本，FTS5 外部內容表與 LIKE 都用它；結果以記錄為單位。
+- **測試**：pytest＋Hypothesis；標記 `slow`（故障注入、行程終止）、`scale`（3.6 萬筆）；合成資料產生器固定種子。
+
+## 專案設定
+
+- 環境：Python 3.14（uv 管理，`.python-version` 已固定）。依賴由 `uv.lock` 鎖定。
+- 型別：`uv run mypy src`　格式與檢查：`uv run ruff format --check .`、`uv run ruff check .`　測試：快速＝`uv run pytest -m "not slow and not scale"`，完整＝`uv run pytest`。
+- 受控測試資料：`tests/` 的合成資料與暫存目錄；`vault/`、`backups/`、`exports/` 已被 `.gitignore` 排除。
 - 版本號有程式後才開始；建立 `CHANGELOG.md`（Unreleased 區），不逐批升版。
 
 ## 發布前關卡（使用者說要發布時才做）

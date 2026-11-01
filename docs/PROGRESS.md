@@ -4,12 +4,28 @@
 
 ## 現況
 
-- 模式：**MODE A**（規劃）。使用者輸入「執行」後才進入 MODE B。
+- 模式：**MODE A**。文件已定稿並通過兩份獨立審稿，環境已就緒，等使用者輸入「執行」開始 M1。
 - 沒有產品程式、測試或 Vault。尚無版本號。
-- Git：`main`，遠端 `origin` = https://github.com/ZekeGan/emLek.git（公開）；與遠端是否同步以 `git status` 為準。
-- 環境（已驗證）：Python 3.14.10（uv 0.13.6，`.python-version` 固定 3.14）、SQLite 3.53.1、FTS5 trigram 可用；Claude Code 2.1.316 已安裝（官方程式、校驗碼與簽章已驗證，**需使用者登入一次**）；MCP 官方套件等在 3.14 可解析（尚未安裝）。`.venv` 已建立但未裝套件。
-- 未驗證：BitLocker／裝置加密（Windows 11 家用版，需管理員權限才查得到；使用者可在「設定 → 隱私權與安全性 → 裝置加密」自行查看）；規模與真實資料效能。
-- 文件：AGENTS、DESIGN、DESIGN_TAGS、AGENT_RULES、WORKFLOW、BENCHMARK、TEST_PLAN、DECISIONS（D01–D37）；LICENSE 為 MIT。舊藍圖在 `docs/archive`。**審稿與最佳化進行中**（見下方）。
+- Git：`main`，遠端 `origin` = https://github.com/ZekeGan/emLek.git（公開）；是否同步以 `git status` 為準。敏感詞檢查掛在本機 pre-commit 與 pre-push，標記清單目前是空的。
+- 環境（已驗證）：Python 3.14.10（uv 0.13.6）、SQLite 3.53.1；`pyproject.toml` 與 `uv.lock` 已建立，執行期與開發套件已安裝進 `.venv`（mcp 2.3.0、cryptography 50.0.2、pytest 9.2.0、ruff 0.17.3、mypy 2.4.1、hypothesis 6.170.14），尚無 `src/` 與測試；Claude Code 2.1.316 已安裝（簽章與校驗碼已驗證）。
+- 未驗證：BitLocker／裝置加密（家用版，需管理員權限）；Codex CLI 目前不在 PATH（未安裝）；真實資料效能。
+
+## 開發前就緒檢查（M0）
+
+- 完成：規格整理（審稿 A 的 22 項、審稿 B 的建議，見 D38）、里程碑 M1–M10（D39）、技術決定（D40）、TEST_PLAN（25 條不變式）、題庫 41 題啟用＋2 題保留、實驗記錄（D41）。
+- 驗證過的關鍵事實：套件在 Python 3.14 可安裝並可匯入；mcp 2.x 的伺服器類別是 `MCPServer`（不是 1.x 的 FastMCP），匯入約 2 秒，故延遲匯入；Python 從 Git Bash 預設用 cp950 輸出，故一律明確用 UTF-8；AES-256-GCM＋scrypt 往返與竄改偵測可用；3.6 萬筆實長度資料 2 字元 LIKE 約 0.5 秒；清除需 checkpoint＋VACUUM 才無殘留；`icacls` 免管理員可設資料夾權限。
+
+## 待使用者決定（都不阻擋開始 M1）
+
+1. **PIN 強化**（M6 前）：為 `phrase`、`notice enable`、`restore`、`tag merge·remove`、`sensitivity set` 這幾個「只有你能做」的命令加一組只有你知道的 PIN。原因：實測 Claude Code 的 PowerShell 工具回報標準輸入是終端機，單靠終端機檢查擋不住會開偽終端機的 AI。我的建議：採用（約 30 行標準庫）。暫定：不採用，僅檢查三條標準串流。
+2. **清除的最終確認**（M9 前）：現在是在對話裡答「是」，AI 再呼叫 `purge_confirm`。我的建議：最終確認改在你自己的終端機執行（`emlek purge r<id>`），MCP 只開放預覽。暫定：維持對話確認。
+3. **備份放哪裡**（M4 前）：建議放不同磁碟或資料夾。
+
+## 需要你做的小事
+
+- 登入 Claude Code 一次（開終端機輸入 `claude`，照瀏覽器提示登入）；AI 層基準測試與日後審查會用到。
+- 看一下「設定 → 隱私權與安全性 → 裝置加密」有沒有這一項，告訴我結果。
+- 若要用 Codex CLI 接入，需先安裝（M3 前）。
 
 ## 待驗收
 
@@ -17,15 +33,10 @@
 
 ## 下一步
 
-收到「執行」後做 DESIGN 步驟 1：建立 `pyproject.toml`、安裝 pytest／ruff／mypy 並驗證 WORKFLOW「專案設定」的指令，再實作資料庫與 `save`／`get`／`search`，用合成資料測試，並建立題庫的系統層測試骨架。
+收到「執行」後做 M1：建立 `src/emlek` 套件骨架與測試目錄，實作 `init`、`doctor`（基本）、設定檔、遷移 0001、`save`／`get`，以 T01–T03、T05、T06、T11、T25 驗證。
 
 ## 觀察清單（到時要主動提醒使用者）
 
 題庫第一次取得基準值後，與使用者約定「不理想」門檻；若低於門檻，提醒評估：語意搜尋、近期加權排序、主題摘要（見 BENCHMARK）。
 
-未來需求：手機使用（隨手記錄、連接器橋接、遠端查詢）等 AGENT 技術更成熟後再評估，見 DESIGN「未來需求」；目前一律本機。
-
-## 待確認（不阻擋開始）
-
-- 這台電腦是否支援 Windows 裝置加密／BitLocker。
-- 使用者登入 Claude Code 一次（AI 層基準測試用）。
+未來需求：手機使用（隨手記錄、連接器橋接、遠端查詢）等 AGENT 技術更成熟後再評估；其他已記錄的缺口見 DESIGN「未來需求」第 6 項。目前一律本機。

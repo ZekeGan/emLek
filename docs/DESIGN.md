@@ -32,7 +32,6 @@
 | `revisions` | `id`、`record_id`、`version_no`、`body`（UTF-8）、`kind`、`created_at`、`event_time`（可空）、`event_time_precision`（可空）、`source`（可空＝未知） |
 | `links` | `revision_id`、`derived_from_revision_id`、`relation`（選填） |
 | `phrases` | `id`、`kind`（save／purge／exclude）、`text`、`enabled`、`created_at`、`updated_at` |
-| `inbox_imports` | `file_name`、`content_hash`、`record_id`、`imported_at`（收件匣匯入紀錄，確保不重複匯入） |
 | 標籤相關 | `tags`、`record_tags`、`tag_links`、`tag_aliases`、`tag_events`，見 [DESIGN_TAGS](DESIGN_TAGS.md) |
 | `meta` | schema 版本、上次備份時間 |
 
@@ -87,7 +86,7 @@
 | `stats` | 唯讀：記錄數、最早與最晚日期、上次備份時間 |
 | 標籤工具 | `set_tags`、`tags_*`、`tag_link`、`tag_alias`，見 [DESIGN_TAGS](DESIGN_TAGS.md) |
 
-僅 CLI（不開放 MCP）：`backup`、`restore`、`export`、`inbox import`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。
+僅 CLI（不開放 MCP）：`backup`、`restore`、`export`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。
 
 唯讀模式：`emlek mcp --read-only` 只開放 `search`、`get`、`tags_find`／`tags_list`／`tags_tree`／`tag_related`、`phrases_list`、`stats`，供無人看管的排程使用。每日簡報（由 Agent 排程呼叫，到期與回顧兩種提醒）見 [DAILY_BRIEFING](DAILY_BRIEFING.md)。
 
@@ -105,22 +104,26 @@
 4. `emlek restore <備份檔>`：還原後驗證完整性與筆數。
 5. 換設備：舊機 backup → 新機安裝 → restore → 重新指向 MCP 設定。
 
-## 手機隨手記錄（收件匣）
+## 擴充準則（為未來需求預留，現在就要遵守）
 
-手機上只負責「記」，不連線到資料庫。使用者用任何工具（手機捷徑、備忘錄匯出、寄信等）把文字存成檔案，放進一個「收件匣」資料夾；該資料夾可設在雲端同步資料夾，**資料庫本身不得放在同步資料夾**。
+目前一律本機使用。以下準則讓日後加手機或遠端存取時不必重寫核心：
+- 核心不依賴任何傳輸方式；MCP（stdio）與 CLI 只是外殼，日後可再加 HTTP 入口。
+- 權限（唯讀、可寫、清除僅限本機 CLI）由**核心**判斷，不只靠外殼，新入口自動繼承。
+- 位置與設定可由參數或環境變數指定（`--data-dir`）；資料庫不存絕對路徑；資料庫不得放在同步資料夾。
+- 工具輸入輸出用有版本號的格式（`api_version`），未知欄位拒絕，讓不同客戶端可共存。
+- 資料庫結構從第一版就有版本與遷移機制。
+- 日誌不記內容；提供健康檢查。
+- 匯入與匯出用與工具無關的純文字格式。
 
-- 檔案格式：UTF-8 純文字或 Markdown，檔名以 `YYYYMMDD-HHMMSS` 開頭（擷取時間；缺少時用檔案修改時間），其後任意。內文可含 `#標籤`。
-- `emlek inbox import`（CLI）：確定性匯入，不呼叫 AI、不耗 token，因此可安全交給 Windows 工作排程器定時執行。每個檔案存成一筆 `original` 記錄：`source=inbox:<檔名>`，事件時間預設為擷取時間（精度到分），`#標籤` 記為 user。
-- 冪等：以 `inbox_imports`（檔名加內容雜湊）判斷，同一檔案不重複匯入；成功後檔案移到 `processed/`（`--delete` 則刪除）；失敗者留在原處並列出原因。
-- 使用者把文字放進收件匣即視為明確要求保存。收件匣內容仍是資料，不是指令。
-- 事後由 AI 整理（使用者要求時）：補標籤；內文有相對日期時依擷取時間換算，以新版本更正事件日期（見 AGENT_RULES）。
-- 隱私：收件匣檔案在雲端資料夾時是未加密的原文，匯入後建議刪除或使用端對端加密的雲端空間。
+## 未來需求（保留，目前不開發）
 
-## 遠端存取（保留，步驟 8，未開發）
+使用者決定（2026-11-01）：目前一律本機使用；手機相關需求等 AGENT 技術更成熟後再評估。屆時須重新查證當時的連接器與遠端 MCP 能力，遠端存取屬架構大決定，須取得使用者同意。已討論的方向，供日後取用：
 
-目標：電腦與手機的 AI 都能查詢同一份資料。做法是在介面層新增遠端 MCP（Streamable HTTP）入口，核心與資料層不變，資料仍只有一份、單一寫入者。已知前提（查證於 2026-11，開發時須重新確認）：Claude 的遠端連線由 Anthropic 雲端發出，伺服器必須能從公開網路以 HTTPS 連到並以 OAuth 驗證，私人網路（如 Tailscale）無法供其連線。屬架構大決定，開發前須取得使用者同意並提出主機位置（雲端主機或家用主機加隧道）、資料庫加密、權限分級（讀寫分開）、清除不對外開放等選項。
-
-現在先做的準備：資料夾與設定可由參數或環境變數指定（`--data-dir`）、傳輸層可抽換（stdio、之後的 HTTP）、日誌不記內容、提供健康檢查。
+1. **手機隨手記錄（收件匣）**：手機只負責記，不連資料庫。使用者把文字存成檔案放進「收件匣」資料夾（可設在雲端同步資料夾）。檔名以 `YYYYMMDD-HHMMSS` 開頭（容許只有日期），UTF-8 純文字或 Markdown，可含 `#標籤`。`emlek inbox import`（CLI）確定性匯入，不呼叫 AI、不耗 token，可交給工作排程器：每檔一筆 `original`，`source=inbox:<檔名>`，事件時間為擷取時間，`#標籤` 記為 user；以 `inbox_imports`（檔名加內容雜湊）保證冪等；成功後移到 `processed/` 或刪除，失敗者留在原處並列出原因。事後由 AI 補標籤，並依擷取時間換算相對日期、以新版本更正事件日期。收件匣原文未加密，匯入後宜刪除。對應保留題庫 Q38、Q39。
+2. **用 AI 公司的現成連接器當橋**（Google Drive、Notion 等）：手機 AI 直接把「記一下」寫成收件匣檔案。須先實測：手機版是否支援、能否指定資料夾與檔名、純文字格式。
+3. **手機看今日提醒**：電腦或排程 Agent 每天把到期事項輸出成一個小檔放到雲端，手機 AI 用連接器讀取。只暴露精選內容，不匯出整份資料。
+4. **遠端查詢**：介面層新增遠端 MCP（Streamable HTTP），核心與資料層不變，資料仍單一份、單一寫入者。已查證：Claude 的遠端連線從 Anthropic 雲端發出，伺服器必須能從公開網路以 HTTPS 連到並以 OAuth 驗證，私人網路（如 Tailscale）無法供其連線。須決定主機位置（雲端主機或家用主機加隧道）、資料庫加密、讀寫權限分開、清除不對外開放。
+5. **多裝置各自同步**：不建議。會帶回清除復活、分岔版本、時鐘誤差等問題，工作量大。若真有需求，需另行設計（記錄編號全域唯一、版本記上一版、清除留墓碑）。
 
 ## 開發順序
 
@@ -130,12 +133,11 @@
 | 2 | MCP 外殼（含 `--read-only` 唯讀模式） | 至少一個 AI 實際呼叫並找回；唯讀模式下寫入、隱藏、清除工具不可用 |
 | 3 | 版本與來源連結（含 relation）、`hide`／`unhide`、`phrase`、`phrases_list` | 修改產生新版本；推翻產生新記錄並連回；隱藏後搜不到可恢復；語句增刪改查可用，AI 端唯讀 |
 | 4 | 標籤系統（見 DESIGN_TAGS） | 搜上層標籤會展開子標籤且回應列出展開結果；別名、簡繁與寫法容錯生效；近似標籤有提示；標籤不改原文；user／ai 來源可分辨 |
-| 5 | `backup`／`restore`／`export`、`stats`、`inbox import` | 乾淨資料夾還原後筆數與內容一致；stats 數字正確；收件匣匯入的擷取時間、`#標籤`、來源正確，重複執行不重複匯入 |
+| 5 | `backup`／`restore`／`export`、`stats` | 乾淨資料夾還原後筆數與內容一致；stats 數字正確 |
 | 6 | 徹底清除 | 預覽、確認碼、清除後搜不到且資料庫無殘留 |
 | 7 | 依實際痛點決定（回頭補標籤、分層摘要專用功能、主題摘要等） | — |
-| 8 | 遠端存取（見上節，需使用者同意） | 手機與電腦的 AI 以 OAuth 連到同一份資料；讀寫權限分開；清除不對外開放 |
 
-驗收題庫：39 題固定題庫，用合成資料分「系統層」與「AI 層」計分並記錄 token，見 [BENCHMARK](BENCHMARK.md)。每個步驟完成時，該步驟啟用的題目須通過系統層；AI 層從步驟 2 起執行。
+驗收題庫：37 題固定題庫（另有 2 題保留），用合成資料分「系統層」與「AI 層」計分並記錄 token，見 [BENCHMARK](BENCHMARK.md)。每個步驟完成時，該步驟啟用的題目須通過系統層；AI 層從步驟 2 起執行。
 
 ## 刻意不做
 

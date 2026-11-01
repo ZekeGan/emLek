@@ -21,6 +21,7 @@ from emlek import __version__
 from emlek.config import load_config
 from emlek.core import search as core_search
 from emlek.core import service
+from emlek.core import stats as core_stats
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
 from emlek.core.permissions import PERMISSIONS, Caller, Channel
@@ -133,6 +134,9 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
             ),
         )
 
+    def stats() -> dict[str, Any]:
+        return run("stats", lambda db: core_stats.stats(db, caller))
+
     read = ToolAnnotations(read_only_hint=True)
     write = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False)
     catalog: dict[str, tuple[Callable[..., dict[str, Any]], str, ToolAnnotations]] = {
@@ -142,6 +146,7 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
             write,
         ),
         "get": (get, "讀取一筆記憶，ref 如 r12 或 r12.v3。", read),
+        "stats": (stats, "記憶庫的筆數、日期範圍、上次備份時間（不含內容）。", read),
         "search": (
             search,
             "搜尋記憶：關鍵字、日期範圍、排序、分頁。回傳記錄、片段、總筆數。",

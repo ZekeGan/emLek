@@ -36,10 +36,23 @@ PERMISSIONS: dict[str, frozenset[Channel]] = {
     "search": _ANY,
     "reindex": _CLI,
     "mcp": _CLI,
+    "stats": _ANY,
+    "backup": _CLI,
+    "restore": _CLI,
+    "export": _CLI,
 }
+
+# Operations that only a person at a real terminal may run (stdin, stdout and stderr are all
+# terminals). A PIN is added on top of this in M6.
+INTERACTIVE_ONLY = frozenset({"restore"})
 
 
 def require(caller: Caller, operation: str) -> None:
     allowed = PERMISSIONS.get(operation, frozenset())
     if caller.channel not in allowed:
         raise EmlekError(ErrorCode.NOT_PERMITTED, f"此入口不能執行 {operation}")
+    if operation in INTERACTIVE_ONLY and not caller.interactive:
+        raise EmlekError(
+            ErrorCode.NOT_PERMITTED,
+            f"{operation} 必須在你自己的終端機執行，不能由管線、腳本或 AI 代跑",
+        )

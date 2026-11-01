@@ -54,5 +54,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--read-only", action="store_true", help="唯讀模式：工具清單不含任何寫入工具"
     )
 
+    backup = sub.add_parser("backup", help="建立一致性備份（預設放 config.toml 的 backup_dir）")
+    backup.add_argument("--to", help="備份資料夾（覆寫設定）")
+
+    restore = sub.add_parser("restore", help="以備份取代目前資料庫（必須在你自己的終端機執行）")
+    restore.add_argument("file", help="備份檔路徑")
+    restore.add_argument("--yes", action="store_true", help="略過確認提問")
+
+    export = sub.add_parser("export", help="匯出完整 JSONL 與可閱讀的 Markdown")
+    export.add_argument("--out", help="輸出資料夾（預設為資料夾內的 exports）")
+    export.add_argument("--exclude-high", action="store_true", help="排除最高敏感度的記錄")
+
+    sub.add_parser("stats", help="記錄數、日期範圍、上次備份")
+
     sub.add_parser("reindex", help="重建全文索引（索引與資料不一致時使用）")
     return parser

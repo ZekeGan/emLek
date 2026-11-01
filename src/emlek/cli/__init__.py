@@ -6,7 +6,7 @@ import logging
 import sys
 from collections.abc import Callable, Sequence
 
-from emlek.cli.commands import doctor, get, init, save, search
+from emlek.cli.commands import doctor, get, init, maintenance, save, search
 from emlek.cli.commands import mcp as mcp_command
 from emlek.cli.output import Output, print_error, print_output
 from emlek.cli.parser import build_parser
@@ -20,6 +20,10 @@ _HANDLERS: dict[str, Callable[..., Output | None]] = {
     "search": search.run,
     "reindex": search.run_reindex,
     "mcp": mcp_command.run,
+    "backup": maintenance.run_backup,
+    "restore": maintenance.run_restore,
+    "export": maintenance.run_export,
+    "stats": maintenance.run_stats,
 }
 
 

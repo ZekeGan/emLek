@@ -335,6 +335,7 @@ def search(
     next_cursor = _encode_cursor(applied, direction, page[-1]["key"]) if page and more else None
 
     results = [_describe(db, row, terms) for row in page]
+    hints = _zero_result_hints(db) if terms and not ordered and not warnings else []
     return {
         "total": len(ordered),
         "undated": undated,
@@ -344,7 +345,34 @@ def search(
         "results": results,
         "next_cursor": next_cursor,
         "warnings": warnings,
+        "hints": hints,
     }
+
+
+def _script_shares(db: Database) -> dict[str, float]:
+    kana = han = latin = 0
+    for (body,) in db.conn.execute("SELECT body FROM revisions ORDER BY id DESC LIMIT 400"):
+        for char in body[:600]:
+            code = ord(char)
+            if 0x3040 <= code <= 0x30FF:
+                kana += 1
+            elif 0x4E00 <= code <= 0x9FFF:
+                han += 1
+            elif char.isascii() and char.isalpha():
+                latin += 1
+    total = (kana + han + latin) or 1
+    return {"kana": kana / total, "han": han / total, "latin": latin / total}
+
+
+def _zero_result_hints(db: Database) -> list[str]:
+    shares = _script_shares(db)
+    labels = (("kana", "日文假名"), ("han", "漢字（中文或日文）"), ("latin", "英文字母"))
+    present = [label for key, label in labels if shares[key] >= 0.05]
+    mixed = "、".join(present) if present else "多種寫法"
+    return [
+        f"沒有找到。這個記憶庫的內容含 {mixed}；請把查詢詞換成另外的語言或寫法"
+        "（日文要同時試平假名、片假名與漢字），試過仍沒有才能說找不到。"
+    ]
 
 
 def _describe(db: Database, row: dict[str, Any], terms: list[str]) -> dict[str, Any]:

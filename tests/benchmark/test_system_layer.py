@@ -1,4 +1,4 @@
-"""Benchmark system layer (M2): can the tools reach the answer? No AI involved.
+"""Benchmark system layer (M2-M4): can the tools reach the answer? No AI involved.
 
 Each question is answered by calling the search tool the way an agent would, then scored
 against the planted facts. Scores follow BENCHMARK.md (F1 bands). All M2 questions must
@@ -19,8 +19,11 @@ import synth
 
 from emlek.config import load_config
 from emlek.core import search
+from emlek.core.backup import create_backup, restore_backup
 from emlek.core.db import Database
+from emlek.core.export import export_all, verify_export
 from emlek.core.permissions import Caller, Channel
+from emlek.core.stats import stats
 from emlek.core.vault import init_vault
 
 REPORT_DIR = Path(__file__).resolve().parents[2] / "benchmark-output"
@@ -52,6 +55,7 @@ class Env:
     db: Database
     caller: Caller
     corpus: synth.Corpus
+    workdir: Path
 
     def ask(self, **kwargs: Any) -> dict[str, Any]:
         kwargs.setdefault("timezone", TZ)
@@ -69,7 +73,7 @@ def env(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Env]:
     db = Database.open(load_config(path).db_path)
     corpus = synth.build_corpus()
     synth.load(db, caller, corpus)
-    yield Env(db, caller, corpus)
+    yield Env(db, caller, corpus, path.parent)
     db.close()
 
 
@@ -120,6 +124,45 @@ def q37(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
     return env.ids(result), env.corpus.ids_for("review14"), result
 
 
+def q21(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    create_backup(env.db, env.caller, env.workdir / "bk21", env.workdir / "vault")
+    shown = stats(env.db, env.caller)
+    found = {shown["records"], int(bool(shown["last_backup_at"]))}
+    return found, {len(env.corpus.entries), 1}, shown
+
+
+def q25(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    made = create_backup(env.db, env.caller, env.workdir / "bk25", env.workdir / "vault")
+    clean = env.workdir / "new-computer"
+    person = Caller(Channel.CLI, interactive=True)
+    init_vault(person, clean)
+    restore_backup(person, clean, Path(made["file"]))
+    restored = Database.open(load_config(clean).db_path)
+    try:
+        assert restored.conn.execute("SELECT count(*) FROM records").fetchone()[0] == len(
+            env.corpus.entries
+        )
+        result = search.search(
+            restored,
+            env.caller,
+            date_from="2025-11-01",
+            date_to="2025-11-01",
+            limit=100,
+            timezone=TZ,
+        )
+    finally:
+        restored.close()
+    return env.ids(result), env.corpus.ids_for("lastyear"), result
+
+
+def q27(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    made = export_all(env.db, env.caller, env.workdir / "ex27")
+    checked = verify_export(Path(made["folder"]))
+    total = len(env.corpus.entries)
+    assert checked["counts"]["record"] == total and checked["markdown_files"] == total
+    return {made["records"]}, {total}, {"total": made["records"], **checked["header"]}
+
+
 def _union(env: Env, fact: str, words: list[str]) -> tuple[set[int], set[int], dict[str, Any]]:
     """What an agent that tries the term in every language would collect."""
     found: set[int] = set()
@@ -163,6 +206,9 @@ QUESTIONS: dict[str, tuple[str, Question]] = {
     "Q15": ("上次頭痛是什麼時候", q15),
     "Q20": ("我多久剪一次頭髮", q20),
     "Q37": ("兩週前我記了什麼（回顧提醒）", q37),
+    "Q21": ("我存了多少筆、上次備份是哪天", q21),
+    "Q25": ("換電腦：備份後在乾淨資料夾還原", q25),
+    "Q27": ("匯出全部資料", q27),
     "Q44": ("我去過幾次淺草寺（跨語言）", q44),
     "Q45": ("我吃過幾次拉麵（跨語言）", q45),
     "Q46": ("我看過醫生嗎（跨語言）", q46),
@@ -172,7 +218,7 @@ QUESTIONS: dict[str, tuple[str, Question]] = {
 }
 
 
-def test_every_m2_question_reaches_full_marks(env: Env) -> None:
+def test_every_system_question_reaches_full_marks(env: Env) -> None:
     report: list[dict[str, Any]] = []
     for qid, (text, run) in QUESTIONS.items():
         found, gold, raw = run(env)
@@ -184,20 +230,20 @@ def test_every_m2_question_reaches_full_marks(env: Env) -> None:
                 "score": f1_score(found, gold),
                 "found": len(found),
                 "expected": len(gold),
-                "total_reported": raw["total"],
+                "total_reported": raw.get("total", raw.get("records")),
                 "tool_result_tokens_est": est_tokens(payload),
             }
         )
     REPORT_DIR.mkdir(exist_ok=True)
     summary = {
         "layer": "system",
-        "milestone": "M2",
+        "milestone": "M4",
         "corpus_entries": len(env.corpus.entries),
         "questions": report,
         "total_tokens_est": sum(q["tool_result_tokens_est"] for q in report),
         "note": "token numbers are character-based estimates, not measured model usage",
     }
-    (REPORT_DIR / "system-m2.json").write_text(
+    (REPORT_DIR / "system-m4.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     failed = {q["id"]: q["score"] for q in report if q["score"] != 5}

@@ -44,6 +44,8 @@ def run(args: argparse.Namespace) -> Output:
     )
     if result["next_cursor"]:
         lines.append(f"下一頁：--cursor {result['next_cursor']}")
+    for hint in result["hints"]:
+        lines.append(f"提示：{hint}")
     if result["warnings"]:
         lines.append("注意：搜尋索引與資料不一致，已改用完整掃描，請執行 emlek reindex")
     return Output(result, "\n".join(lines))

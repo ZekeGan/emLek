@@ -6,16 +6,18 @@ import re
 import sqlite3
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from emlek.config import load_config
+from emlek.config import Config, load_config
 from emlek.core.db import Database, load_migrations, wal_safe
 from emlek.core.errors import EmlekError
 from emlek.core.permissions import Caller, require
 from emlek.core.search import index_status
 from emlek.core.vault import acl_principals, current_user_principal
 
+MAX_BACKUP_AGE_DAYS = 14
 _SYNC_HINT = re.compile(r"onedrive|dropbox|google ?drive|icloud|nextcloud|syncthing|box sync", re.I)
 _TRUSTED_PRINCIPAL_ENDINGS = ("\\system", "\\administrators")
 
@@ -80,7 +82,6 @@ def run_checks(
             "無法確認；Windows 家用版沒有 BitLocker，資料庫與日誌在磁碟上是明文",
         )
     )
-    checks.append(Check("backup", "info", "備份功能於 M4 提供"))
     status = "ok"
     if any(c.status == "fail" for c in checks):
         status = "fail"
@@ -148,6 +149,21 @@ def _check_database(data_dir: Path) -> list[Check]:
                         "請執行 emlek reindex",
                     )
                 )
+            checks.append(_check_backup(db, config))
     finally:
         db.close()
     return checks
+
+
+def _check_backup(db: Database, config: Config) -> Check:
+    last = db.conn.execute("SELECT value FROM meta WHERE key = 'last_backup_at'").fetchone()
+    where = (
+        f"（備份資料夾：{config.backup_dir}）" if config.backup_dir else "（尚未設定備份資料夾）"
+    )
+    if last is None:
+        return Check("backup", "warn", f"尚無備份，請執行 emlek backup {where}")
+    taken = datetime.fromisoformat(last[0].replace("Z", "+00:00"))
+    age = (datetime.now(UTC) - taken).days
+    if age > MAX_BACKUP_AGE_DAYS:
+        return Check("backup", "warn", f"上次備份是 {age} 天前（{last[0]}）{where}")
+    return Check("backup", "ok", f"上次備份 {last[0]} {where}")

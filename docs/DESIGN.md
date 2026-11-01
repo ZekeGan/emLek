@@ -28,17 +28,21 @@
 
 | 表 | 欄位 |
 |---|---|
-| `records` | `id`、`created_at`、`hidden`、`hidden_at` |
+| `records` | `id`、`created_at`、`hidden`、`hidden_at`、`tags`（選填） |
 | `revisions` | `id`、`record_id`、`version_no`、`body`（UTF-8）、`kind`、`created_at`、`event_time`（可空）、`event_time_precision`（可空）、`source`（可空＝未知） |
-| `links` | `revision_id`、`derived_from_revision_id` |
+| `links` | `revision_id`、`derived_from_revision_id`、`relation`（選填） |
 | `phrases` | `id`、`kind`（save／purge／exclude）、`text`、`enabled`、`created_at`、`updated_at` |
-| `meta` | schema 版本 |
+| `meta` | schema 版本、上次備份時間 |
 
-另有 FTS5 虛擬表索引 `revisions.body`。
+另有 FTS5 虛擬表，索引 `revisions.body` 與 `records.tags`。
 
 規則：
 - `revisions` 寫入後不可更新或刪除（徹底清除除外）；修改＝同一 `record_id` 新增下一個 `version_no`。
 - `ai_summary`、`inference` 以 `links` 指向依據版本。
+- `links.relation` 選填：`supersedes`（推翻）、`supports`（支持）、`supplements`（補充）、`derived`（衍生）；空＝未指定。
+- 改錯字、補充＝同一記錄新增版本；改變看法或推翻結論＝新記錄，並以 `links` 連回被推翻的版本。這樣才能呈現「某時間點改變了想法」的完整時間線。
+- `tags` 是 AI 存入時補上的輔助索引（地點、人物、主題），不是原文；可事後補或修改，不影響原文不可變。
+- `event_time` 一律存實際日期（「昨天」須由 AI 換算），保留精度；未知則空，查詢時另行標示，不排除也不假裝完整。
 - 資料庫不存絕對路徑；搜尋預設排除 `hidden`。
 
 ## 自訂語句
@@ -70,15 +74,22 @@
 
 | 動作 | 說明 |
 |---|---|
-| `save` | 新增；參數：內容、kind、來源、事件時間（可空）、依據版本（可空） |
+| `save` | 新增；參數：內容、kind、來源、事件時間（可空）、標籤（可空）、依據或關聯版本與 relation（可空） |
 | `amend` | 為既有記錄新增版本 |
-| `search` | 全文搜尋，回傳記錄、版本、來源、片段 |
+| `set_tags` | 補或修改某記錄的標籤（不動原文） |
+| `search` | 全文搜尋＋日期範圍；回傳記錄、版本、來源、片段、總筆數 |
 | `get` | 讀取指定記錄／版本 |
 | `hide`／`unhide` | 隱藏與恢復 |
 | `purge_preview`／`purge_confirm` | 徹底清除兩步 |
 | `phrases_list` | 唯讀取得啟用語句 |
+| `stats` | 唯讀：記錄數、最早與最晚日期、上次備份時間 |
 
-僅 CLI（不開放 MCP）：`backup`、`restore`、`export`、`phrase add·set·remove`。查詢預設 20 筆、上限 100；過長內容標明已截斷並提供取得剩餘部分的方式。
+僅 CLI（不開放 MCP）：`backup`、`restore`、`export`、`phrase add·set·remove`。
+
+搜尋規則：
+- 日期範圍可指定依 `event_time` 或 `created_at`；事件時間未知的記錄另計並標示，不默默排除。
+- 一律回傳總筆數並分頁（預設 20 筆、上限 100，附下一頁游標）；過長內容標明已截斷並提供取得剩餘部分的方式。
+- 同一天或同一時段的日期範圍即可瀏覽當天或當期所有紀錄。
 
 ## 備份與搬家
 
@@ -92,16 +103,18 @@
 
 | 步驟 | 內容 | 完成標準 |
 |---|---|---|
-| 1 | 資料庫＋`save`／`get`／`search`（CLI） | 合成資料存取、中日英搜尋正確；版本不覆蓋 |
+| 1 | 資料庫＋`save`／`get`／`search`（CLI），含日期範圍、總筆數與分頁、事件時間 | 合成資料存取、中日英搜尋正確；日期篩選與分頁正確；版本不覆蓋 |
 | 2 | MCP 外殼 | 至少一個 AI 實際呼叫並找回 |
-| 3 | 版本與來源連結、`hide`／`unhide`、`phrase`、`phrases_list` | 修改產生新版本；隱藏後搜不到可恢復；語句增刪改查可用，AI 端唯讀 |
-| 4 | `backup`／`restore`／`export` | 乾淨資料夾還原後筆數與內容一致 |
+| 3 | 版本與來源連結（含 relation）、標籤與 `set_tags`、`hide`／`unhide`、`phrase`、`phrases_list` | 修改產生新版本；推翻產生新記錄並連回；標籤可被搜到且不改原文；隱藏後搜不到可恢復；語句增刪改查可用，AI 端唯讀 |
+| 4 | `backup`／`restore`／`export`、`stats` | 乾淨資料夾還原後筆數與內容一致；stats 數字正確 |
 | 5 | 徹底清除 | 預覽、確認碼、清除後搜不到且資料庫無殘留 |
 | 6 | 依實際痛點決定 | — |
 
 ## 刻意不做
 
-身分／SID／named pipe 隔離、授權 grant、提案→確認→提交流程、獨立安全帳本與防備份復活、restic、獨立搜尋庫與 outbox、長期分析掃描、向量搜尋、知識圖譜。需要時從 archive 取用。
+身分／SID／named pipe 隔離、授權 grant、提案→確認→提交流程、獨立安全帳本與防備份復活、restic、獨立搜尋庫與 outbox、長期分析掃描與自動統整、知識圖譜、簡繁對照表（先靠 AI 同時搜兩種寫法，常漏再補）。需要時從 archive 取用。
+
+**語意搜尋（用意思找）暫不做**，屬架構大決定，須經使用者同意。重新評估條件：使用一段時間後，準備約 30 題含模糊問法（心情、感覺、類似的事）的測試問句，用使用者同意的資料跑；超過三分之一找不到或找不全才正式提案。模型變強可降低門檻：更大的上下文可由 AI 直接分批讀取日期範圍內的紀錄代替部分搜尋。
 
 ## 已知限制
 
@@ -109,3 +122,4 @@
 - 徹底清除不影響既有備份與第三方副本。
 - 軟體層不加密資料庫本體。
 - 只能找回使用者主動保存的內容。
+- 搜尋可以接近完整，不能保證完整（標籤沒標、用詞不同都可能漏）；回答須如實說明範圍。

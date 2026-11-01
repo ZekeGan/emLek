@@ -7,17 +7,19 @@ import sys
 from collections.abc import Callable, Sequence
 
 from emlek.cli.commands import doctor, get, init, save, search
+from emlek.cli.commands import mcp as mcp_command
 from emlek.cli.output import Output, print_error, print_output
 from emlek.cli.parser import build_parser
 from emlek.core.errors import EmlekError, ErrorCode
 
-_HANDLERS: dict[str, Callable[..., Output]] = {
+_HANDLERS: dict[str, Callable[..., Output | None]] = {
     "init": init.run,
     "doctor": doctor.run,
     "save": save.run,
     "get": get.run,
     "search": search.run,
     "reindex": search.run_reindex,
+    "mcp": mcp_command.run,
 }
 
 
@@ -47,5 +49,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         internal = EmlekError(ErrorCode.INTERNAL, "發生未預期的錯誤，詳情見日誌")
         print_error(internal, as_json=args.json)
         return internal.exit_code
-    print_output(output, as_json=args.json)
+    if output is not None:  # `emlek mcp` owns stdout for the protocol and prints nothing
+        print_output(output, as_json=args.json)
     return 0

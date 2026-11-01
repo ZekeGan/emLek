@@ -35,6 +35,7 @@ PERMISSIONS: dict[str, frozenset[Channel]] = {
     "get": _ANY,
     "search": _ANY,
     "reindex": _CLI,
+    "mcp": _CLI,
 }
 
 

@@ -49,5 +49,10 @@ def build_parser() -> argparse.ArgumentParser:
     find.add_argument("--include-hidden", action="store_true", help="包含已隱藏的記錄")
     find.add_argument("--max-sensitivity", choices=SENSITIVITY_LEVELS, default="high")
 
+    serve = sub.add_parser("mcp", help="以 MCP（stdio）提供工具給 AI 使用")
+    serve.add_argument(
+        "--read-only", action="store_true", help="唯讀模式：工具清單不含任何寫入工具"
+    )
+
     sub.add_parser("reindex", help="重建全文索引（索引與資料不一致時使用）")
     return parser

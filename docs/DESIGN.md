@@ -1,146 +1,111 @@
-# Emlek 簡化版設計
+# emLek 設計
 
-狀態：規劃中，尚未實作。本設計取代 [archive](archive/) 內的完整版藍圖；藍圖保留供日後需要某功能時參考，不是現行規格。
+狀態：規劃中，尚未實作。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)。
 
-## 定位與假設
+## 定位
 
-- 單一使用者、單一電腦（Windows）、本機優先，資料不上雲。
-- 信任使用者自己的 AI；不防範 AI 被攻陷，因此沒有身分隔離、授權 grant、提案確認流程。
-- 只管理文字：日記、聊天、筆記、決定。
-- 目標：AI 能存、能找、能追溯來源；換設備時能簡單備份與搬家。
-- 避免過度開發：只做下列功能，其餘等實際遇到痛點再加。
+單一使用者、單一 Windows 電腦、本機優先、不上雲；只管理文字；信任使用者自己的 AI。目標：AI 能存、能找、能追溯來源，換設備能簡單備份搬家。只做本檔列出的功能，其餘等實際遇到痛點再加。
 
-## 核心原則（保留自完整版）
+## 核心原則
 
-1. **原文不可變**：修改＝新增版本，舊版本仍在。
-2. **來源與時間必標**：未知就記為未知，不補造作者、日期、證據。
-3. **三類內容分開標記**：`original`（使用者原文）、`ai_summary`（AI 整理）、`inference`（AI 推論）。
-4. **預設不存、不讀**：一般問答不碰記憶庫；只有明確指令才存（見 [AGENT_RULES](AGENT_RULES.md)）。
-5. **可離開**：隨時可匯出成 JSON／Markdown，不被本軟體綁住。
+1. 原文不可變：修改＝新增版本。
+2. 來源與時間必標；未知記為未知，不補造。
+3. 內容分三類：`original`（使用者原文）、`ai_summary`（AI 整理）、`inference`（AI 推論）。
+4. 預設不讀不存；只有明確指令才存（[AGENT_RULES](AGENT_RULES.md)）。
+5. 可離開：隨時匯出 JSON／Markdown。
 
 ## 技術選型
 
-| 項目 | 選擇 | 理由 |
-|---|---|---|
-| 語言 | Python（受支援的最新穩定版） | 標準庫即有 SQLite；使用者不需會寫，由 AI 開發 |
-| 資料庫 | 單一 SQLite 檔 | 備份＝一個檔案；無額外服務 |
-| 搜尋 | 同檔內 FTS5（trigram） | 內建、免安裝；索引與資料同檔，不會不同步 |
-| AI 入口 | MCP（stdio）＋命令列 CLI | MCP 為標準；CLI 是任何 Agent 都能用的保底 |
-| 加密備份 | 成熟現成加密函式庫，密碼加密 | 不自寫加密 |
-| 日常加密 | Windows 裝置加密／BitLocker（依電腦支援） | 軟體不處理金鑰 |
-
-核心邏輯只寫一份，MCP 與 CLI 只是薄外殼，因此可接 Claude、Codex 與未來的 LLM 平台。
-
-中日英搜尋：trigram 需 3 字元以上；1–2 字元的短詞（如人名、單字）改用逐筆掃描（LIKE），資料量小時可接受。實測不足時再評估其他方案。
-
-## 資料模型（三張表）
-
-| 表 | 內容 |
+| 項目 | 選擇 |
 |---|---|
-| `records` | 記憶身分：`id`、`created_at`、`hidden`（是否隱藏）、`hidden_at` |
-| `revisions` | 每個版本：`id`、`record_id`、`version_no`、`body`（UTF-8 原文）、`kind`（original／ai_summary／inference）、`created_at`、`event_time`（可空）、`event_time_precision`（可空）、`source`（來源說明，可空＝未知） |
-| `links` | 版本之間的來源關係：`revision_id`、`derived_from_revision_id` |
+| 語言 | Python 3.14（uv 管理） |
+| 資料庫 | 單一 SQLite 檔 |
+| 搜尋 | 同檔 FTS5 trigram；1–2 字元短詞改逐筆掃描（LIKE），資料量小時可接受，不足再評估 |
+| AI 入口 | MCP（stdio）＋命令列 CLI；核心只寫一份，兩者都是薄外殼 |
+| 加密 | 日常靠 Windows 裝置加密；備份可選密碼加密，用現成函式庫，不自寫 |
 
-另有 `meta`（schema 版本）、`phrases`（使用者自訂語句，見下節）與 FTS5 虛擬表（索引 `revisions.body`）。
+## 資料模型
 
-## 自訂語句（可增刪改查）
-
-使用者可自行設定 AI 該辨識哪些語句，不必改文件或程式。語句存在資料庫的 `phrases` 表，隨備份與搬家一起帶走。
-
-| 欄位 | 說明 |
+| 表 | 欄位 |
 |---|---|
-| `id` | 編號 |
-| `kind` | `save`（存入觸發）、`purge`（徹底清除觸發）、`exclude`（不算指令的範例，如「上週記住了文法」） |
-| `text` | 語句 |
-| `enabled` | 是否啟用 |
-| `created_at`、`updated_at` | 時間 |
+| `records` | `id`、`created_at`、`hidden`、`hidden_at` |
+| `revisions` | `id`、`record_id`、`version_no`、`body`（UTF-8）、`kind`、`created_at`、`event_time`（可空）、`event_time_precision`（可空）、`source`（可空＝未知） |
+| `links` | `revision_id`、`derived_from_revision_id` |
+| `phrases` | `id`、`kind`（save／purge／exclude）、`text`、`enabled`、`created_at`、`updated_at` |
+| `meta` | schema 版本 |
 
-初始化時預設放入：`save`＝記住、幫我記一下、存起來、記憶；`purge`＝完全刪除；`exclude`＝上週記住了文法。使用者可全部改掉。
+另有 FTS5 虛擬表索引 `revisions.body`。
 
-命令（僅 CLI，不開放為 MCP 工具）：
+規則：
+- `revisions` 寫入後不可更新或刪除（徹底清除除外）；修改＝同一 `record_id` 新增下一個 `version_no`。
+- `ai_summary`、`inference` 以 `links` 指向依據版本。
+- 資料庫不存絕對路徑；搜尋預設排除 `hidden`。
+
+## 自訂語句
+
+使用者以 CLI 增刪改查，存在資料庫隨備份搬家。預設：`save`＝記住、幫我記一下、存起來、記憶；`purge`＝完全刪除；`exclude`＝上週記住了文法（不算指令的範例）。
 
 | 命令 | 作用 |
 |---|---|
-| `emlek phrase list [kind]` | 查：列出語句 |
+| `emlek phrase list [kind]` | 查 |
 | `emlek phrase add <kind> "<語句>"` | 增 |
-| `emlek phrase set <id> "<新語句>"` | 改（也可啟用／停用） |
+| `emlek phrase set <id> "<新語句>"` | 改、啟用或停用 |
 | `emlek phrase remove <id>` | 刪 |
 
-安全規則：
-- AI 只能透過 MCP 的唯讀工具 `phrases_list` **讀取**目前語句，不能增刪改。
-- 動到 `purge` 類語句（新增、修改、刪除、停用）必須在真人互動的終端機中，重新輸入語句確認；非互動環境（腳本、AI 代跑）一律拒絕。
-- 沒有任何啟用的 `purge` 語句時，徹底清除功能等同關閉。
-- 限制：若 AI 本身能在你的電腦執行命令，理論上仍可嘗試呼叫 CLI；互動終端機確認是主要防線，不是絕對隔離。
-- 語句只是給 AI 的判斷依據，不是機械比對：AI 仍依語意判斷，拿不準就問。徹底清除另有預覽加確認碼的兩步流程，不因語句設定而省略。
+- AI 只能用 MCP 唯讀工具 `phrases_list`。
+- 動到 `purge` 類語句必須在真人互動終端機重新輸入確認；非互動環境（腳本、AI 代跑）拒絕。沒有啟用的 `purge` 語句時，徹底清除關閉。
+- 限制：能執行命令的 AI 理論上仍可嘗試呼叫 CLI；互動確認是主要防線，不是絕對隔離。
+- 語句只是 AI 的判斷依據，不是機械比對。
 
-規則：
-- `revisions` 一經寫入不可更新或刪除（徹底清除除外）。
-- 修改某筆記憶＝為同一 `record_id` 新增下一個 `version_no`。
-- `ai_summary`、`inference` 應以 `links` 指向其依據的版本。
-- 資料庫內不存絕對路徑，方便搬家。
-- 搜尋預設排除 `hidden` 的記錄。
+## 刪除
 
-## 刪除（三層）
+| 層級 | 行為 |
+|---|---|
+| 隱藏（預設的「刪除」） | `hidden=1`，搜尋與一般讀取看不到，可 `unhide` 恢復 |
+| 徹底清除 | 真正移除該記錄所有版本與索引，無法恢復；對話流程見 [AGENT_RULES](AGENT_RULES.md) §3 |
 
-| 層級 | 名稱 | 行為 | 誰能觸發 |
-|---|---|---|---|
-| A | 不刪除 | — | — |
-| B | **隱藏**（預設的「刪除」） | `hidden=1`，搜尋與一般讀取看不到，資料仍在，可恢復 | AI 聽到一般的刪除要求時只做這個 |
-| C | **徹底清除** | 從資料庫真正移除該記錄所有版本與索引，無法恢復 | 只有使用者事前登記的特別指令，且經兩段確認 |
-
-第一版先實作 A／B；C 可稍後加入，不影響資料結構。C 的規則在 [AGENT_RULES](AGENT_RULES.md) §3。
-
-C 的設計要點：
-- 工具分兩步：`purge_preview` 回傳將被清除的內容摘要與一次性確認碼；`purge_confirm` 帶該確認碼才執行。AI 無法跳過預覽。
-- 清除後執行 SQLite 的 `VACUUM` 以回收被刪內容所在空間。
-- **清除不會改動既有備份檔**。備份裡可能仍有該資料，需要使用者自行刪除舊備份；清除成功的回覆要明確提醒這點。
-- 已傳給第三方 AI 平台的內容，本機無法收回，也需在回覆中說明。
+徹底清除的實作：`purge_preview` 回傳摘要與一次性確認碼，`purge_confirm` 帶確認碼才執行；完成後 `VACUUM`。**不改動既有備份**，回覆須提醒使用者自行處理舊備份，並說明已傳給第三方 AI 的內容無法收回。第一版先做隱藏，徹底清除在步驟 5。
 
 ## 工具（MCP／CLI 共用）
 
 | 動作 | 說明 |
 |---|---|
-| `save` | 新增記憶；參數含內容、kind、來源、事件時間（可空）、依據版本（可空） |
-| `amend` | 為既有記憶新增版本 |
-| `search` | 全文搜尋，回傳記錄、版本、來源、原文片段 |
+| `save` | 新增；參數：內容、kind、來源、事件時間（可空）、依據版本（可空） |
+| `amend` | 為既有記錄新增版本 |
+| `search` | 全文搜尋，回傳記錄、版本、來源、片段 |
 | `get` | 讀取指定記錄／版本 |
-| `hide` / `unhide` | 隱藏與恢復 |
-| `purge_preview` / `purge_confirm` | 徹底清除（兩步） |
-| `phrases_list` | 唯讀：取得目前啟用的自訂語句 |
-| `backup` / `restore` / `export` / `phrase add·set·remove` | 僅 CLI，不開放為 MCP 工具 |
+| `hide`／`unhide` | 隱藏與恢復 |
+| `purge_preview`／`purge_confirm` | 徹底清除兩步 |
+| `phrases_list` | 唯讀取得啟用語句 |
 
-查詢預設 20 筆、上限 100；內容過長要標明被截斷並提供取得剩餘部分的方式。
+僅 CLI（不開放 MCP）：`backup`、`restore`、`export`、`phrase add·set·remove`。查詢預設 20 筆、上限 100；過長內容標明已截斷並提供取得剩餘部分的方式。
 
 ## 備份與搬家
 
-1. 所有資料在一個 Vault 資料夾，主體是一個 `.db` 檔，內含資料與搜尋索引。
-2. `emlek backup`：使用 SQLite 內建的一致性備份（backup API 或 `VACUUM INTO`）產生帶日期的單一檔案，不直接複製使用中的檔案。可選 `--encrypt`，以密碼加密；密碼遺失則無法還原，指令需明確提醒。
-3. `emlek export`：輸出 JSON（完整，含所有版本與關係）與 Markdown（供閱讀）。這是脫離本軟體的保險。
-4. `emlek restore <備份檔>`：在新電腦還原；還原後驗證資料庫完整性與筆數。
-5. 換設備：舊機 `backup` → 新機安裝 → `restore` → 把 AI 的 MCP 設定指向新 Vault。
+1. 資料在一個 Vault 資料夾，主體是一個 `.db`（含搜尋索引）。
+2. `emlek backup`：用 SQLite 一致性備份（backup API 或 `VACUUM INTO`）產生帶日期的單一檔，不直接複製使用中的檔案。可選 `--encrypt` 密碼加密，須提醒密碼遺失無法還原。
+3. `emlek export`：完整 JSON（含所有版本與關係）＋供閱讀的 Markdown。
+4. `emlek restore <備份檔>`：還原後驗證完整性與筆數。
+5. 換設備：舊機 backup → 新機安裝 → restore → 重新指向 MCP 設定。
 
 ## 開發順序
 
-每一步都應可實際使用。
-
 | 步驟 | 內容 | 完成標準 |
 |---|---|---|
-| 1 | 資料庫＋`save`／`get`／`search`（CLI） | 用假資料存取、搜尋中日英正確；版本不覆蓋 |
-| 2 | MCP 外殼 | 至少一個 AI 能實際呼叫並找回 |
-| 3 | 版本、來源連結、`hide`／`unhide`、`phrase` 命令與 `phrases_list` | 修改產生新版本；隱藏後搜不到、可恢復；語句增刪改查可用，AI 端唯讀 |
-| 4 | `backup`／`restore`／`export` | 備份後在乾淨資料夾還原，筆數與內容一致 |
-| 5 | 徹底清除（兩步） | 預覽、確認碼、清除後確實搜不到且資料庫內無殘留 |
-| 6 | 依實際痛點再決定 | — |
+| 1 | 資料庫＋`save`／`get`／`search`（CLI） | 合成資料存取、中日英搜尋正確；版本不覆蓋 |
+| 2 | MCP 外殼 | 至少一個 AI 實際呼叫並找回 |
+| 3 | 版本與來源連結、`hide`／`unhide`、`phrase`、`phrases_list` | 修改產生新版本；隱藏後搜不到可恢復；語句增刪改查可用，AI 端唯讀 |
+| 4 | `backup`／`restore`／`export` | 乾淨資料夾還原後筆數與內容一致 |
+| 5 | 徹底清除 | 預覽、確認碼、清除後搜不到且資料庫無殘留 |
+| 6 | 依實際痛點決定 | — |
 
-測試只用合成假資料，不讀取使用者真實日記或私人記憶。
+## 刻意不做
 
-## 刻意不做（目前）
-
-身分／SID／named pipe 隔離、授權 grant 系統、提案→確認→提交流程、獨立安全帳本與防備份復活、restic、獨立搜尋庫與 outbox、長期分析掃描 manifest、向量搜尋、知識圖譜。若日後確實需要，從 [archive](archive/) 取用。
+身分／SID／named pipe 隔離、授權 grant、提案→確認→提交流程、獨立安全帳本與防備份復活、restic、獨立搜尋庫與 outbox、長期分析掃描、向量搜尋、知識圖譜。需要時從 archive 取用。
 
 ## 已知限制
 
-- AI 是否正確判斷「要不要存」依賴使用指示，無法由軟體強制。
-- 徹底清除不影響既有備份與第三方平台上的副本。
-- 軟體層不加密資料庫本體；保護靠裝置加密，備份可另加密。
-- 只管理使用者主動保存的內容；沒存過的無法找回。
+- AI 是否正確判斷「要不要存」靠使用指示，軟體無法強制。
+- 徹底清除不影響既有備份與第三方副本。
+- 軟體層不加密資料庫本體。
+- 只能找回使用者主動保存的內容。

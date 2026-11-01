@@ -8,17 +8,17 @@
 
 - 只有明確要求（記住、幫我記一下…）才存；「我上週記住了文法」這類敘述不觸發。觸發語句可用 `emlek phrase` 自行增刪改查。
 - 原文不被覆蓋：修改新增版本。原文、AI 整理、AI 推論分開標記；未知的作者與日期標未知。
-- 中日英全文搜尋。
+- 中日英全文搜尋，加上標籤系統（階層、別名），方便用「日本」找到東京、京都的紀錄。
 - 一般刪除只是隱藏、可恢復；真正抹除需要你登記的特別語句，AI 還會再問一次「是／否（無法回復）」。
 - 資料全在一個資料庫檔：`backup` 產生單一備份（可加密碼），`restore` 在新電腦還原，`export` 輸出 JSON／Markdown。
 
 ## 不做
 
-不上雲、不做多使用者、不做身分隔離或授權系統、不做向量搜尋或知識圖譜。
+不上雲、不做多使用者、不做身分隔離或授權系統、不做向量搜尋或完整知識圖譜。
 
 ## 文件
 
-[設計](docs/DESIGN.md)・[AI 使用規則](docs/AGENT_RULES.md)・[進度](docs/PROGRESS.md)・[決策紀錄](docs/DECISIONS.md)・[開發 Agent 指引](AGENTS.md)・[舊藍圖](docs/archive/)（非現行）
+[設計](docs/DESIGN.md)・[標籤系統](docs/DESIGN_TAGS.md)・[AI 使用規則](docs/AGENT_RULES.md)・[驗收題庫](docs/BENCHMARK.md)・[進度](docs/PROGRESS.md)・[決策紀錄](docs/DECISIONS.md)・[開發 Agent 指引](AGENTS.md)・[舊藍圖](docs/archive/)（非現行）
 
 ## 環境
 

@@ -4,27 +4,37 @@
 
 ## 現況
 
-- 模式：**MODE B；M3 已驗收，M4 進行中**（授權範圍到 M4，M5 需使用者驗收或下一道指示）。
-- 已有 `src/emlek`（init、doctor、save、get、search、reindex、mcp、遷移 0001–0002）與 176 項測試（175 項快速＋1 項 36000 筆規模）；只有合成測試資料。版本號 0.0.0，尚未發布。
+- 模式：**MODE B；M4 已完成，等使用者驗收**（授權到 M4，M5 需使用者驗收或下一道指示）。
+- 已有 `src/emlek`（init、doctor、save、get、search、reindex、mcp、backup、restore、export、stats、遷移 0001–0002）與 212 項測試（211 項快速＋1 項 36000 筆規模）；只有合成測試資料。版本號 0.0.0，尚未發布。
 - Git：`main`，遠端 `origin` = https://github.com/ZekeGan/emLek.git（公開）；是否同步以 `git status` 為準。敏感詞檢查掛在本機 pre-commit 與 pre-push，標記清單目前是空的。
-- 環境（已驗證）：Python 3.14.10（uv 0.13.6）、SQLite 3.53.1；`pyproject.toml` 與 `uv.lock` 已建立，套件已安裝進 `.venv`（mcp 2.3.0、cryptography 50.0.2、pytest 9.2.0、ruff 0.17.3、mypy 2.4.1、hypothesis 6.170.14），專案本身以可編輯模式安裝；Claude Code 2.1.316；Codex CLI 0.166.0 已安裝並登入，但使用者的 ChatGPT 用量已用完，**2026-11-04 22:58 後才能測**。
+- 環境（已驗證）：Python 3.14.10（uv 0.13.6）、SQLite 3.53.1；套件由 `uv.lock` 鎖定並安裝進 `.venv`；Claude Code 2.1.316；Codex CLI 0.166.0 已安裝並登入，但使用者的 ChatGPT 用量已用完，**2026-11-04 22:58 後才能測**。
 - 未驗證：Codex 端的 MCP 連線與沙箱；真實資料效能。
 
 ## 使用者已決定（2026-11-01）
 
-PIN 強化採用（M6）；清除最終確認只在使用者自己的終端機（M9，MCP 只有預覽）；備份放不同磁碟（M4）；Windows 家用版沒有 BitLocker，資料庫本體明文（D44，`doctor` 會提示）；M1、M2、M3 已驗收。
+PIN 強化採用（M6）；清除最終確認只在使用者自己的終端機（M9，MCP 只有預覽）；備份放不同磁碟（預設 `D:\emlek-backups`）；Windows 家用版沒有 BitLocker，資料庫本體明文（D44，`doctor` 會提示）；M1–M3 已驗收。
 
-## 待驗收
+## 待驗收：M4 安全網
 
-無。M4 完成後在這裡列出清單。
+做了什麼：`emlek backup`（一致性備份，建立後立刻檢查完整性與筆數）、`emlek restore`（驗證後才替換，舊資料庫改名保留，必須在你自己的終端機執行）、`emlek export`（完整 JSONL 加可閱讀的 Markdown，失敗不留半成品）、`emlek stats`（筆數、日期範圍、上次備份；AI 唯讀模式也能用）、`doctor` 備份檢查（從未備份或超過 14 天會警告）、搜尋查無結果時提示換語言再試（D52 約定的工具端對策）。
 
-## 下一步（M4 安全網）
+實測：ruff、嚴格 mypy 通過；211 項快速測試全過，另 1 項 36000 筆規模測試通過。題庫系統層 17 題全為 5 分（含 Q21 筆數與備份日期、Q25 換電腦還原、Q27 匯出）。36000 筆（資料庫約 523 MB）：備份約 9 秒、還原約 22 秒、匯出約 37 秒。測了壞檔、截斷檔、非 emlek 的資料庫、比程式新的備份、資料庫使用中、舊結構備份升級，失敗時目前資料庫都維持原狀。
 
-`backup`（`VACUUM INTO` 一致性備份，預設放設定檔的 `backup_dir`）、`restore`（驗證後才替換，保留舊庫改名，需真人終端機）、`export` v1（JSONL＋Markdown，無損）、`stats`（CLI 與 MCP 唯讀工具）、搜尋查無結果時的語言提示。完成標準：T19、T20、Q21、Q25、Q27。**真實資料（含舊日記）在 M4 與 M6 都完成前仍不處理。**
+30 秒驗收（拋棄式資料夾，只放假資料）：
+1. PowerShell：`cd D:\Programming\Project\emlek`，依序執行：`.venv\Scripts\emlek.exe --data-dir D:\emlek-try4 init`；`... save --text "今日は京都へ行った"`；`... backup --to D:\emlek-try4-bk`；`... stats`（應顯示 1 筆、上次備份有時間）。
+2. 執行 `... export --out D:\emlek-try4-bk\x`，打開產生的資料夾，看 `export.jsonl` 與 `markdown` 內容是否正確。
+3. 在同一個 PowerShell 視窗執行 `... restore D:\emlek-try4-bk\emlek-<剛產生的檔名>.db`：它會問你，輸入「是」才會還原；原本的資料庫會改名保留。若從腳本或 AI 呼叫，必須被拒絕。
+4. 執行 `.venv\Scripts\pytest.exe -q -m "not scale"`，看到 `211 passed`。完成後可刪除 `D:\emlek-try4` 與 `D:\emlek-try4-bk`。
+
+限制：備份與匯出目前都是明文（加密於 M8）；`restore` 目前只檢查終端機，PIN 於 M6 加上；**真實資料（含舊日記）仍要等 M6 完成**。
+
+## 下一步（M5 版本、連結、隱藏）
+
+等使用者驗收後做：`amend`（新版本）、`relation`（推翻、支持、補充）、`superseded_by` 與 `linked_from`、`hide`／`unhide`、衍生摘要失效（計算值）。完成標準：T12、T13、Q08–Q10、Q22–Q23。
 
 ## 待使用者同意：AI 層「不理想」門檻（提議）
 
-提議：任一非模糊題單次得 0 分，或同一里程碑 AI 層平均低於 4 分，我就依觀察清單提醒你評估。目前實例：Q20（剪頭髮，0 分）與 Q49（買衣服，0 分）都是「遠義詞」型，加入「0 筆時換語言再試」規則後分別變 5 與 3，Q48 略差；這是部分有效，根本對策是 M7 的標籤與別名。建議先記錄，M7 後重測，仍不理想再正式提案（例如語意搜尋）。不回覆則照此執行。
+提議：任一非模糊題單次得 0 分，或同一里程碑 AI 層平均低於 4 分，我就依觀察清單提醒你評估。目前實例：Q20（剪頭髮）、Q49（買衣服）是「遠義詞」型失敗；加入「0 筆時換語言再試」規則與工具端提示後有部分改善，根本對策是 M7 的標籤與別名。建議先記錄，M7 後重測，仍不理想再正式提案（例如語意搜尋）。不回覆則照此執行。
 
 ## 觀察清單（到時要主動提醒使用者）
 

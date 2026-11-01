@@ -22,7 +22,7 @@
 | 資料庫 | 單一 SQLite 檔 |
 | 搜尋 | 同檔 FTS5 trigram，建在正規化副本 `revisions.body_norm` 上。查詢拆成詞：3 字元以上走 FTS5，1–2 字元走 LIKE 逐筆掃描，各詞結果取交集；FTS5 對某詞無結果時補跑 LIKE 再下結論。有 3 字元以上的詞時，先用 FTS5 取候選再對候選做 LIKE 驗證；只有短詞時先用標籤或日期縮小範圍。實測（合成 3.6 萬筆、平均約 1.7K 字元）：2 字元 LIKE 全掃約 0.5 秒、3 字元以上 FTS5 低於 1 毫秒，資料庫約為原文位元組的 2.5 倍 |
 | AI 入口 | MCP（stdio）＋命令列 CLI；核心只寫一份，兩者都是薄外殼 |
-| 加密 | 日常靠 Windows 裝置加密；備份可選密碼加密，用現成函式庫，不自寫 |
+| 加密 | Windows 家用版沒有 BitLocker，資料庫本體不加密（`doctor` 如實提示）；高風險內容靠分級提示並建議改存密碼管理器；備份可選密碼加密，用現成函式庫，不自寫；日後可評估 SQLCipher 或 VeraCrypt |
 
 實作層的技術決定（目錄、套件、遷移、CLI 與 MCP 函式庫）見 [WORKFLOW](WORKFLOW.md)。
 
@@ -59,8 +59,9 @@
 | `emlek phrase remove <id>` | 刪 |
 
 - AI 只能用 MCP 唯讀工具 `phrases_list`。語句只是 AI 的判斷依據，不是機械比對。沒有啟用的 `purge` 語句時，徹底清除關閉。
-- **需要真人終端機的 CLI 命令**：`phrase add·set·remove`（所有類別）、`notice enable`、`restore`、`tag merge·remove`、`sensitivity set`。檢查方式：標準輸入、輸出、錯誤輸出都必須是終端機；否則回 `NOT_PERMITTED`（結束碼 3）。
-- 限制（已實測）：Claude Code 的 PowerShell 工具回報標準輸入是終端機、標準輸出不是，所以**只檢查輸入不夠**，必須三者都檢查。能開偽終端機的 AI、以及直接開資料庫檔的 AI 仍能繞過；這是主要防線而非絕對隔離。是否加一組只有使用者知道的 PIN 作強化，待使用者決定（見 PROGRESS）。
+- **需要真人終端機與 PIN 的 CLI 命令**：`phrase add·set·remove`（所有類別）、`notice enable`、`restore`、`tag merge·remove`、`sensitivity set`、`purge`、`import --include-high`、`pin change·reset`。檢查兩層：(1) 標準輸入、輸出、錯誤輸出都必須是終端機，否則回 `NOT_PERMITTED`（結束碼 3）；(2) 以 `getpass` 從主控台輸入 PIN，**絕不接受參數、環境變數或標準輸入傳入**。
+- **PIN**：至少 6 碼，以 `scrypt` 雜湊存於 `meta`，連續錯 5 次鎖定 5 分鐘；設定時一次性顯示復原碼（只存雜湊）供 `pin reset`。`init` 在 M6 起設定 PIN，早於 M6 建立的庫以 `emlek pin set` 補設。**PIN 不得告訴任何 AI**；若貼在對話，須立即 `emlek pin change`。
+- 限制（已實測）：Claude Code 的 PowerShell 工具回報標準輸入是終端機、標準輸出不是，所以三條串流都要驗。PIN 擋得住只透過 CLI 操作的 AI；能開偽終端機並讀到使用者輸入、或直接開資料庫檔改資料的 AI 仍能繞過。這是主要防線而非絕對隔離。
 
 ## 刪除
 
@@ -71,7 +72,7 @@
 
 **衍生摘要失效**是計算值，不另存欄位：記錄的任一來源（經 `links` 遞移）處於隱藏，其衍生的 `ai_summary`、`inference` 即失效，重新產生前不得用於回答；`unhide` 後自動恢復。
 
-**徹底清除**：`purge_preview` 回傳摘要、會連帶移除的衍生記錄與一次性確認碼（10 分鐘，綁定記錄編號與版本數）；`purge_confirm` 帶確認碼才執行。執行（單一交易）：以僅供清除函式設定的連線層暫存旗標暫時放行不可變觸發器；移除該記錄的版本、全文索引列、標籤關聯、指向這些版本的 `links`（其餘記錄保留，只是少了這條連結）、以它為來源的衍生記錄；`tag_events` 中涉及該記錄的明細清空；`import_log` 保留檔名與雜湊但清空 `record_id` 並標 `purged`，避免重新匯入後復活。提交後 `secure_delete=ON`、`wal_checkpoint(TRUNCATE)`、`VACUUM`、再 checkpoint，最後掃描資料庫與 WAL 原始檔確認預覽中的片段已不存在（已實測：只刪不整理時 WAL 與主檔會殘留）。**不改動既有備份**，回覆須提醒使用者自行處理舊備份，並說明已傳給第三方 AI 的內容無法收回。
+**徹底清除**：MCP 只有 `purge_preview`（唯讀，回傳摘要與會連帶移除的衍生記錄）；實際清除只能由使用者在自己的終端機執行 `emlek purge r<id>`：顯示預覽與固定句式「是否要從資料庫中完全刪除這筆資料？是 / 否（此操作無法再回復）」，輸入 PIN 並回答「是」才執行，含糊或「否」不執行。執行（單一交易）：以僅供清除函式設定的連線層暫存旗標暫時放行不可變觸發器；移除該記錄的版本、全文索引列、標籤關聯、指向這些版本的 `links`（其餘記錄保留，只是少了這條連結）、以它為來源的衍生記錄；`tag_events` 中涉及該記錄的明細清空；`import_log` 保留檔名與雜湊但清空 `record_id` 並標 `purged`，避免重新匯入後復活。提交後 `secure_delete=ON`、`wal_checkpoint(TRUNCATE)`、`VACUUM`、再 checkpoint，最後掃描資料庫與 WAL 原始檔確認預覽中的片段已不存在（已實測：只刪不整理時 WAL 與主檔會殘留）。**不改動既有備份**，回覆須提醒使用者自行處理舊備份，並說明已傳給第三方 AI 的內容無法收回。
 
 ## 工具（MCP／CLI 共用）
 
@@ -84,12 +85,12 @@
 | `search` | 見下方「搜尋規則」 |
 | `get` | 讀取指定記錄與版本；回傳 `superseded_by`、`linked_from`；支援 `max_sensitivity` |
 | `hide`／`unhide` | 隱藏與恢復 |
-| `purge_preview`／`purge_confirm` | 徹底清除兩步 |
+| `purge_preview` | 唯讀預覽徹底清除的範圍（實際清除只有 CLI `emlek purge`） |
 | `phrases_list` | 唯讀取得啟用語句 |
 | `stats` | 唯讀：記錄數（不含隱藏）、隱藏數、版本數、最早與最晚日期、上次備份時間 |
 | 標籤工具 | `set_tags`、`tags_find`、`tags_list`、`tags_tree`、`tag_related`、`tag_link`、`tag_alias`，見 [DESIGN_TAGS](DESIGN_TAGS.md) |
 
-僅 CLI（不開放 MCP）：`init`、`doctor`、`backup`、`restore`、`export`、`import`、`notice status·enable`、`sensitivity set`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。
+僅 CLI（不開放 MCP）：`init`、`doctor`、`backup`、`restore`、`export`、`import`、`purge`、`pin set·change·reset`、`notice status·enable`、`sensitivity set`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。
 
 **唯讀模式**：`emlek mcp --read-only` 的工具清單只含 `search`、`get`、`phrases_list`、`stats`、`tags_find`、`tags_list`、`tags_tree`、`tag_related`（寫入工具根本不存在，不是被拒絕），供無人看管的排程使用；`max_sensitivity` 預設為 medium。每日簡報見 [DAILY_BRIEFING](DAILY_BRIEFING.md)。
 
@@ -124,7 +125,7 @@
 
 ## 備份與搬家
 
-1. 資料在一個資料夾，主體是一個 `.db`（含搜尋索引）。
+1. 資料在一個資料夾，主體是一個 `.db`（含搜尋索引）。備份放在 `config.toml` 的 `backup_dir`：`init` 時預設選與資料庫不同的磁碟（有第二顆磁碟用其上的 `emlek-backups`，否則在使用者文件夾下），不與資料庫放同一處。
 2. `emlek backup`：用 SQLite 一致性備份（`VACUUM INTO`）產生帶日期的單一檔，不直接複製使用中的檔案。可選 `--encrypt` 密碼加密，須提醒密碼遺失無法還原。遷移前自動備份一份。
 3. `emlek export`：完整 JSONL（含所有版本與關係）＋供閱讀的 Markdown。
 4. `emlek restore <備份檔>`：先驗證再替換，並保留舊庫改名。
@@ -132,11 +133,11 @@
 
 ## 規格細節（v1）
 
-- **位置**：預設 `%LOCALAPPDATA%/emlek/`（不在 OneDrive 等同步位置）；`--data-dir` 或 `EMLEK_DATA_DIR` 覆寫。資料夾內有資料庫與 `config.toml`（目前只有 `timezone`，預設系統時區，由 `init` 建立）。`emlek init` 建立並限制只有目前使用者可存取（已實測 `icacls` 不需管理員權限）；`emlek doctor` 檢查 Python 與 SQLite 版本、FTS5 trigram、WAL 修補版本、資料夾是否在同步位置、權限、最近備份。
+- **位置**：預設 `%LOCALAPPDATA%/emlek/`（不在 OneDrive 等同步位置）；`--data-dir` 或 `EMLEK_DATA_DIR` 覆寫。資料夾內有資料庫與 `config.toml`（`timezone`，預設 `local`＝系統時區；`backup_dir`；由 `init` 建立）。`emlek init` 建立並限制只有目前使用者可存取（已實測 `icacls` 不需管理員權限）；`emlek doctor` 檢查 Python 與 SQLite 版本、FTS5 trigram、WAL 修補版本、資料夾是否在同步位置、權限、最近備份。
 - **編號**：整數主鍵；對外顯示為 `r<id>`、`r<id>.v<n>`。
 - **時間**：`created_at` 存 UTC（ISO 8601，毫秒）。`event_time_precision` 為 year、month、day、hour、minute、second。year、month、day 存日曆日期字串（`2026`、`2026-11`、`2026-01-15`，不換算時區）；hour、minute、second 存含偏移的 ISO 8601（如 `2026-01-15T09:30+09:00`）。範圍查詢以該值涵蓋的時間區間與查詢區間有重疊即命中；「今天」的日界線依 `timezone`。
 - **SQLite**：WAL、`synchronous=FULL`、`foreign_keys=ON`、`busy_timeout=5000`，啟動時讀回 PRAGMA 驗證。SQLite 須 ≥ 3.51.3（或修補線 3.50.7、3.44.6）才用 WAL，否則退回 `journal_mode=DELETE` 並警告。每個 `save` 為單一交易，記錄、版本、連結、標籤、全文索引全成功或全失敗。同一時間只有一個寫入交易，多行程（CLI 與 MCP）以 busy_timeout 序列化。
-- **大小限制**：單版原文 ≤ 1 MiB（UTF-8 位元組）；來源 ≤ 500 字元；每筆標籤 ≤ 20 個、名稱 ≤ 64 字元、說明 ≤ 200 字元；查詢 ≤ 512 字元；單頁 ≤ 100 筆。
+- **大小限制**：單版原文 ≤ 1 MiB（UTF-8 位元組），不得含 NUL（U+0000）或孤立代理字元；來源 ≤ 500 字元；每筆標籤 ≤ 20 個、名稱 ≤ 64 字元、說明 ≤ 200 字元；查詢 ≤ 512 字元；單頁 ≤ 100 筆。
 - **搜尋正規化**：`body_norm` 與查詢都先做 NFKC 與 casefold，原文不動；簡繁不統一，用別名。
 - **錯誤**：回傳 `{ok, error:{code, message, retryable, data?}}`。代碼：`INVALID_INPUT`、`NOT_FOUND`、`CONFLICT`、`NEEDS_CONFIRMATION`（待確認狀態也用此代碼，`error.data.state` 區分）、`TOKEN_INVALID`（確認碼錯誤、過期或已用過）、`NOT_PERMITTED`、`BUSY`、`INTERNAL`。CLI 結束碼：0 成功、1 內部錯誤、2 輸入錯誤、3 不允許或需確認、4 找不到或衝突、5 忙碌或暫時失敗。
 - **匯出 v1**：資料夾內 `export.jsonl`（第一行 `{"type":"header","format_version":1,"schema_version":N,...}`，其後每行一個物件，`type` 為 record、revision、link、tag、record_tag、tag_link、tag_alias、tag_event、phrase、notice_setting、import_log、meta；隱藏的記錄照匯出並帶 `hidden` 旗標；不含 `body_norm`，匯入時重建）與 `markdown/`（每筆記錄一檔，含版本、標籤、來源，供閱讀）。
@@ -176,10 +177,10 @@
 | M3 權限與 MCP | `core/permissions.py`、MCP 完整與 `--read-only`、stdout 只輸出協定；Claude Code 與 Codex CLI 以合成庫實測；平台唯讀沙箱旗標實測；AI 層題庫開始（只報告不卡關） | T06、T07、T16；兩個 AI 都能存與找回合成資料；唯讀清單不含寫入工具 |
 | M4 安全網 | `backup`、`restore`（驗證再替換）、`export` v1、`stats`、遷移前自動備份 | T19、T20；還原到乾淨資料夾與原庫逐筆一致 |
 | M5 版本、連結、隱藏 | `amend`、`relation`、`superseded_by`、`linked_from`、`hide`／`unhide`、衍生失效（計算值） | T12、T13；Q08–10、Q22–23 |
-| M6 信任閘門 | 規則掃描、`notice_settings`、`confirm_token`／`notice_token`、`phrase`、`notice`、`sensitivity set` 的真人終端機閘門、`phrases_list` | T14、T15；Q40–42；閘門限制如實記載 |
+| M6 信任閘門 | 規則掃描、`notice_settings`、`confirm_token`／`notice_token`、`phrase`、`notice`、`sensitivity set` 的真人終端機閘門與 PIN（`pin set·change·reset`）、`phrases_list` | T14、T15；Q40–42；閘門限制如實記載 |
 | M7 標籤 | M7a：資料表、`set_tags`、`#標籤`、別名、向下展開。M7b：`tags_find` 等查詢工具、facets、`similar_tags`、合併、健檢、熱門標籤 | T17、T18；Q03/05/32–36 |
 | M8 匯入與備份加密 | `import`（含敏感掃描、`--split-by-heading`）、備份 `--encrypt` | T21；Q43；錯誤密碼與一位元組竄改被拒 |
-| M9 清除 | `purge`（預覽、確認碼、清除、殘留檢查） | T22、T23；原始檔掃描無殘留 |
+| M9 清除 | `purge_preview` 與 CLI `purge`（預覽、固定句式、PIN、清除、殘留檢查） | T22、T23；原始檔掃描無殘留 |
 | M10 | 依實際痛點決定（回頭補標籤、分層／主題摘要、觀察清單項目） | — |
 
 題庫分系統層（不用 AI、做為卡關依據）與 AI 層（報告用，不卡關），見 BENCHMARK。
@@ -196,7 +197,7 @@
 
 - AI 是否正確判斷「要不要存」、是否真的詢問過，靠使用指示，軟體無法強制。
 - 徹底清除不影響既有備份與第三方副本。
-- 軟體層不加密資料庫本體。
+- Windows 家用版沒有 BitLocker：資料庫與日誌在磁碟上是明文，電腦被他人取得或實體遺失時資料可被讀取；軟體層不加密資料庫本體，只有備份可加密。
 - 只能找回使用者主動保存的內容。
 - 搜尋可以接近完整，不能保證完整（標籤沒標、用詞不同都可能漏）；回答須如實說明範圍。
 - 能執行命令的 AI 與同一 Windows 帳號下的程式，理論上能直接開資料庫檔；唯讀模式與終端機檢查只擋常見路徑。

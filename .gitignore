@@ -31,3 +31,14 @@ exports/
 .idea/
 .DS_Store
 Thumbs.db
+
+# 覆蓋率與除錯產物
+.coverage
+coverage.xml
+htmlcov/
+*.stackdump
+
+# 資料夾若建在專案內時產生的執行期內容（日誌、遷移前備份）與題庫輸出
+logs/
+pre-migration/
+benchmark-output/

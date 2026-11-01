@@ -14,7 +14,7 @@ emLek 是本機、單一使用者的個人長期文字記憶庫。AI 可存入�
 ## 讀取順序（省 token）
 
 - 每次：本檔＋[PROGRESS](docs/PROGRESS.md)。
-- 依任務再讀：改規格或實作→[DESIGN](docs/DESIGN.md)（按標題搜尋相關章節，不整份讀）；改 AI 行為或工具語意→[AGENT_RULES](docs/AGENT_RULES.md)；追溯「為何這樣決定」→[DECISIONS](docs/DECISIONS.md)。
+- 依任務再讀：改規格或實作→[DESIGN](docs/DESIGN.md)（按標題搜尋相關章節，不整份讀）；改 AI 行為或工具語意→[AGENT_RULES](docs/AGENT_RULES.md)；追溯「為何這樣決定」→[DECISIONS](docs/DECISIONS.md)；寫測試或評分→[BENCHMARK](docs/BENCHMARK.md)。
 - [docs/archive](docs/archive/) 是舊完整版藍圖，**非現行規格**；僅在使用者要求或 DESIGN 指名時才讀。
 - 搜尋程式與文件時排除 `docs/archive`、`.venv`。已讀且未變的內容不重讀。
 

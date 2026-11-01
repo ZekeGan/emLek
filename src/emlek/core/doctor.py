@@ -13,6 +13,7 @@ from emlek.config import load_config
 from emlek.core.db import Database, load_migrations, wal_safe
 from emlek.core.errors import EmlekError
 from emlek.core.permissions import Caller, require
+from emlek.core.search import index_status
 from emlek.core.vault import acl_principals, current_user_principal
 
 _SYNC_HINT = re.compile(r"onedrive|dropbox|google ?drive|icloud|nextcloud|syncthing|box sync", re.I)
@@ -135,6 +136,18 @@ def _check_database(data_dir: Path) -> list[Check]:
             checks.append(
                 Check("database", "ok", f"結構版本 {db.user_version}，日誌模式 {db.journal_mode}")
             )
+            status = index_status(db)
+            if status["ok"]:
+                checks.append(Check("search_index", "ok", f"{status['indexed']} 個版本已建立索引"))
+            else:
+                checks.append(
+                    Check(
+                        "search_index",
+                        "warn",
+                        f"索引 {status['indexed']} 筆與資料 {status['revisions']} 筆不一致，"
+                        "請執行 emlek reindex",
+                    )
+                )
     finally:
         db.close()
     return checks

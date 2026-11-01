@@ -20,14 +20,15 @@ def _tables(path: Path) -> set[str]:
 
 
 def test_real_migrations_are_numbered_from_one() -> None:
-    assert [m.version for m in load_migrations()] == [1]
+    versions = [m.version for m in load_migrations()]
+    assert versions == list(range(1, len(versions) + 1))
 
 
 def test_fresh_database_gets_the_current_schema(tmp_path: Path) -> None:
     db = Database.open(tmp_path / "a.db", must_exist=False)
     try:
-        assert db.user_version == 1
-        assert {"meta", "records", "revisions"} <= _tables(db.path)
+        assert db.user_version == len(load_migrations())
+        assert {"meta", "records", "revisions", "revisions_fts"} <= _tables(db.path)
     finally:
         db.close()
 
@@ -73,3 +74,29 @@ def test_a_failing_migration_changes_nothing(tmp_path: Path) -> None:
         assert not db.conn.in_transaction
     finally:
         db.close()
+
+
+def test_upgrading_an_existing_vault_keeps_data_and_builds_the_index(tmp_path: Path) -> None:
+    from emlek.core import search, service
+    from emlek.core.permissions import Caller, Channel
+
+    path = tmp_path / "old.db"
+    first_only = load_migrations()[:1]
+    old = Database.open(path, must_exist=False, migrations=first_only)
+    cli = Caller(Channel.CLI)
+    service.save(old, cli, body="アップグレード前の記録 京都", event_time="2026-03")
+    old.close()
+
+    upgraded = Database.open(path, backup_dir=tmp_path / "bk")
+    try:
+        assert upgraded.user_version == len(load_migrations())
+        assert service.get(upgraded, cli, ref="r1")["body"] == "アップグレード前の記録 京都"
+        found = search.search(upgraded, cli, query="アップグレード")
+        assert found["total"] == 1
+        in_march = search.search(upgraded, cli, date_from="2026-03-15", date_to="2026-03-16")
+        assert in_march["total"] == 1  # derived date columns work for rows written before them
+    finally:
+        upgraded.close()
+    backups = list((tmp_path / "bk").glob("pre-migration-v1-*.db"))
+    assert len(backups) == 1
+    assert "revisions_fts" not in _tables(backups[0])  # the backup is the old shape

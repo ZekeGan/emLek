@@ -6,7 +6,7 @@ import logging
 import sys
 from collections.abc import Callable, Sequence
 
-from emlek.cli.commands import doctor, get, init, save
+from emlek.cli.commands import doctor, get, init, save, search
 from emlek.cli.output import Output, print_error, print_output
 from emlek.cli.parser import build_parser
 from emlek.core.errors import EmlekError, ErrorCode
@@ -16,6 +16,8 @@ _HANDLERS: dict[str, Callable[..., Output]] = {
     "doctor": doctor.run,
     "save": save.run,
     "get": get.run,
+    "search": search.run,
+    "reindex": search.run_reindex,
 }
 
 

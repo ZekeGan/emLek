@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 
 from emlek import __version__
+from emlek.core.search import DEFAULT_LIMIT, MAX_LIMIT, ORDERS, SENSITIVITY_LEVELS
 from emlek.core.service import KINDS
 
 
@@ -29,4 +30,24 @@ def build_parser() -> argparse.ArgumentParser:
     get = sub.add_parser("get", help="讀取一筆記憶")
     get.add_argument("ref", help="記錄編號，如 r12 或 r12.v3")
     get.add_argument("--version", type=int, help="指定版本（預設最新）")
+
+    find = sub.add_parser("search", help="搜尋（關鍵字、日期、排序、分頁）")
+    find.add_argument(
+        "query", nargs="?", help="關鍵字，空白分隔表示全部都要出現；可用雙引號包住片語"
+    )
+    find.add_argument("--kinds", nargs="+", choices=KINDS, help="只看這些種類")
+    find.add_argument("--date-field", choices=("event_time", "created_at"), default="event_time")
+    find.add_argument("--from", dest="date_from", help="起日：2026、2026-11 或 2026-11-01")
+    find.add_argument("--to", dest="date_to", help="迄日：格式同 --from，含當天")
+    find.add_argument("--order", choices=ORDERS, help="預設：有關鍵字用 relevance，否則 event_time")
+    find.add_argument("--dir", choices=("asc", "desc"), default="desc", help="排序方向")
+    find.add_argument(
+        "--limit", type=int, default=DEFAULT_LIMIT, help=f"每頁筆數，最多 {MAX_LIMIT}"
+    )
+    find.add_argument("--cursor", help="上一頁回傳的游標")
+    find.add_argument("--all-versions", action="store_true", help="也比對舊版本")
+    find.add_argument("--include-hidden", action="store_true", help="包含已隱藏的記錄")
+    find.add_argument("--max-sensitivity", choices=SENSITIVITY_LEVELS, default="high")
+
+    sub.add_parser("reindex", help="重建全文索引（索引與資料不一致時使用）")
     return parser

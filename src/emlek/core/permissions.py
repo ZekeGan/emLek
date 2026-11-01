@@ -33,6 +33,8 @@ PERMISSIONS: dict[str, frozenset[Channel]] = {
     "doctor": _CLI,
     "save": _WRITERS,
     "get": _ANY,
+    "search": _ANY,
+    "reindex": _CLI,
 }
 
 

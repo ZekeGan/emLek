@@ -42,7 +42,7 @@
 - `ai_summary`、`inference` 以 `links` 指向依據版本。
 - `links.relation` 選填：`supersedes`（推翻）、`supports`（支持）、`supplements`（補充）、`derived`（衍生）、`summarizes`（摘要涵蓋該來源）；空＝未指定。
 - 改錯字、補充＝同一記錄新增版本；改變看法或推翻結論＝新記錄，並以 `links` 連回被推翻的版本。這樣才能呈現「某時間點改變了想法」的完整時間線。
-- `event_time` 一律存實際日期（「昨天」須由 AI 換算），保留精度；未知則空，查詢時另行標示，不排除也不假裝完整。
+- `event_time` 一律存實際日期（「昨天」須由 AI 換算），保留精度；可以是未來日期，用來記期限、約定、預約；未知則空，查詢時另行標示，不排除也不假裝完整。
 - 資料庫不存絕對路徑；搜尋預設排除 `hidden`。
 
 ## 自訂語句
@@ -78,8 +78,8 @@
 |---|---|
 | `save` | 新增；參數：內容、kind、來源、事件時間（可空）、標籤（可空）、依據或關聯版本與 relation（可空）；回傳 `similar_tags` |
 | `amend` | 為既有記錄新增版本 |
-| `search` | 全文搜尋＋日期範圍＋標籤篩選與展開；回傳記錄、版本、來源、片段、總筆數、facets、`superseded_by`；`current_only=true` 可排除已被推翻者（預設只標示不排除） |
-| `get` | 讀取指定記錄／版本；回傳 `superseded_by` |
+| `search` | 全文搜尋＋日期範圍＋標籤篩選與展開；回傳記錄、版本、來源、片段、總筆數、facets、`superseded_by`、`linked_from`（所有指向該記錄的連結與關係，如完成紀錄）；`current_only=true` 可排除已被推翻者（預設只標示不排除） |
+| `get` | 讀取指定記錄／版本；回傳 `superseded_by`、`linked_from` |
 | `hide`／`unhide` | 隱藏與恢復 |
 | `purge_preview`／`purge_confirm` | 徹底清除兩步 |
 | `phrases_list` | 唯讀取得啟用語句 |
@@ -87,6 +87,8 @@
 | 標籤工具 | `set_tags`、`tags_*`、`tag_link`、`tag_alias`，見 [DESIGN_TAGS](DESIGN_TAGS.md) |
 
 僅 CLI（不開放 MCP）：`backup`、`restore`、`export`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。
+
+唯讀模式：`emlek mcp --read-only` 只開放 `search`、`get`、`tags_find`／`tags_list`／`tags_tree`／`tag_related`、`phrases_list`、`stats`，供無人看管的排程使用。每日簡報（由 Agent 排程呼叫，到期與回顧兩種提醒）見 [DAILY_BRIEFING](DAILY_BRIEFING.md)。
 
 搜尋規則：
 - `superseded_by` 由 `links` 中 `relation=supersedes` 推算，不另存欄位，列出推翻它的記錄；若之後又有 `supports` 重新確認，一併回傳，讓 AI 能還原 A→B→C→A 的完整過程。
@@ -107,14 +109,14 @@
 | 步驟 | 內容 | 完成標準 |
 |---|---|---|
 | 1 | 資料庫＋`save`／`get`／`search`（CLI），含日期範圍、總筆數與分頁、事件時間 | 合成資料存取、中日英搜尋正確；日期篩選與分頁正確；版本不覆蓋 |
-| 2 | MCP 外殼 | 至少一個 AI 實際呼叫並找回 |
+| 2 | MCP 外殼（含 `--read-only` 唯讀模式） | 至少一個 AI 實際呼叫並找回；唯讀模式下寫入、隱藏、清除工具不可用 |
 | 3 | 版本與來源連結（含 relation）、`hide`／`unhide`、`phrase`、`phrases_list` | 修改產生新版本；推翻產生新記錄並連回；隱藏後搜不到可恢復；語句增刪改查可用，AI 端唯讀 |
 | 4 | 標籤系統（見 DESIGN_TAGS） | 搜上層標籤會展開子標籤且回應列出展開結果；別名、簡繁與寫法容錯生效；近似標籤有提示；標籤不改原文；user／ai 來源可分辨 |
 | 5 | `backup`／`restore`／`export`、`stats` | 乾淨資料夾還原後筆數與內容一致；stats 數字正確 |
 | 6 | 徹底清除 | 預覽、確認碼、清除後搜不到且資料庫無殘留 |
 | 7 | 依實際痛點決定（回頭補標籤、分層摘要專用功能、主題摘要等） | — |
 
-驗收題庫：33 題固定題庫，用合成資料分「系統層」與「AI 層」計分並記錄 token，見 [BENCHMARK](BENCHMARK.md)。每個步驟完成時，該步驟啟用的題目須通過系統層；AI 層從步驟 2 起執行。
+驗收題庫：37 題固定題庫，用合成資料分「系統層」與「AI 層」計分並記錄 token，見 [BENCHMARK](BENCHMARK.md)。每個步驟完成時，該步驟啟用的題目須通過系統層；AI 層從步驟 2 起執行。
 
 ## 刻意不做
 

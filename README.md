@@ -19,7 +19,7 @@
 
 ## 文件
 
-[設計](docs/DESIGN.md)・[標籤系統](docs/DESIGN_TAGS.md)・[AI 使用規則](docs/AGENT_RULES.md)・[每日簡報](docs/DAILY_BRIEFING.md)・[驗收題庫](docs/BENCHMARK.md)・[測試計畫](docs/TEST_PLAN.md)・[進度](docs/PROGRESS.md)・[決策紀錄](docs/DECISIONS.md)・[開發 Agent 指引](AGENTS.md)・[舊藍圖](docs/archive/)（非現行）
+[設計](docs/DESIGN.md)・[標籤系統](docs/DESIGN_TAGS.md)・[AI 使用規則](docs/AGENT_RULES.md)・[每日簡報](docs/DAILY_BRIEFING.md)・[題庫](docs/QUESTIONS.md)・[基準測試](docs/BENCHMARK.md)・[測試計畫](docs/TEST_PLAN.md)・[進度](docs/PROGRESS.md)・[決策紀錄](docs/DECISIONS.md)・[開發 Agent 指引](AGENTS.md)・[舊藍圖](docs/archive/)（非現行）
 
 ## 環境
 

@@ -171,7 +171,7 @@ MCP 伺服器的 `instructions` 放約 300 字的規則摘要（完整規則在 
 
 ## 開發順序（里程碑）
 
-每個里程碑結束須 ruff、mypy、pytest 全綠，更新 PROGRESS 的待驗收與 30 秒驗收清單。測試 ID 見 [TEST_PLAN](TEST_PLAN.md)，題號見 [BENCHMARK](BENCHMARK.md)。**真實資料（含舊日記）只在 M4 與 M6 完成後，且須使用者貼出路徑並同意。**
+每個里程碑結束須 ruff、mypy、pytest 全綠，更新 PROGRESS 的待驗收與 30 秒驗收清單。測試 ID 見 [TEST_PLAN](TEST_PLAN.md)，題號見 [QUESTIONS](QUESTIONS.md)。**真實資料（含舊日記）只在 M4 與 M6 完成後，且須使用者貼出路徑並同意。**
 
 | 里程碑 | 內容 | 完成標準 |
 |---|---|---|

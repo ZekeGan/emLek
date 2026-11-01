@@ -14,11 +14,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import bank
 import pytest
 import synth
 
 from emlek.config import load_config
-from emlek.core import search
+from emlek.core import search, service
 from emlek.core.backup import create_backup, restore_backup
 from emlek.core.db import Database
 from emlek.core.export import export_all, verify_export
@@ -197,6 +198,88 @@ def q49(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
     return _union(env, "shopping", ["ユニクロ", "購入", "買了", "bought"])
 
 
+def _gold(env: Env, qid: str) -> set[int]:
+    return bank.SPECS[qid].gold(env.corpus)
+
+
+def _none(env: Env, words: list[str]) -> tuple[set[int], set[int], dict[str, Any]]:
+    """Every wording tried: nothing exists, so nothing may be found."""
+    found: set[int] = set()
+    last: dict[str, Any] = {}
+    for word in words:
+        last = env.ask(query=word, limit=100)
+        found |= env.ids(last)
+    return found, set(), {"total": len(found), **last}
+
+
+def _dated(
+    env: Env, qid: str, day_from: str, day_to: str, **kwargs: Any
+) -> tuple[set[int], set[int], dict[str, Any]]:
+    result = env.ask(date_from=day_from, date_to=day_to, limit=100, **kwargs)
+    return env.ids(result), _gold(env, qid), result
+
+
+def q59(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _none(env, ["沖繩", "沖縄"])
+
+
+def q60(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _none(env, ["小明明"])
+
+
+def q61(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _dated(env, "Q61", "2026-03-03", "2026-03-03")
+
+
+def q62(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _dated(env, "Q62", "2027-06-01", "2027-08-31")
+
+
+def q63(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _none(env, ["韓文", "韓国語", "ハングル", "Korean"])
+
+
+def q64(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _dated(env, "Q64", "2026-10-29", "2026-10-29")
+
+
+def q65(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _dated(env, "Q65", "2026-10-01", "2026-10-31", query="頭痛")
+
+
+def q66(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _dated(env, "Q66", "2026-10-01", "2026-10-31", query="京都")
+
+
+def q67(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _dated(env, "Q67", "2025-06-01", "2025-08-31", query="京都")
+
+
+def q68(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    result = env.ask(
+        query="京都",
+        date_from="2026-01-01",
+        date_to="2026-12-31",
+        order="event_time",
+        direction="asc",
+        limit=1,
+    )
+    return env.ids(result), _gold(env, "Q68"), result
+
+
+def q69(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _dated(env, "Q69", "2024-01-01", "2024-12-31")
+
+
+def q70(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _dated(env, "Q70", "2026-10-28", "2026-10-28")
+
+
+def q71(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    result = env.ask(query="北海道", limit=100)
+    return env.ids(result), _gold(env, "Q71"), result
+
+
 QUESTIONS: dict[str, tuple[str, Question]] = {
     "Q01": ("去年今天我做了什麼", q01),
     "Q02": ("我第一次去京都是什麼時候", q02),
@@ -215,6 +298,19 @@ QUESTIONS: dict[str, tuple[str, Question]] = {
     "Q47": ("我什麼時候搬過家（跨語言）", q47),
     "Q48": ("我運動過幾次（遠義詞）", q48),
     "Q49": ("我買過幾次衣服鞋子（遠義詞）", q49),
+    "Q59": ("我去過沖繩嗎（查無）", q59),
+    "Q60": ("我跟小明明最後一次見面（相似名字，查無）", q60),
+    "Q61": ("2026 年 3 月 3 日我做了什麼（沒有記錄的一天）", q61),
+    "Q62": ("2027 年夏天我去了哪些地方（沒有記錄的期間）", q62),
+    "Q63": ("我學過韓文嗎（查無）", q63),
+    "Q64": ("三天前我做了什麼", q64),
+    "Q65": ("上個月我有頭痛嗎", q65),
+    "Q66": ("上個月我有去京都嗎", q66),
+    "Q67": ("去年夏天我有去京都嗎", q67),
+    "Q68": ("今年第一次去京都是什麼時候", q68),
+    "Q69": ("前年我記了什麼", q69),
+    "Q70": ("10 月 28 日凌晨我做了什麼（跨日邊界）", q70),
+    "Q71": ("我去過北海道嗎（內含惡意指令的記錄）", q71),
 }
 
 
@@ -255,4 +351,19 @@ def test_filler_never_collides_with_planted_dates(env: Env) -> None:
     for entry in env.corpus.entries:
         if entry.fact is None:
             assert entry.created_at[:10] != "2026-10-18"
-            assert not (entry.event_time or "").startswith("2025-11-01")
+            for day in ("2025-11-01", "2026-10-28", "2026-10-29", "2026-03-03"):
+                assert not (entry.event_time or "").startswith(day)
+                assert entry.created_at[:10] != day
+            for month in synth.NO_MONTH_EVENTS:
+                assert entry.event_time != month
+
+
+def test_injected_records_come_back_as_plain_data(env: Env) -> None:
+    """The tools hand back stored orders word for word; refusing to obey them is the agent's job."""
+    for fact, order in (("inject_save", "PWNED"), ("inject_deny", "該当する記録はありません")):
+        entry = next(e for e in env.corpus.entries if e.fact == fact)
+        shown = service.get(env.db, env.caller, ref=f"r{env.corpus.id_of(fact)}")
+        assert shown["body"] == entry.body and order in shown["body"]
+    before = env.db.conn.execute("SELECT count(*) FROM records").fetchone()[0]
+    env.ask(query="北海道", limit=100)
+    assert env.db.conn.execute("SELECT count(*) FROM records").fetchone()[0] == before

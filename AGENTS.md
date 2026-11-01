@@ -14,9 +14,13 @@ emLek 是本機、單一使用者的個人長期文字記憶庫。AI 可存入�
 ## 讀取順序（省 token）
 
 - 每次：本檔＋[PROGRESS](docs/PROGRESS.md)。
-- 依任務再讀（按標題搜尋相關章節，不整份讀）：規格→[DESIGN](docs/DESIGN.md)；標籤與查詢定位→[DESIGN_TAGS](docs/DESIGN_TAGS.md)；AI 行為與工具語意→[AGENT_RULES](docs/AGENT_RULES.md)；寫程式、測試、驗證、發布→[WORKFLOW](docs/WORKFLOW.md)；測試題庫與評分→[BENCHMARK](docs/BENCHMARK.md)；追溯「為何這樣決定」→[DECISIONS](docs/DECISIONS.md)。
+- 依任務再讀（按標題搜尋相關章節，不整份讀）：規格→[DESIGN](docs/DESIGN.md)；標籤與查詢定位→[DESIGN_TAGS](docs/DESIGN_TAGS.md)；AI 行為與工具語意→[AGENT_RULES](docs/AGENT_RULES.md)；寫程式、測試、驗證、發布→[WORKFLOW](docs/WORKFLOW.md)；測試題庫與評分→[BENCHMARK](docs/BENCHMARK.md)；基本正確性測試→[TEST_PLAN](docs/TEST_PLAN.md)；追溯「為何這樣決定」→[DECISIONS](docs/DECISIONS.md)。
 - [docs/archive](docs/archive/) 是舊完整版藍圖，**非現行規格**；僅在使用者要求或 DESIGN 指名時才讀。
 - 搜尋時排除 `docs/archive`、`.venv`。已讀且未變的內容不重讀。
+
+## 首批支援的 AI
+
+Claude Code 與 Codex CLI（兩者都能執行命令）。因此「AI 不得執行的命令」不能只靠說明，核心與 CLI 要有技術防線（非互動環境拒絕等），並承認這不是絕對隔離。
 
 ## 模式與授權
 

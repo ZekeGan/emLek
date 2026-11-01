@@ -28,10 +28,12 @@
 
 | 表 | 欄位 |
 |---|---|
-| `records` | `id`、`created_at`、`hidden`、`hidden_at` |
+| `records` | `id`、`created_at`、`hidden`、`hidden_at`、`sensitivity`（none／medium／high） |
 | `revisions` | `id`、`record_id`、`version_no`、`body`（UTF-8）、`kind`、`created_at`、`event_time`（可空）、`event_time_precision`（可空）、`source`（可空＝未知） |
 | `links` | `revision_id`、`derived_from_revision_id`、`relation`（選填） |
 | `phrases` | `id`、`kind`（save／purge／exclude）、`text`、`enabled`、`created_at`、`updated_at` |
+| `notice_settings` | `level`（medium）、`enabled`、`acknowledged_at`（敏感提示設定，見「敏感內容提示」） |
+| `import_log` | `file_name`、`content_hash`、`record_id`、`imported_at`（匯入既有資料的紀錄，確保不重複匯入） |
 | 標籤相關 | `tags`、`record_tags`、`tag_links`、`tag_aliases`、`tag_events`，見 [DESIGN_TAGS](DESIGN_TAGS.md) |
 | `meta` | schema 版本、上次備份時間 |
 
@@ -76,7 +78,7 @@
 
 | 動作 | 說明 |
 |---|---|
-| `save` | 新增；參數：內容、kind、來源、事件時間（可空）、標籤（可空）、依據或關聯版本與 relation（可空）；回傳 `similar_tags` |
+| `save` | 新增；參數：內容、kind、來源、事件時間（可空）、標籤（可空）、依據或關聯版本與 relation（可空）、`sensitivity`（可空）；回傳 `similar_tags`、`sensitivity_hint`；含敏感內容時先回傳 `needs_confirmation` 或 `needs_notice`，須帶 `confirm_token` 或 `notice_ack` 重送 |
 | `amend` | 為既有記錄新增版本 |
 | `search` | 全文搜尋＋日期範圍＋標籤篩選與展開；回傳記錄、版本、來源、片段、總筆數、facets、`superseded_by`、`linked_from`（所有指向該記錄的連結與關係，如完成紀錄）；`current_only=true` 可排除已被推翻者（預設只標示不排除） |
 | `get` | 讀取指定記錄／版本；回傳 `superseded_by`、`linked_from` |
@@ -86,7 +88,7 @@
 | `stats` | 唯讀：記錄數、最早與最晚日期、上次備份時間 |
 | 標籤工具 | `set_tags`、`tags_*`、`tag_link`、`tag_alias`，見 [DESIGN_TAGS](DESIGN_TAGS.md) |
 
-僅 CLI（不開放 MCP）：`backup`、`restore`、`export`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。
+僅 CLI（不開放 MCP）：`init`、`doctor`、`backup`、`restore`、`export`、`import`、`notice status·enable`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。
 
 唯讀模式：`emlek mcp --read-only` 只開放 `search`、`get`、`tags_find`／`tags_list`／`tags_tree`／`tag_related`、`phrases_list`、`stats`，供無人看管的排程使用。每日簡報（由 Agent 排程呼叫，到期與回顧兩種提醒）見 [DAILY_BRIEFING](DAILY_BRIEFING.md)。
 
@@ -96,6 +98,26 @@
 - 一律回傳總筆數並分頁（預設 20 筆、上限 100，附下一頁游標）；過長內容標明已截斷並提供取得剩餘部分的方式。
 - 同一天或同一時段的日期範圍即可瀏覽當天或當期所有紀錄。
 
+## 敏感內容提示
+
+存入時依危險度提示，避免使用者在不知情下把高風險資料留在明文資料庫（備份與匯出也會帶出）。
+
+| 等級 | 例子 | 存入時 |
+|---|---|---|
+| high（最高） | 密碼、API 金鑰與 token、私鑰、信用卡號、一次性復原碼 | **每次**詢問，不可關閉；建議改存密碼管理器 |
+| medium（中） | 電話、住址、身分證或護照號碼、生日 | **第一次**詢問並提醒，使用者同意後之後不再詢問；`emlek notice enable medium` 可重新開啟提醒 |
+| none | 其他 | 不提示 |
+
+- 判斷：AI 依語意判斷；核心另以規則掃描當補強（私鑰區塊、常見金鑰格式、JWT、卡號 Luhn 檢查、電話與證號格式），回傳 `sensitivity_hint`，取兩者較高者。規則掃描不可能完整，不是保證。
+- high 流程：`save` 回傳 `needs_confirmation`（含一次性 `confirm_token`，綁定內容雜湊，10 分鐘過期）；AI 以固定句式詢問，使用者答「是」才帶 token 重送；答「否」或含糊則不存。
+- medium 流程：未確認過時 `save` 回傳 `needs_notice`；使用者同意後 AI 帶 `notice_ack=true` 重送，核心寫入 `notice_settings`（`enabled=0`、記錄時間），之後不再詢問。`emlek notice status` 查看、`emlek notice enable medium` 重開（CLI，僅使用者）。
+- 存入的記錄標 `sensitivity`；`search`／`get` 回傳該欄位。high 記錄預設不出現在每日簡報內文，`emlek export --exclude high` 可排除。
+- 限制：AI 若自行帶 `confirm_token` 或 `notice_ack` 而未真正詢問，核心無法分辨，與清除流程同一信任邊界；以題庫與審查驗證 AI 平台的遵守程度。
+
+## 匯入既有資料
+
+使用者有舊日記要放進來；功能隨時可新增，不阻擋其他步驟。`emlek import <檔案或資料夾>`（CLI）：讀 `.txt`、`.md`，每檔一筆 `original`；檔名或內文開頭的日期用作事件時間，沒有則留空；`#標籤` 解析為 user；`--split-by-heading` 以日期標題切成多筆；`--dry-run` 預覽；以 `import_log`（檔名加內容雜湊）保證冪等；`source=import:<檔名>`。真實舊日記屬私人資料：開發與測試只用合成檔，真實檔案須使用者貼出路徑並同意才處理。
+
 ## 備份與搬家
 
 1. 資料在一個 Vault 資料夾，主體是一個 `.db`（含搜尋索引）。
@@ -103,6 +125,19 @@
 3. `emlek export`：完整 JSON（含所有版本與關係）＋供閱讀的 Markdown。
 4. `emlek restore <備份檔>`：還原後驗證完整性與筆數。
 5. 換設備：舊機 backup → 新機安裝 → restore → 重新指向 MCP 設定。
+
+## 規格細節（v1）
+
+- **位置**：預設 `%LOCALAPPDATA%/emlek/`（不在 OneDrive 等同步位置）；`--data-dir` 或 `EMLEK_DATA_DIR` 覆寫。`emlek init` 建立資料庫並限制只有目前使用者可存取；`emlek doctor` 檢查 Python 與 SQLite 版本、FTS5 trigram、WAL 修補版本、資料夾是否在同步位置、權限、最近備份。
+- **編號**：整數主鍵；對外顯示為 `r<id>`、`r<id>.v<n>`。
+- **時間**：`created_at` 存 UTC（ISO 8601，毫秒）。`event_time` 依精度：年、月、日存日曆日期（如 2026-01-15，不換算時區）；時、分、秒存含偏移的 ISO 8601（如 2026-01-15T09:30+09:00）。設定檔的 `timezone`（預設系統時區）決定「今天」的日界線與顯示。
+- **SQLite**：WAL、`synchronous=FULL`、`foreign_keys=ON`、`busy_timeout=5000`，啟動時讀回 PRAGMA 驗證。SQLite 版本須 ≥ 3.51.3（或修補線 3.50.7、3.44.6）才用 WAL，否則退回 `journal_mode=DELETE` 並警告。每個 `save` 為單一交易：記錄、版本、連結、標籤、全文索引全成功或全失敗。同一資料庫只由一個 emlek 行程寫入，CLI 與 MCP 同時使用時以 busy_timeout 排隊。
+- **大小限制**：單版原文 ≤ 1 MiB（UTF-8 位元組）；來源 ≤ 500 字元；每筆標籤 ≤ 20 個、名稱 ≤ 64 字元、說明 ≤ 200 字元；查詢 ≤ 512 字元；單頁 ≤ 100 筆。
+- **搜尋正規化**：內文索引與查詢都先做 NFKC 與 casefold（索引存正規化副本，原文不動）；簡繁不統一，用別名。
+- **錯誤**：回傳 `{ok, error:{code, message, retryable}}`；代碼 `INVALID_INPUT`、`NOT_FOUND`、`CONFLICT`、`NEEDS_CONFIRMATION`、`NOT_PERMITTED`、`BUSY`、`INTERNAL`。CLI 結束碼：0 成功、1 內部錯誤、2 輸入錯誤、3 不允許或需確認、4 找不到或衝突、5 忙碌或暫時失敗。
+- **匯出 v1**：資料夾內 `export.jsonl`（第一行為 `{"type":"header","format_version":1,"schema_version":N,...}`，其後每行一個物件，`type` 為 record、revision、link、tag、record_tag、tag_link、tag_alias、phrase、meta，無損）與 `markdown/`（每筆記錄一檔，含版本、標籤、來源，供閱讀）。
+- **備份加密**：`cryptography` 的 AES-256-GCM，金鑰由 `hashlib.scrypt` 從密碼導出，參數與格式版本寫入檔頭，不儲存密碼。`restore` 先驗證（`PRAGMA integrity_check`、筆數）再替換，並保留舊庫改名。
+- **語言**：CLI 與訊息預設繁體中文，欄位與代碼用英文。日誌不記內容。
 
 ## 擴充準則（為未來需求預留，現在就要遵守）
 
@@ -125,19 +160,21 @@
 4. **遠端查詢**：介面層新增遠端 MCP（Streamable HTTP），核心與資料層不變，資料仍單一份、單一寫入者。已查證：Claude 的遠端連線從 Anthropic 雲端發出，伺服器必須能從公開網路以 HTTPS 連到並以 OAuth 驗證，私人網路（如 Tailscale）無法供其連線。須決定主機位置（雲端主機或家用主機加隧道）、資料庫加密、讀寫權限分開、清除不對外開放。
 5. **多裝置各自同步**：不建議。會帶回清除復活、分岔版本、時鐘誤差等問題，工作量大。若真有需求，需另行設計（記錄編號全域唯一、版本記上一版、清除留墓碑）。
 
+6. **其他已記錄的可能缺口**（先記錄，必要時由 Agent 提醒使用者）：依標籤或人物批次清除；結構化金額與待辦狀態；圖片與語音等非文字；簡繁對照表；語意搜尋（見觀察清單）；資料庫本體加密（如 SQLCipher）；備份自動排程；打包成安裝檔；CLI 多語系；CI 與提交前檢查掛鉤；使用說明書。
+
 ## 開發順序
 
 | 步驟 | 內容 | 完成標準 |
 |---|---|---|
-| 1 | 資料庫＋`save`／`get`／`search`（CLI），含日期範圍、總筆數與分頁、事件時間 | 合成資料存取、中日英搜尋正確；日期篩選與分頁正確；版本不覆蓋 |
+| 1 | `init`／`doctor`、資料庫＋`save`／`get`／`search`（CLI），含日期範圍、總筆數與分頁、事件時間 | 合成資料存取、中日英搜尋正確；日期篩選與分頁正確；版本不覆蓋；`doctor` 能報告環境狀態 |
 | 2 | MCP 外殼（含 `--read-only` 唯讀模式） | 至少一個 AI 實際呼叫並找回；唯讀模式下寫入、隱藏、清除工具不可用 |
-| 3 | 版本與來源連結（含 relation）、`hide`／`unhide`、`phrase`、`phrases_list` | 修改產生新版本；推翻產生新記錄並連回；隱藏後搜不到可恢復；語句增刪改查可用，AI 端唯讀 |
+| 3 | 版本與來源連結（含 relation）、`hide`／`unhide`、`phrase`、`phrases_list`、敏感內容提示 | 修改產生新版本；推翻產生新記錄並連回；隱藏後搜不到可恢復；語句增刪改查可用，AI 端唯讀；high 每次要確認、medium 只問第一次且可重開 |
 | 4 | 標籤系統（見 DESIGN_TAGS） | 搜上層標籤會展開子標籤且回應列出展開結果；別名、簡繁與寫法容錯生效；近似標籤有提示；標籤不改原文；user／ai 來源可分辨 |
-| 5 | `backup`／`restore`／`export`、`stats` | 乾淨資料夾還原後筆數與內容一致；stats 數字正確 |
+| 5 | `backup`／`restore`／`export`、`stats`、`import` | 乾淨資料夾還原後筆數與內容一致；stats 數字正確；匯入的日期、標籤、來源正確，重複執行不重複 |
 | 6 | 徹底清除 | 預覽、確認碼、清除後搜不到且資料庫無殘留 |
 | 7 | 依實際痛點決定（回頭補標籤、分層摘要專用功能、主題摘要等） | — |
 
-驗收題庫：37 題固定題庫（另有 2 題保留），用合成資料分「系統層」與「AI 層」計分並記錄 token，見 [BENCHMARK](BENCHMARK.md)。每個步驟完成時，該步驟啟用的題目須通過系統層；AI 層從步驟 2 起執行。
+驗收題庫：41 題固定題庫（另有 2 題保留），用合成資料分「系統層」與「AI 層」計分並記錄 token，見 [BENCHMARK](BENCHMARK.md)。每個步驟完成時，該步驟啟用的題目須通過系統層；AI 層從步驟 2 起執行。
 
 ## 刻意不做
 

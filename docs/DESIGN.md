@@ -31,7 +31,7 @@
 | 表 | 欄位 |
 |---|---|
 | `records` | `id`、`created_at`、`hidden`、`hidden_at`、`sensitivity`（none／medium／high） |
-| `revisions` | `id`、`record_id`、`version_no`、`body`（UTF-8 原文）、`body_norm`（NFKC＋casefold 的衍生副本，供搜尋）、`kind`、`created_at`、`event_time`（可空）、`event_time_precision`（可空）、`source`（可空＝未知） |
+| `revisions` | `id`、`record_id`、`version_no`、`body`（UTF-8 原文）、`body_norm`（NFKC＋casefold 的衍生副本，供搜尋）、`kind`、`created_at`、`event_time`（可空）、`event_time_precision`（可空）、`source`（可空＝未知）、`event_date_start`／`event_date_end`（由 event_time 與精度推出的日曆日期區間，虛擬欄位，供日期範圍查詢） |
 | `links` | `revision_id`、`derived_from_revision_id`、`relation`（選填） |
 | `phrases` | `id`、`kind`（save／purge／exclude）、`text`、`enabled`、`created_at`、`updated_at` |
 | `notice_settings` | `level`（medium）、`enabled`、`acknowledged_at` |
@@ -90,14 +90,14 @@
 | `stats` | 唯讀：記錄數（不含隱藏）、隱藏數、版本數、最早與最晚日期、上次備份時間 |
 | 標籤工具 | `set_tags`、`tags_find`、`tags_list`、`tags_tree`、`tag_related`、`tag_link`、`tag_alias`，見 [DESIGN_TAGS](DESIGN_TAGS.md) |
 
-僅 CLI（不開放 MCP）：`init`、`doctor`、`backup`、`restore`、`export`、`import`、`purge`、`pin set·change·reset`、`notice status·enable`、`sensitivity set`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。
+僅 CLI（不開放 MCP）：`init`、`doctor`、`reindex`、`backup`、`restore`、`export`、`import`、`purge`、`pin set·change·reset`、`notice status·enable`、`sensitivity set`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。
 
 **唯讀模式**：`emlek mcp --read-only` 的工具清單只含 `search`、`get`、`phrases_list`、`stats`、`tags_find`、`tags_list`、`tags_tree`、`tag_related`（寫入工具根本不存在，不是被拒絕），供無人看管的排程使用；`max_sensitivity` 預設為 medium。每日簡報見 [DAILY_BRIEFING](DAILY_BRIEFING.md)。
 
 **搜尋規則**：
 - 命中單位是**記錄**；預設比對各記錄的最新版本並標示命中的版本，`all_versions=true` 才比對舊版。總筆數的單位也是記錄。
 - 過濾：`kinds`、`tags`、`tag_types`、日期範圍（`date_field=event_time|created_at`，前者看最新版本，後者是記錄首次存入時間；事件時間未知的記錄不排除，另列 `undated` 數量）、`include_hidden`（預設否）、`current_only`（排除已被推翻者，預設只標示）、`max_sensitivity`（超過上限的記錄不回內文，只計入 `withheld`）。
-- 排序：`order=relevance|event_time|created_at`，`dir=asc|desc`；有關鍵字時預設 relevance、無關鍵字時預設 event_time desc。游標以排序鍵加記錄編號為準，頁間穩定。
+- 排序：`order=relevance|event_time|created_at`，`dir=asc|desc`；有關鍵字時預設 relevance、無關鍵字時預設 event_time desc。游標以排序鍵加記錄編號為準，頁間穩定。只有短詞（沒有 3 字元以上的詞）時沒有相關度，改以 `created_at desc`，回應的 `order` 欄位會註明實際採用的排序。
 - 一律回傳總筆數並分頁（預設 20 筆、上限 100，附下一頁游標）；過長內容標明已截斷並提供取得剩餘部分的方式。同一天或同一時段的日期範圍即可瀏覽當天或當期所有紀錄。
 - `superseded_by` 由 `links` 中 `relation=supersedes` 推算，不另存欄位；若之後又有 `supports` 重新確認，一併回傳，讓 AI 能還原 A→B→C→A 的完整過程。`linked_from` 列出所有指向該記錄的連結與關係（如完成紀錄）。
 
@@ -139,6 +139,7 @@
 - **SQLite**：WAL、`synchronous=FULL`、`foreign_keys=ON`、`busy_timeout=5000`，啟動時讀回 PRAGMA 驗證。SQLite 須 ≥ 3.51.3（或修補線 3.50.7、3.44.6）才用 WAL，否則退回 `journal_mode=DELETE` 並警告。每個 `save` 為單一交易，記錄、版本、連結、標籤、全文索引全成功或全失敗。同一時間只有一個寫入交易，多行程（CLI 與 MCP）以 busy_timeout 序列化。
 - **大小限制**：單版原文 ≤ 1 MiB（UTF-8 位元組），不得含 NUL（U+0000）或孤立代理字元；來源 ≤ 500 字元；每筆標籤 ≤ 20 個、名稱 ≤ 64 字元、說明 ≤ 200 字元；查詢 ≤ 512 字元；單頁 ≤ 100 筆。
 - **搜尋正規化**：`body_norm` 與查詢都先做 NFKC 與 casefold，原文不動；簡繁不統一，用別名。
+- **全文索引與一致性**：`revisions_fts` 是以 `body_norm` 為外部內容的 FTS5 trigram 表，由觸發器在同一交易內維護。查詢的 3 字元以上詞走索引、1–2 字元詞走 LIKE；索引沒有任何結果時補跑一次 LIKE 完整掃描，若掃描有結果就回 `warnings=["index_stale"]`，`doctor` 的 `search_index` 與 `emlek reindex` 用來檢查與重建。日期過濾對 `event_time` 用 `event_date_*`（照原文寫法的日曆日期，不換算時區），對 `created_at` 用使用者時區的日界線；M2 的 `timezone` 只支援 `local`（系統時區）與 `+09:00` 這類固定偏移，IANA 名稱（如 Asia/Tokyo）尚未支援，會回 `INVALID_INPUT`。
 - **錯誤**：回傳 `{ok, error:{code, message, retryable, data?}}`。代碼：`INVALID_INPUT`、`NOT_FOUND`、`CONFLICT`、`NEEDS_CONFIRMATION`（待確認狀態也用此代碼，`error.data.state` 區分）、`TOKEN_INVALID`（確認碼錯誤、過期或已用過）、`NOT_PERMITTED`、`BUSY`、`INTERNAL`。CLI 結束碼：0 成功、1 內部錯誤、2 輸入錯誤、3 不允許或需確認、4 找不到或衝突、5 忙碌或暫時失敗。
 - **匯出 v1**：資料夾內 `export.jsonl`（第一行 `{"type":"header","format_version":1,"schema_version":N,...}`，其後每行一個物件，`type` 為 record、revision、link、tag、record_tag、tag_link、tag_alias、tag_event、phrase、notice_setting、import_log、meta；隱藏的記錄照匯出並帶 `hidden` 旗標；不含 `body_norm`，匯入時重建）與 `markdown/`（每筆記錄一檔，含版本、標籤、來源，供閱讀）。
 - **備份加密**：`cryptography` 的 AES-256-GCM，金鑰由 `hashlib.scrypt` 從密碼導出，參數與格式版本寫入檔頭，不儲存密碼。

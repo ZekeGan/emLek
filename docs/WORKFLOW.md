@@ -21,7 +21,7 @@
 
 ## 技術決定（D40）
 
-- **目錄**：`pyproject.toml`、`uv.lock`；`src/emlek/`：`cli/`（`parser.py`、`commands/*.py`、`output.py`）、`mcp_server/`（唯一匯入 `mcp` 的地方）、`core/`（`service.py` 每個操作一個函式、`permissions.py`、`errors.py`、`schemas.py`、`db.py`、`migrations/0001_*.sql…`、`search.py`、`sensitivity.py`、`tags.py`、`backup.py`、`export.py`、`purge.py`）、`config.py`、`logging.py`；`tests/`：`unit/`、`invariants/`（`test_t01_*.py`…）、`benchmark/`（`system/`、`ai/`、`synth/`）。
+- **目錄**：`pyproject.toml`、`uv.lock`；`src/emlek/`：`cli/`（`parser.py`、`commands/*.py`、`output.py`）、`mcp_server/`（唯一匯入 `mcp` 的地方）、`core/`（`service.py` 每個操作一個函式、`permissions.py`、`errors.py`、`schemas.py`、`db.py`、`vault.py`、`doctor.py`、`timeutil.py`、`migrations/0001_*.sql…`、`search.py`、`sensitivity.py`、`tags.py`、`backup.py`、`export.py`、`purge.py`）、`config.py`、`log.py`；`tests/`：`unit/`、`invariants/`（`test_t01_*.py`…）、`benchmark/`（`system/`、`ai/`、`synth/`）。
 - **權限在核心**：`core/permissions.py` 一張「操作×入口（cli、mcp、mcp-readonly）」的表；每個 `service` 函式收 `ctx: Caller(channel, interactive, readonly)`。外殼只做輸入輸出轉換；MCP 依該表註冊工具，唯讀是工具清單的性質，不是每個工具裡的旗標檢查。
 - **封裝**：`[project.scripts] emlek = "emlek.cli:main"`；建置後端用 uv 預設的 `uv_build`。MCP 註冊用安裝後的絕對路徑 `.venv\Scripts\emlek.exe`，不用 `uv run`（啟動慢且受工作目錄影響）；`mcp` 延遲匯入，純 CLI 呼叫保持快速。
 - **CLI**：`argparse`（無依賴、約 30 個子命令足夠，自訂結束碼 0–5 本來就要手動對應）。內文輸入支援 `--body-file` 與標準輸入，明確以 UTF-8 解碼（中文 Windows 終端機可能預設 cp950）。

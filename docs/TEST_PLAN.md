@@ -17,8 +17,9 @@
 | T09 | 事件時間：精度、時區、日界線正確 | 日精度不受時區影響；分精度保留偏移；跨日界線的範圍查詢 | M2 |
 | T10 | 分頁：總筆數正確、不重複、不遺漏、游標穩定 | 查詢中途新增資料，頁間不重複不漏 | M2 |
 | T11 | 輸入限制與錯誤碼 | 超長原文、過多標籤、空查詢、未知欄位都回對應 `INVALID_INPUT`，結束碼正確 | M1（標籤限制於 M7 補） |
-| T12 | 隱藏：搜尋與讀取看不到、恢復後回來、衍生摘要同步失效 | 隱藏、恢復、檢查 `superseded_by` 與衍生記錄狀態 | M5 |
-| T13 | 推翻與支持：`superseded_by`、`linked_from` 正確還原 A→B→C→A | 建立四筆記錄與關係，檢查各自回傳 | M5 |
+| T12 | 隱藏：搜尋與讀取看不到、恢復後回來、衍生摘要同步失效；隱藏與 `unhide` 冪等；隱藏者不計入 `summary` 數字；推翻者被隱藏則被推翻者恢復為 `current`；`supersedes` 不傳遞隱藏效果、`derived`／`summarizes` 會 | 隱藏、恢復、檢查 `status`、`superseded_by` 與衍生記錄狀態、`summary` 筆數 | M5 |
+| T13 | 推翻與支持：`superseded_by`、`linked_from`、`status` 正確還原 A→B→C→A（`current`／`superseded`／`reaffirmed`）；連到不存在、自己、隱藏者被拒；重複連結冪等；`amend` 的 `expected_version` 衝突、內文未變、隱藏中、`kind` 不可改、省略與 null 的差別；`current_only` 排除規則；`linked_from` 超過 50 條標 `truncated` | 建立四筆記錄與關係，逐一檢查各自回傳與錯誤碼 | M5 |
+| T26 | 結果過多摘要：超過 50 筆才有 `summary`；`by_month` 加總等於總筆數減未標日期；超過 24 個月改 `by_year`；固定 `basis` 與 `note`；`get` 超過 8000 字元截斷並可用 `offset` 取完；舊欄位不變 | 以合成 120 筆跨 30 個月的資料查詢，對照 SQL 直接統計 | M5 |
 | T14 | 語句與需真人終端機的命令（DESIGN 自訂語句清單）：標準輸入、輸出、錯誤輸出缺一個不是終端機就拒絕；AI 端對語句唯讀 | 管線、無終端機、子行程、只有輸入是終端機（如 Claude Code 的 PowerShell 工具）都應拒絕；PIN 不接受參數、環境變數、標準輸入；錯誤 PIN 被拒，連續錯誤鎖定 | M6 |
 | T15 | 敏感提示：high 每次要 token，token 單次有效、綁內容、過期；medium 只問一次且可重開；規則掃描命中常見格式；`amend` 重新掃描取較高等級；AI 無法調低 `sensitivity`；`import` 略過含 high 的檔案並列出 | 逐項測；偽造或重用 token 被拒；醒目樣本（合成金鑰格式）命中 | M6 |
 | T16 | 權限矩陣（每個操作×每個入口）：唯讀模式的工具清單根本沒有寫入、隱藏、清除工具；`max_sensitivity` 生效 | 以唯讀啟動，列出工具；對照核心權限表逐格驗證 | M3（每個里程碑重跑） |

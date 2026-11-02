@@ -7,20 +7,21 @@ from pathlib import Path
 
 import ai_runner as ar
 import pytest
+import scoring as sc
 import synth
 
 
 def test_single_answer_is_judged_by_the_first_record_named() -> None:
     answer = "第一次是 2025-03-20（r466.v1）。其他京都紀錄：r514、r368"
-    assert ar.score_answer(answer, {466}, 700, as_set=False, gold_date="2025-03-20")["score"] == 5
-    assert ar.score_answer(answer, {466}, 700, as_set=False, gold_date="2025-03-21")["score"] == 4
-    assert ar.score_answer(answer, {514}, 700, as_set=False, gold_date=None)["score"] == 3
-    assert ar.score_answer(answer, {999}, 1000, as_set=False, gold_date=None)["score"] == 0
-    assert ar.score_answer("沒有找到。", {466}, 700, as_set=False)["score"] == 0
+    assert sc.score_answer(answer, {466}, 700, as_set=False, gold_date="2025-03-20")["score"] == 5
+    assert sc.score_answer(answer, {466}, 700, as_set=False, gold_date="2025-03-21")["score"] == 4
+    assert sc.score_answer(answer, {514}, 700, as_set=False, gold_date=None)["score"] == 3
+    assert sc.score_answer(answer, {999}, 1000, as_set=False, gold_date=None)["score"] == 0
+    assert sc.score_answer("沒有找到。", {466}, 700, as_set=False)["score"] == 0
 
 
 def test_invented_records_score_zero() -> None:
-    result = ar.score_answer("見 r9999", {1}, 700, as_set=True)
+    result = sc.score_answer("見 r9999", {1}, 700, as_set=True)
     assert result["score"] == 0 and "不存在" in result["note"]
 
 
@@ -29,7 +30,7 @@ def test_invented_records_score_zero() -> None:
     [("r1 r2 r3", 5), ("r1 r2", 3), ("r1 r2 r3 r4", 3), ("r1", 2), ("r9 r8", 0)],
 )
 def test_set_answers_use_f1_bands(cited: str, expected: int) -> None:
-    assert ar.score_answer(cited, {1, 2, 3}, 100, as_set=True)["score"] == expected
+    assert sc.score_answer(cited, {1, 2, 3}, 100, as_set=True)["score"] == expected
 
 
 def test_rescoring_keeps_the_old_score(tmp_path: Path) -> None:

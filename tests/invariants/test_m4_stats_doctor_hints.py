@@ -61,7 +61,13 @@ def test_zero_results_carry_a_language_hint(db: Database) -> None:
     miss = search.search(db, CLI, query="存在しない")
     assert miss["total"] == 0 and len(miss["hints"]) == 1
     hint = miss["hints"][0]
-    assert "日文假名" in hint and "英文字母" in hint and "平假名" in hint
+    assert "英文字母" in hint and "日文假名" not in hint  # only the scripts not yet tried
+    latin = search.search(db, CLI, query="nothing")["hints"][0]
+    assert "日文假名" in latin and "平假名" in latin and "英文字母" not in latin
+    both = search.search(db, CLI, query="OR 存在しない OR nothing".replace("OR ", "", 1))["hints"][
+        0
+    ]
+    assert "涵蓋" in both  # every script of the library was tried: do not ask for more languages
     assert search.search(db, CLI, query="京都")["hints"] == []  # only when nothing was found
     assert search.search(db, CLI)["hints"] == []  # browsing without a query never nags
 
@@ -69,7 +75,7 @@ def test_zero_results_carry_a_language_hint(db: Database) -> None:
 def test_hint_names_only_scripts_that_exist(db: Database) -> None:
     service.save(db, CLI, body="plain english text only")
     hint = search.search(db, CLI, query="missing")["hints"][0]
-    assert "英文字母" in hint and "日文假名" not in hint
+    assert "日文假名" not in hint and "漢字" not in hint  # scripts the library lacks stay unnamed
 
 
 @pytest.mark.slow

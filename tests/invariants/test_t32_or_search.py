@@ -159,8 +159,36 @@ def test_no_hit_counts_when_there_is_nothing_to_explain(
     db: Database, caller: Caller, filled: dict[str, str]
 ) -> None:
     assert "term_hits" not in search.search(db, caller, query="薬局")  # one word
-    assert "term_hits" not in search.search(db, caller, query="病院 OR 薬局")  # it found something
-    assert "term_hits" not in search.search(db, caller, query="病院 ラーメン")
+    assert "term_hits" not in search.search(db, caller, query="病院 ラーメン")  # one group, a hit
+
+
+def test_an_or_query_always_says_which_words_exist(
+    db: Database, caller: Caller, filled: dict[str, str]
+) -> None:
+    got = search.search(db, caller, query="病院 OR 薬局 OR クリニック")
+    assert got["total"] == 3 and got["term_hits"] == {"病院": 2, "薬局": 0, "クリニック": 1}
+    assert "hints" in got and not any("term_hits" in h for h in got["hints"])  # no complaint
+
+
+def test_single_word_groups_do_not_claim_all_words_were_needed(
+    db: Database, caller: Caller, filled: dict[str, str]
+) -> None:
+    got = search.search(db, caller, query="薬局 OR 歯科")
+    hint = got["hints"][-1]
+    assert "同時含有" not in hint and "term_hits" in hint
+
+
+def test_the_wider_limits_accept_a_big_or_query(
+    db: Database, caller: Caller, filled: dict[str, str]
+) -> None:
+    words = [f"ことば{i}" for i in range(search.MAX_ALTERNATIVES - 1)]
+    got = search.search(db, caller, query=" OR ".join([*words, "病院"]))
+    assert got["total"] == 2
+    with pytest.raises(EmlekError) as info:
+        search.search(
+            db, caller, query=" OR ".join(f"語{i}" for i in range(search.MAX_ALTERNATIVES + 1))
+        )
+    assert "分成兩次" in info.value.message
 
 
 def test_hit_counts_never_count_what_the_caller_may_not_see(db: Database, caller: Caller) -> None:
@@ -174,3 +202,20 @@ def test_hit_counts_never_count_what_the_caller_may_not_see(db: Database, caller
     got = search.search(db, caller, query="薬局 歯科", max_sensitivity="medium")
     assert got["term_hits"] == {"薬局": 1, "歯科": 0}
     assert shown  # only this one is visible
+
+
+def test_a_batched_or_query_matches_the_union_of_its_groups(
+    db: Database, caller: Caller, filled: dict[str, str]
+) -> None:
+    # single-word groups share one query (long words through the index, short ones by scan);
+    # the answer must be exactly what the groups find one by one
+    words = ["病院", "クリニック", "ラーメン", "醫院", "院", "食"]
+    together = _found(db, caller, " OR ".join(words))
+    apart: set[str] = set()
+    for word in words:
+        apart |= _found(db, caller, word)
+    assert together == apart and len(together) >= 4
+    mixed = _found(db, caller, "病院 ラーメン OR クリニック OR 醫院 OR 院")
+    assert mixed == _found(db, caller, "病院 ラーメン") | _found(db, caller, "クリニック") | _found(
+        db, caller, "醫院"
+    ) | _found(db, caller, "院")

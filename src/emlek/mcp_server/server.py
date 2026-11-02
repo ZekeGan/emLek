@@ -47,6 +47,7 @@ INSTRUCTIONS = (
     "error.data 裡的 token 重送；不可自行帶碼，也不可替使用者回答。\n"
     "10. 存入時順手加標籤，優先用下列既有標籤；回 tags_pending 就改用既有的。情緒標籤是推測。"
 )
+MAX_SEARCH_LIMIT = 30  # one page of results; more is reached by narrowing or by cursor
 MAX_SEARCH_CHARS = 12000  # one search answer is trimmed to about this many characters
 MAX_GET_CHARS = 8000  # longer bodies are cut; the rest is read with `offset`
 
@@ -228,7 +229,7 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
                 date_to=date_to,
                 order=order,
                 direction=dir,
-                limit=limit,
+                limit=min(limit, MAX_SEARCH_LIMIT),
                 cursor=cursor,
                 all_versions=all_versions,
                 include_hidden=include_hidden,

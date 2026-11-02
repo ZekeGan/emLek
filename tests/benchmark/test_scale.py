@@ -95,6 +95,29 @@ def test_scale_36k(tmp_path: Path) -> None:
         timed(label="fts_plus_like", query="新幹線 東京", limit=20)
         timed(label="absent_term_fallback", query="存在しない言葉です")
         timed(label="or_three_groups", query="新幹線 OR 東京 OR 針山", limit=20)
+        timed(
+            label="or_fifteen_groups",
+            query=" OR ".join(
+                [
+                    "新幹線",
+                    "東京",
+                    "針山",
+                    "ラーメン",
+                    "京都",
+                    "病院",
+                    "友達",
+                    "母",
+                    "父",
+                    "猫",
+                    "犬",
+                    "雨",
+                    "夜",
+                    "朝",
+                    "旅",
+                ]
+            ),
+            limit=20,
+        )
         empty = timed(
             label="zero_result_with_word_counts", query="新幹線 存在しない言葉です", limit=20
         )

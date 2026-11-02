@@ -25,8 +25,8 @@ from emlek.core.permissions import Caller, require
 from emlek.core.service import KINDS, normalize_for_search
 
 MAX_QUERY_CHARS = 512
-MAX_TERMS = 20
-MAX_ALTERNATIVES = 8
+MAX_TERMS = 30
+MAX_ALTERNATIVES = 20
 MAX_TERM_HITS = 12  # how many words get a hit count when a query finds nothing
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
@@ -39,6 +39,11 @@ AGGREGATE_THRESHOLD = 50  # above this many matches the response also carries a 
 MAX_SUMMARY_MONTHS = 24
 SUMMARY_NOTE = "依關鍵字比對，可能漏掉不同說法的記錄；僅供縮小範圍，不代表全貌"
 
+_SCRIPTS = {
+    "kana": re.compile("[\u3040-\u30ff]"),
+    "han": re.compile("[\u4e00-\u9fff]"),
+    "latin": re.compile("[A-Za-z]"),
+}
 _TERM = re.compile(r'"([^"]+)"|(\S+)')
 _DATE_PART = re.compile(r"^\d{4}(?:-\d{2}(?:-\d{2})?)?$")
 _OFFSET = re.compile(r"^([+-])(\d{2}):(\d{2})$")
@@ -66,9 +71,15 @@ def parse_alternatives(query: str | None) -> list[list[str]]:
             total += 1
     alternatives = [alt for alt in alternatives if alt]
     if total > MAX_TERMS:
-        raise EmlekError(ErrorCode.INVALID_INPUT, "查詢詞不可超過 20 個")
+        raise EmlekError(
+            ErrorCode.INVALID_INPUT,
+            f"查詢詞不可超過 {MAX_TERMS} 個；請挑最有代表性的詞，或分成兩次搜尋",
+        )
     if len(alternatives) > MAX_ALTERNATIVES:
-        raise EmlekError(ErrorCode.INVALID_INPUT, f"OR 最多 {MAX_ALTERNATIVES} 組")
+        raise EmlekError(
+            ErrorCode.INVALID_INPUT,
+            f"OR 最多 {MAX_ALTERNATIVES} 組；請挑最有代表性的說法，或分成兩次搜尋",
+        )
     return alternatives
 
 
@@ -114,8 +125,8 @@ def _like_pattern(term: str) -> str:
     return f"%{escaped}%"
 
 
-def _fts_expression(terms: list[str]) -> str:
-    return " AND ".join('"' + t.replace('"', '""') + '"' for t in terms)
+def _fts_expression(terms: list[str] | None, joiner: str = " AND ") -> str:
+    return joiner.join('"' + t.replace('"', '""') + '"' for t in terms or [])
 
 
 def _encode_cursor(order: str, direction: str, key: list[Any]) -> str:
@@ -170,6 +181,8 @@ def _run(
     *,
     fts_terms: list[str],
     like_terms: list[str],
+    fts_any: list[str] | None = None,
+    like_any: list[str] | None = None,
     kinds: list[str] | None,
     include_hidden: bool,
     all_versions: bool,
@@ -185,9 +198,10 @@ def _run(
     untagged: bool = False,
 ) -> list[sqlite3.Row | tuple[Any, ...]]:
     plan = _Plan(all_versions=all_versions)
-    if fts_terms:
+    if fts_terms or fts_any:
         source = "revisions_fts f JOIN revisions r ON r.id = f.rowid"
-        plan.add("revisions_fts MATCH ?", _fts_expression(fts_terms))
+        expression = _fts_expression(fts_terms) if fts_terms else _fts_expression(fts_any, " OR ")
+        plan.add("revisions_fts MATCH ?", expression)
         rank = "bm25(revisions_fts)"
     else:
         source = "revisions r"
@@ -195,6 +209,11 @@ def _run(
     source += " JOIN records rec ON rec.id = r.record_id"
     for term in like_terms:
         plan.add("r.body_norm LIKE ? ESCAPE '\\'", _like_pattern(term))
+    if like_any:
+        plan.add(
+            "(" + " OR ".join("r.body_norm LIKE ? ESCAPE '\\'" for _ in like_any) + ")",
+            *(_like_pattern(t) for t in like_any),
+        )
     if not all_versions:
         plan.add(
             "r.version_no ="
@@ -269,14 +288,47 @@ def _gather(
         like = words if stale else [t for t in words if len(t) < FTS_MIN_CHARS]
         return [tuple(row) for row in _run(db, fts_terms=fts, like_terms=like, **kwargs)]
     merged: dict[int, tuple[Any, ...]] = {}
+    # groups of a single word are the common case (a list of synonyms): ask for all of them in
+    # one query instead of one table pass each; groups of several words still run one by one
+    singles = [alt[0] for alt in alternatives if len(alt) == 1]
+    batched_fts = [] if stale else [t for t in singles if len(t) >= FTS_MIN_CHARS]
+    batched_like = singles if stale else [t for t in singles if len(t) < FTS_MIN_CHARS]
+    jobs: list[tuple[list[str], list[str], list[str], list[str], list[str]]] = []
+    if len(batched_fts) > 1:
+        jobs.append(([], [], batched_fts, [], batched_fts))
+    if len(batched_like) > 1:
+        jobs.append(([], [], [], batched_like, batched_like))
+    taken = {t for job in jobs for t in job[4]}
     for words in alternatives:
+        if len(words) == 1 and words[0] in taken:
+            continue
         fts = [] if stale else [t for t in words if len(t) >= FTS_MIN_CHARS]
         like = words if stale else [t for t in words if len(t) < FTS_MIN_CHARS]
-        found_rows = list(_run(db, fts_terms=fts, like_terms=like, **kwargs))
-        if not found_rows and fts:
+        jobs.append((fts, like, [], [], words))
+    for fts, like, any_fts, any_like, words in jobs:
+        found_rows = list(
+            _run(
+                db,
+                fts_terms=fts,
+                like_terms=like,
+                fts_any=any_fts or None,
+                like_any=any_like or None,
+                **kwargs,
+            )
+        )
+        if not found_rows and (fts or any_fts):
+            fts = fts or any_fts
             # one group answering from the index while another group's index is stale would
             # hide records silently: an empty index answer is checked again without the index
-            again = list(_run(db, fts_terms=[], like_terms=words, **kwargs))
+            again = list(
+                _run(
+                    db,
+                    fts_terms=[],
+                    like_terms=[] if any_fts else words,
+                    like_any=any_fts or None,
+                    **kwargs,
+                )
+            )
             if again:
                 found_rows = again
                 if notes is not None and "index_stale" not in notes:
@@ -302,12 +354,38 @@ def _gather(
 
 
 def _term_hits(
-    db: Database, terms: list[str], include_hidden: bool, max_sensitivity: str
+    db: Database, terms: list[str], include_hidden: bool, max_sensitivity: str, *, stale: bool
 ) -> dict[str, int]:
-    """How many current records contain each word on its own (one pass over the table)."""
+    """How many current records contain each word on its own. Words of three characters or more
+    are counted through the index; the short ones share one pass over the table."""
     allowed = ",".join(
         f"'{lvl}'" for lvl in SENSITIVITY_LEVELS[: SENSITIVITY_LEVELS.index(max_sensitivity) + 1]
     )
+    counts: dict[str, int] = {}
+    scan = terms
+    if not stale:
+        scan = [t for t in terms if len(t) < FTS_MIN_CHARS]
+        for term in terms:
+            if len(term) < FTS_MIN_CHARS:
+                continue
+            counts[term] = int(
+                db.conn.execute(
+                    "SELECT COUNT(*) FROM revisions_fts f JOIN revisions r ON r.id = f.rowid"
+                    " JOIN records rec ON rec.id = r.record_id WHERE revisions_fts MATCH ?"
+                    " AND r.version_no ="
+                    " (SELECT MAX(v.version_no) FROM revisions v WHERE v.record_id = r.record_id)"
+                    f" AND (rec.hidden = 0 OR ?) AND rec.sensitivity IN ({allowed})",
+                    [_fts_expression([term]), 1 if include_hidden else 0],
+                ).fetchone()[0]
+            )
+    if scan:
+        counts.update(_scan_hits(db, scan, include_hidden, allowed))
+    return {term: counts[term] for term in terms}
+
+
+def _scan_hits(
+    db: Database, terms: list[str], include_hidden: bool, allowed: str
+) -> dict[str, int]:
     columns = ", ".join("COALESCE(SUM(r.body_norm LIKE ? ESCAPE '\\'), 0)" for _ in terms)
     row = db.conn.execute(
         f"SELECT {columns} FROM revisions r JOIN records rec ON rec.id = r.record_id"
@@ -321,12 +399,18 @@ def _term_hits(
 
 def _word_hint(alternatives: list[list[str]], hits: dict[str, int]) -> str:
     found = [t for t, n in hits.items() if n]
+    if all(len(alt) == 1 for alt in alternatives):
+        base = "各詞單獨的命中數見 term_hits。"
+        if found:
+            names = "、".join(found)
+            return base + f"有資料的詞：{names}；其餘詞在這個記憶庫沒有出現過，不必再重送。"
+        return base + "每個詞單獨都沒有命中。"
     base = "沒有一筆同時含有全部的詞（同一組的詞須全部出現）；各詞單獨命中數見 term_hits。"
     if found:
         return (
             base + f"其中 {'、'.join(found)} 有資料：用大寫 OR 表示任一（如 A OR B），或分開搜尋。"
         )
-    return base + "每個詞單獨都沒有命中，請換說法或換語言。"
+    return base + "每個詞單獨都沒有命中。"
 
 
 def _snippet(body: str, terms: list[str]) -> str:
@@ -530,17 +614,25 @@ def search(
     if trimmed:  # the answer would be too big to read: hand back fewer, and the way to the rest
         page = page[: len(results)]
         next_cursor = _encode_cursor(applied, direction, page[-1]["key"])
-    hints = _zero_result_hints(db) if terms and not ordered and not warnings else []
+    hints = _zero_result_hints(db, terms) if terms and not ordered and not warnings else []
     if trimmed:
         hints = [
             *hints,
             f"回應太長，只回了前 {len(results)} 筆（共 {len(ordered)} 筆）；"
-            "縮小日期或詞，或用下一頁游標接著看。",
+            "先縮小日期或詞再搜；真的需要其餘結果才用下一頁游標。",
         ]
     term_hits: dict[str, int] | None = None
-    if not ordered and len(terms) >= 2 and not tags:
-        term_hits = _term_hits(db, terms[:MAX_TERM_HITS], include_hidden, max_sensitivity)
-        hints = [*hints, _word_hint(alternatives, term_hits)]
+    if not tags and len(terms) >= 2 and (not ordered or len(alternatives) >= 2):
+        # with OR the AI guesses many words: tell it which ones exist at all, hits or not
+        term_hits = _term_hits(
+            db,
+            terms[:MAX_TERM_HITS],
+            include_hidden,
+            max_sensitivity,
+            stale="index_stale" in warnings,
+        )
+        if not ordered:
+            hints = [*hints, _word_hint(alternatives, term_hits)]
     summary = (
         _summary(db, ordered, date_field, modifiers) if len(ordered) > AGGREGATE_THRESHOLD else None
     )
@@ -606,13 +698,20 @@ def _script_shares(db: Database) -> dict[str, float]:
     return {"kana": kana / total, "han": han / total, "latin": latin / total}
 
 
-def _zero_result_hints(db: Database) -> list[str]:
+def _zero_result_hints(db: Database, terms: list[str]) -> list[str]:
     shares = _script_shares(db)
     labels = (("kana", "日文假名"), ("han", "漢字（中文或日文）"), ("latin", "英文字母"))
-    present = [label for key, label in labels if shares[key] >= 0.05]
-    mixed = "、".join(present) if present else "多種寫法"
+    present = [(key, label) for key, label in labels if shares[key] >= 0.05]
+    tried = {key for key, _ in labels if any(_SCRIPTS[key].search(t) for t in terms)}
+    missing = [label for key, label in present if key not in tried]
+    if present and not missing:
+        return [
+            "沒有找到。查詢已涵蓋這個記憶庫用到的各種文字；請改用更上位或更下位的說法、"
+            "用標籤或日期縮小範圍，試過仍沒有才能說找不到。"
+        ]
+    mixed = "、".join(missing or [label for _, label in present]) or "多種寫法"
     return [
-        f"沒有找到。這個記憶庫的內容含 {mixed}；請把查詢詞換成另外的語言或寫法"
+        f"沒有找到。這個記憶庫的內容也含 {mixed}，查詢還沒試過；請補上這種寫法"
         "（日文要同時試平假名、片假名與漢字），試過仍沒有才能說找不到。"
     ]
 

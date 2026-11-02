@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 搜尋：OR 上限 20 組／30 詞、單詞組併成一次查詢、含 OR 的查詢附 `term_hits`、提示修正、MCP 單頁上限 30（D78）。
 - `NEEDS_CONFIRMATION` 回應附 `ask_user` 固定問句；開場說明的熱門標籤只列使用者建立或使用過的；MCP `search` 單次回應約 12000 字元上限（`results_trimmed`）；評分另報 `adjusted_score`（D77）。
 - 搜尋：裸的大寫 `OR` 表示任一組；多詞零結果時回 `term_hits` 與提示；`untagged` 篩選。標籤回補 `emlek tags backfill`（預覽、套用、復原，來源 `rule`，遷移 0006）。題庫新增模糊問法題 Q82–Q89。
 

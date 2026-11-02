@@ -356,3 +356,15 @@ def test_tags_over_mcp_and_the_tag_list_in_the_opening_instructions(data_dir: Pa
             assert {"tags_find", "tags_list"} <= names and not names & {"set_tags", "tag_link"}
 
     asyncio.run(scenario())
+
+
+@pytest.mark.slow
+def test_a_page_of_search_results_is_capped_over_mcp(data_dir: Path) -> None:
+    async def scenario() -> None:
+        async with _stdio(data_dir, read_only=False) as client:
+            for i in range(35):
+                await client.call_tool("save", {"body": f"京都の記録{i}"})
+            got = _payload(await client.call_tool("search", {"query": "京都", "limit": 100}))
+            assert got["result"]["total"] == 35 and len(got["result"]["results"]) == 30
+
+    asyncio.run(scenario())

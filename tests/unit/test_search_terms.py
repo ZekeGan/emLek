@@ -20,8 +20,11 @@ def test_query_limits() -> None:
         search.parse_terms("x" * 513)
     assert too_long.value.code is ErrorCode.INVALID_INPUT
     with pytest.raises(EmlekError):
-        search.parse_terms(" ".join(f"t{i}" for i in range(21)))
-    assert len(search.parse_terms(" ".join(f"t{i}" for i in range(20)))) == 20
+        search.parse_terms(" ".join(f"t{i}" for i in range(search.MAX_TERMS + 1)))
+    assert (
+        len(search.parse_terms(" ".join(f"t{i}" for i in range(search.MAX_TERMS))))
+        == search.MAX_TERMS
+    )
 
 
 @pytest.mark.parametrize(

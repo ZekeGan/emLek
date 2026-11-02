@@ -265,3 +265,8 @@ def test_sensitivity_and_notice_commands_use_the_gate(
     assert (
         "重新開啟" in trust.run_notice(_args(pinned, notice_command="enable", level="medium")).text
     )
+
+
+def test_filtering_the_list_does_not_change_whether_purge_is_on(db: Database) -> None:
+    only_save = phrases.list_phrases(db, Caller(Channel.CLI), kind="save")
+    assert only_save["phrases"]["purge"] == [] and only_save["purge_enabled"] is True

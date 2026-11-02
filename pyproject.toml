@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "emlek"
-version = "0.0.0"
+version = "0.1.0"
 description = "Local-first, single-user long-term text memory store for AI agents"
 readme = "README.md"
 license = "MIT"

@@ -62,7 +62,10 @@ def list_phrases(
     grouped: dict[str, list[dict[str, Any]]] = {k: [] for k in KINDS}
     for row in rows:
         grouped[row[1]].append(_row(row))
-    return {"phrases": grouped, "purge_enabled": any(p["enabled"] for p in grouped["purge"])}
+    purge_on = db.conn.execute(
+        "SELECT 1 FROM phrases WHERE kind = 'purge' AND enabled = 1 LIMIT 1"
+    ).fetchone()
+    return {"phrases": grouped, "purge_enabled": purge_on is not None}
 
 
 def add(db: Database, caller: Caller, *, kind: str, text: str) -> dict[str, Any]:

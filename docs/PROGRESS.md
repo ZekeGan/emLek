@@ -4,8 +4,8 @@
 
 ## 現況
 
-- 模式：**MODE B；M1–M5 已完成並經使用者驗收（M5 於 2026-11-02 通過）**。**M6 已實作（2026-11-02 使用者下令開始），待使用者驗收**；M7 須等使用者下一道明確指示。
-- 已有 `src/emlek`（init、doctor、save、amend、hide、unhide、get、search、reindex、mcp、backup、restore、export、stats、遷移 0001–0004；pin、phrase、notice、sensitivity）與 412 項測試（快速）加 1 項 36000 筆規模測試；只有合成測試資料。版本號 0.0.0，尚未發布。
+- 模式：**MODE B；M1–M5 已完成並經使用者驗收（M5 於 2026-11-02 通過）**。**M6 已實作並經使用者驗收（2026-11-02 通過），程式版本升為 0.1.0**；M7 須等使用者下一道明確指示。
+- 已有 `src/emlek`（init、doctor、save、amend、hide、unhide、get、search、reindex、mcp、backup、restore、export、stats、遷移 0001–0004；pin、phrase、notice、sensitivity）與 415 項測試（快速）加 1 項 36000 筆規模測試；只有合成測試資料。版本號 0.0.0，尚未發布。
 - Git：`main`，遠端 `origin` = https://github.com/ZekeGan/emLek.git（公開）；是否同步以 `git status` 為準。敏感詞檢查掛在本機 pre-commit 與 pre-push，標記清單目前是空的。
 - 環境（已驗證）：Python 3.14.10（uv 0.13.6）、SQLite 3.53.1；套件由 `uv.lock` 鎖定；Claude Code 2.1.316；Codex CLI 0.166.0 已安裝並登入，但使用者的 ChatGPT 用量已用完，**2026-11-04 22:58 後才能測**。
 - 未驗證：Codex 端的 MCP 連線與沙箱；真實資料效能。
@@ -22,16 +22,16 @@ PIN 強化採用（M6）；清除最終確認只在使用者自己的終端機�
 ## 下一步
 
 1. ~~M5 版本、連結、隱藏~~ **已完成並通過驗收**（結果見下「M5 驗收紀錄」）。原規劃：`amend`、`relation`、`superseded_by`、`linked_from`、`hide`／`unhide`、衍生摘要失效；**加上回傳瘦身**（搜尋預設片段、過多先回筆數與分布，D56）。完成標準：T12、T13、T26、Q08–Q10、Q22–Q23，且題庫平均回傳大小不高於 M4 基準，另加規模彙整題（數千筆合成資料、命中上千筆，AI 不可把前幾十筆當全貌；QUESTIONS 類別 I）。M5 完成時補 E／H（含糊、多輪）與版本題。
-2. ~~M6 信任閘門~~ **已實作，待你驗收**（見下「M6 待驗收」；驗收通過後升版 0.1.0）→ M7 標籤（開始前補 D 類組合比較題；完成後重跑 Q20、Q48、Q49）→ M8 匯入與備份加密 → M9 清除 → M10 依數據決定 → M11 發布準備（見 DESIGN）。
+2. ~~M6 信任閘門~~ **已完成並通過驗收，版本 0.1.0**（見下「M6 驗收紀錄」）→ M7 標籤（開始前補 D 類組合比較題；完成後重跑 Q20、Q48、Q49）→ M8 匯入與備份加密 → M9 清除 → M10 依數據決定 → M11 發布準備（見 DESIGN）。
 
-## M6 待驗收（2026-11-02）
+## M6 驗收紀錄（2026-11-02 通過）
 
 **做了什麼**：PIN（存在資料夾內的 `security.json`，不在資料庫；`pin set／change／reset`，復原碼）、危險命令閘門（真人終端機加 PIN：`restore`、`phrase add／set／remove`、`notice enable`、`sensitivity set`）、觸發語句（`phrase list` 不需 PIN；MCP `phrases_list`）、敏感掃描（high／medium）與確認碼（`save`／`amend` 的 `confirm_token`、`notice_token`）、`get` 的敏感度上限、`doctor` 顯示 PIN 狀態與失敗次數、`restore` 保留目前的 PIN 設定。
 
-**實測**：快速測試 412 項全過（新增 T14、T15、T27、T28 共約 130 項）；ruff、mypy 乾淨。掃描效能：1 MiB 文字 0.5 秒內（初版有二次方時間的問題，已修並有測試）。AI 層（haiku）：五段同意對話（C01–C05，對應 Q40–Q42）**5/5**——AI 對密碼用固定句式詢問、答「否」不存、答「是」存成 high；電話第一次詢問並存成 medium、第二次不再問；重新開啟提醒後又問。Claude Code 的 PowerShell 工具執行 `phrase add`、`pin set`、`restore` 皆被拒（結束碼 3）。
+**實測**：快速測試 413 項全過（新增 T14、T15、T27、T28 共約 130 項）；ruff、mypy 乾淨。掃描效能：1 MiB 文字 0.5 秒內（初版有二次方時間的問題，已修並有測試）。AI 層（haiku）：五段同意對話（C01–C05，對應 Q40–Q42）**5/5**——AI 對密碼用固定句式詢問、答「否」不存、答「是」存成 high；電話第一次詢問並存成 medium、第二次不再問；重新開啟提醒後又問。Claude Code 的 PowerShell 工具執行 `phrase add`、`pin set`、`restore` 皆被拒（結束碼 3）。
 **沒有驗證的**：在真正的終端機輸入 PIN（`getpass`）——自動化測試用替身取代，必須由你驗收。
 
-**驗收清單**（在自己的 PowerShell，用拋棄式資料夾 `C:\temp\emlek-m6`；順序重要，第 6 步最後做）：
+**驗收清單**（已由使用者完成；在自己的 PowerShell，用拋棄式資料夾 `C:\temp\emlek-m6`；順序重要，第 6 步最後做）：
 1. `cd <專案資料夾>`；`$e = ".\.venv\Scripts\emlek.exe"; $d = "C:\temp\emlek-m6"`；`& $e --data-dir $d init` → 輸入兩次 PIN（至少 6 字元）；畫面顯示**復原碼**，抄下來。
 2. `& $e --data-dir $d doctor` → `pin` 一行為「已設定」。
 3. `& $e --data-dir $d phrase list` → 看到 6 條預設語句（save 四條、purge 一條、exclude 一條）。

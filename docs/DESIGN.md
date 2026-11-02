@@ -35,7 +35,7 @@
 | `links` | `revision_id`、`derived_from_revision_id`、`relation`（選填） |
 | `phrases` | `id`、`kind`（save／purge／exclude）、`text`、`enabled`、`created_at`、`updated_at` |
 | `notice_settings` | `level`（medium）、`enabled`、`acknowledged_at` |
-| `import_log` | `file_name`、`chunk_index`、`content_hash`、`record_id`（清除後為空）、`purged`、`imported_at` |
+| `import_batches`、`import_log` | 批次與每檔紀錄：`file_name`、`content_hash`、`record_id`（清除後為空）、`purged`、`batch_id`、`imported_at`（M8 精簡版，`chunk_index` 延後） |
 | 標籤相關 | `tags`、`record_tags`、`tag_links`、`tag_aliases`、`tag_events`，見 [DESIGN_TAGS](DESIGN_TAGS.md) |
 | `meta` | schema 版本、上次備份時間 |
 
@@ -211,29 +211,41 @@ T14、T15、T16，以及新增的 T27（確認碼）、T28（PIN 儲存與狀態
 
 備份加密：分段 AEAD（每段約 1 MiB，隨機前綴加計數器當 nonce，檔頭與「最後一段」旗標放進附加驗證資料，才能防截斷與重排；整個大檔一次 GCM 不可行）；解密時對 scrypt 參數設上下限，防惡意檔頭造成資源耗盡；`VACUUM INTO` 的明文暫存檔放在資料夾內而不是備份磁碟，串流加密後刪除並記載 SSD 可能殘留；密碼只能用 `getpass` 在真人終端機輸入，不與 PIN 共用，加密後立即解密驗證；測試要涵蓋改一個位元組、交換兩段、截斷都被拒。匯出（`exports/`）與 `pre-migration/` 的副本仍是明文，要另外標示或處理。
 
-匯入：**用單一大交易批次寫入**（30,108 筆逐筆呼叫 `save` 花了 27 分鐘，約 19 筆／秒，瓶頸是每筆一次 fsync）；編碼必須明確指定，壞字元不可悄悄替換（錯了會成為永久的原文）；預設 `--dry-run`；每次匯入記一個批次編號，讓整批可以一次隱藏（徹底清除在 M9 之前做不到，匯入錯了只能隱藏）；改檔名造成的重複要用雜湊跨檔名比對並警告；不用檔案修改時間推測日期；匯入的 `#標籤` 另標來源，**不得進 AI 開場說明的標籤清單**。
+匯入：**用單一大交易批次寫入**（30,108 筆逐筆呼叫 `save` 花了 27 分鐘，約 19 筆／秒，瓶頸是每筆一次 fsync）；編碼必須明確指定，壞字元不可悄悄替換（錯了會成為永久的原文）；預設只預覽（加 `--apply` 才寫入）；每次匯入記一個批次編號，讓整批可以一次隱藏（徹底清除在 M9 之前做不到，匯入錯了只能隱藏）；改檔名造成的重複要用雜湊跨檔名比對並警告；不用檔案修改時間推測日期；匯入的 `#標籤` 另標來源，**不得進 AI 開場說明的標籤清單**。
 
-## M8 規格（2026-11-03；使用者指示開始 M8，在 AI 層正式比較結束後實作）
+## M8 規格（2026-11-03；使用者指示開始 M8 後又改為「之後再開發」；Opus 規格審查已併入；**尚未實作，等使用者下一道指示**）
 
-**範圍**：①備份加密（`backup --encrypt`、`restore` 讀加密檔）；②匯入（`emlek import`）。兩者都只在命令列，不開放 MCP。
+**範圍**：①備份加密（`backup --encrypt`、`restore` 讀加密檔）；②匯入精簡版（`emlek import`）。都只在命令列，不開放 MCP。
 
-**備份加密檔格式（版本 1，副檔名 `.db.enc`）**
-- 檔頭（固定 40 位元組）：魔術字 `EMLKBK01`（8）｜KDF 代碼 1（1）｜scrypt log2(n)（1）、r（1）、p（1）｜保留 0（3）｜salt（16）｜nonce 前綴（8）｜分段大小 log2（1）= 20（1 MiB）。檔頭整段進每一段的附加驗證資料（AAD）。
-- 每段：AES-256-GCM，nonce＝前綴（8）＋段序號（4，大端）；AAD＝檔頭＋1 位元組「最後一段」旗標。密文長度＝明文長度＋16。至少一段（空內容也有一段）。讀者以「後面還有沒有資料」決定旗標，所以：改任一位元組、交換兩段、截斷（含剛好砍在段落邊界）、尾端多塞資料，都會驗證失敗。
-- 金鑰：`hashlib.scrypt`，預設 n=2^17、r=8、p=1（約 128 MiB 記憶體、不到 1 秒）。**解密時檔頭參數必須在範圍內才執行**：log2(n) 14–18、r=8、p 1–4，超出就拒絕（防惡意檔頭耗盡記憶體）。
-- 密碼：只能用 `getpass` 在真人終端機輸入兩次；至少 10 個字元；**不與 PIN 共用**（拒絕與 PIN 相同）；顯示「密碼遺失就無法還原，我們沒有辦法找回」。密碼不存任何地方。
-- 流程：`VACUUM INTO` 先寫到資料夾內的 `tmp/`（不寫到備份磁碟）→ 串流加密到備份資料夾 → **立刻從加密檔重新解密並比對明文雜湊**，通過才算成功 → 暫存明文覆寫後刪除（SSD 可能殘留，文件如實記載）。失敗時刪除不完整的 `.db.enc`。
-- `restore`：偵測魔術字；加密檔要求輸入密碼，解密到資料夾內暫存，再走既有的檢查、PIN 閘門與還原流程；密碼錯誤與檔案遭竄改回相同的 `INVALID_INPUT`（不區分，避免成為判斷依據）。
-- `doctor`：備份項目多顯示最近一次是否加密（`meta.last_backup_encrypted`）；未加密時維持現狀，不報警（加密是選項）。
-- 匯出（`exports/`）與 `pre-migration/` 副本仍是明文，`doctor`／README 如實標示；本里程碑不加密它們。
+**共同前置：共用寫入函式**。把 `service.save` 的寫入段抽成 `_write_record(conn, *, body, kind, level, event_time, precision, source, parse_hashtags)`：不開交易、不簽發確認碼。`save` 與 `import` 都呼叫它（現有 `save` 自己開 `BEGIN IMMEDIATE`，不能放進外部交易，`tokens.issue` 也自己開交易）。
 
-**匯入（`emlek import`）——精簡版（2026-11-03，使用者目前沒有日記，要求「增加太多複雜度就先放著」）**
-- 本里程碑只做：①`emlek import <檔案或資料夾>`，預設只預覽，加 `--apply` 才寫入；②只讀 `.txt`、`.md`，每檔一筆 `original`，單檔 ≤ 1 MiB，資料夾遞迴、不跟隨符號連結、一次最多 20,000 檔；③編碼只收嚴格 UTF-8（接受 BOM），解碼失敗列為失敗，不替換壞字元；④日期只取檔名裡的 `YYYY-MM-DD`／`YYYYMMDD`／`YYYY年M月D日`，沒有就留空，精度為日，不用檔案修改時間、不合法日期視為沒有；⑤`source=import:<相對檔名>`；⑥冪等與重複：（檔名、內容雜湊）已匯入則跳過；改檔後視為新內容並警告；內容相同但檔名不同預設略過並列出（`--allow-duplicates` 才匯入）；⑦敏感掃描：high 預設略過並列出（只列檔名與類別），`--include-high` 需真人終端機與 PIN；medium 照匯入並標為 medium；⑧整批一個資料庫交易，錯誤整批回復，預覽先算段數，超過 50,000 筆拒絕並要求分批；⑨批次編號：`import list`、`import undo <編號>`（把該批全部隱藏，可 `unhide`；徹底清除屬 M9）；⑩摘要列出匯入、重複、變更、high 略過、失敗（附原因）的數量。
-- 遷移 0007 只新增 `import_batches` 與 `import_log`（唯一鍵：檔名、內容雜湊），不動標籤表。
-- **延後（等有真實需求再做，記在 ROADMAP）**：`--split-by-heading` 日期標題切段、`--encoding`（cp932、big5、gbk 等）、內文 `#標籤` 解析（需要新增 `import` 來源並重建標籤表，且該來源不得進開場說明清單）、段落序號、日期出現在內文第一行的辨識。
+### 備份加密檔格式（版本 1，副檔名 `.db.enc`）
+- **檔頭**（固定 40 位元組）：魔術字 `EMLKBK01`（8）｜KDF 代碼 1（1）｜scrypt log2(n)、r、p（各 1）｜保留 0（3）｜salt（16）｜nonce 前綴（8，隨機）｜分段大小 log2（1）。檔頭整段是每一段的附加驗證資料（AAD）。
+- **分段**：AES-256-GCM，nonce＝前綴（8）＋段序號（4，大端）；AAD＝檔頭＋1 位元組「最後一段」旗標。讀者只接受分段大小 log2 = 20（1 MiB），其他拒絕。寫入者預讀一段判斷是否為最後一段：明文剛好是整數倍時，最後一段就是那個滿段（**不補空段**）；只有空內容才寫一個 0 位元組的段。讀者遇到非最後段卻短於 1 MiB＋16、或任何段短於 16 位元組、或段序號達 2^32，一律拒絕。改任一位元組、交換兩段、截斷（含剛好砍在段落邊界）、尾端追加，都會驗證失敗。
+- **金鑰**：`hashlib.scrypt`，預設 n=2^17、r=8、p=1。`maxmem = 128·r·n + 16 MiB`，依檔頭的值計算，**不共用 PIN 的 `KDF_MAXMEM`**（128 MiB 對 n=2^17 不夠，會 `ValueError`）。解密時檔頭參數必須在範圍內才執行（log2(n) 14–18、r=8、p 1–4），檢查先於計算。
+- **密碼**：只能用 `getpass` 在真人終端機輸入兩次；至少 10 個字元；**先做 NFC 再以 UTF-8 編碼**（換電腦或輸入法碼位不同會無法還原）；不存任何地方；介面明說「密碼遺失就無法還原，我們沒有辦法找回」。「不與 PIN 相同」只做提示文字，**不做程式比對**（比對會動到 PIN 失敗計數）。
+- **流程**：先把 `VACUUM INTO` 寫到資料夾內的 `tmp/`（不寫到備份磁碟）→ 對暫存檔跑既有的 `inspect_database` → 串流加密到 `*.db.enc.partial` → 從加密檔重新解密並比對明文雜湊 → 通過才改名為 `.db.enc` → 刪除暫存明文（SSD 可能殘留，如實記載，不假裝覆寫有效）。`backup`／`doctor` 啟動時清掉殘留的 `tmp/*` 與 `*.partial`。
+- **權限**：`backup --encrypt` 列入 `INTERACTIVE_ONLY`（真人終端機，不需 PIN）；不加密的 `backup` 維持現狀。
+- **`restore` 順序**：PIN →（偵測到魔術字）備份密碼 → 直接解密到 `emlek.db.restoring` → 既有檢查 → 使用者輸入「是」。取消或任何失敗都刪除暫存。現行 `run_restore` 與 `restore_backup` 各複製一次，要改成接受已放好的暫存檔，避免兩份明文。回應的 `restored_from` 填 `.enc` 路徑。還原後遷移在 `pre-migration/` 產生的明文副本要寫進文件。
+- **錯誤訊息**：檔頭問題（魔術字不符、版本不支援、參數超出範圍）用各自的訊息；只有驗證失敗統一為「密碼錯誤或檔案損毀」。
+- **`doctor`**：多顯示最近一次備份是否加密（`meta.last_backup_encrypted`）；還原時 `meta` 會換成備份當時的值，這個欄位也隨之回到當時狀態（既有行為，記載即可）。
+- 匯出（`exports/`）與 `pre-migration/` 的副本仍是明文，`doctor`／README 如實標示；本里程碑不加密它們。
+
+### 匯入精簡版（`emlek import`；使用者目前沒有日記，要求「增加太多複雜度就先放著」）
+- **做**：`emlek import <檔案或資料夾>`，預設只預覽，加 `--apply` 才寫入；只讀 `.txt`、`.md`，每檔一筆 `original`；單檔 ≤ 1 MiB、一次最多 20,000 檔、單批原文合計 ≤ 512 MiB；其他副檔名列為略過。
+- **權限**：新增操作 `import_preview`（任何入口）、`import_apply`（`INTERACTIVE_ONLY`，真人終端機，不需 PIN；預防有 shell 的 AI 把整個資料夾一次匯入）、`import_apply_high`（另加 `PIN_REQUIRED`）。`--include-high`：PIN 通過後再列一次 high 檔名與類別，使用者輸入「是」才寫入（預覽與寫入之間檔案可能被換掉）。
+- **不解析 `#標籤`**：匯入寫入一律 `parse_hashtags=False`，不寫 `record_tags`／`tag_events`；現有 `save` 對 original 會以 user 身分建立標籤，若匯入走那條路，外部檔案的文字就能進 AI 開場說明（提示注入）。測試保證匯入後 `record_tags` 數量不變。
+- **路徑**：遞迴；略過資料夾本身、`backup_dir`、任何含 `export.jsonl` 的目錄（摘要列為「略過（emLek 自己的檔案）」）；略過所有 reparse point（`st_file_attributes & FILE_ATTRIBUTE_REPARSE_POINT`，涵蓋符號連結、junction、雲端預留檔）；每檔只讀一次（最多讀 1 MiB＋1 位元組），雜湊、解碼、掃描用同一份 bytes；單檔 `OSError`（路徑過長、權限、保留名稱）列為失敗，不中止整批。
+- **編碼**：只收嚴格 UTF-8（接受 BOM），解碼失敗列為失敗，不替換壞字元。
+- **日期**：只取檔名。先把主檔名做 NFKC；數字前後不得緊鄰數字（避免從 `IMG_202601151230` 或電話號碼誤取）；格式 `YYYY-MM-DD`、`YYYYMMDD`、`YYYY年M月D日`；年份限 1900–2100；不合法（如 `20261301`）視為沒有；檔名含兩個以上「不同」的合法日期時留空並於摘要列出；沒有日期就留空，精度為日，不用檔案修改時間。
+- **來源與冪等**：`source=import:<相對檔名>`，去除控制字元、長度 ≤ 300，不記錄任何絕對路徑；`file_name` 為相對匯入根目錄的路徑，分隔符統一為 `/` 並做 NFC；`content_hash` ＝ SHA-256（去掉 BOM 的 UTF-8 原文，不轉換換行）。（檔名、雜湊）已匯入則跳過；改檔後視為新內容並警告；內容相同但檔名不同（含同一批內）預設略過並列出，`--allow-duplicates` 才匯入；從不同層級的資料夾匯入會因相對檔名改變而靠雜湊判成重複，文件載明。**`undo` 之後重新匯入會被略過並提示「該記錄已隱藏，請用 `unhide`」**。
+- **敏感掃描**：用 `sensitivity` 掃描自己決定等級，不簽發確認碼；high 預設略過並列出（只列檔名與類別）；medium 照匯入並標為 medium，摘要回報數量。
+- **寫入**：整批一個交易，錯誤整批回復；匯入期間其他寫入（含 AI 的 `save`）會回 `BUSY`（`busy_timeout` 5 秒），文件載明；提交後執行 `wal_checkpoint(TRUNCATE)`。`import undo <批次>`：以單一 `UPDATE records SET hidden=1 … WHERE id IN (該批)` 在同一交易完成，不逐筆呼叫 `versions.hide`；若該批記錄後來被 `amend` 過，先提示並列出數量。`import list` 列批次。
+- **遷移 0007**：`import_batches(id, created_at, file_count, options_json, undone_at)`；`import_log(id, batch_id REFERENCES import_batches, file_name, content_hash, record_id REFERENCES records NULL, purged INTEGER DEFAULT 0, imported_at, UNIQUE(file_name, content_hash))`；索引 `content_hash`、`batch_id`。`import_batches` 不存根目錄的絕對路徑。**匯出**新增 `import_batch`、`import_log` 兩種型別並計入標頭 `counts`，`verify_export` 一併檢查（現況匯出沒有輸出 `import_log`）。日誌只記批次編號與各項數量，不記檔名。
+- **延後**（等有真實需求，見 ROADMAP）：`--split-by-heading`、`--encoding`（cp932、big5、gbk）、內文 `#標籤` 解析（需新增 `import` 來源並重建標籤表，且不得進開場說明清單）、內文第一行日期的辨識、段落序號（`chunk_index`）。
 - 真實資料規則不變：開發與測試只用合成檔；真實文件須使用者貼出路徑並同意。
 
-**驗收（對應 T21、Q43）**：重複匯入不重複；壞檔（非 UTF-8、過大、空檔）列為失敗且不影響其他檔；日期解析；high 略過、`--include-high` 的閘門；整批回復；`undo` 後搜尋找不到、`unhide` 可恢復；三萬段匯入在單一交易內於合理時間完成（目標：遠快於逐筆的 27 分鐘）；備份加密：往返相同、錯誤密碼被拒、改一位元組／交換兩段／截斷／尾端追加都被拒、惡意檔頭參數被拒、暫存明文已刪除、`doctor` 顯示加密狀態。
+**驗收（對應 T21、Q43）**：匯入——重複匯入不重複；壞檔（非 UTF-8、過大、空檔）列為失敗且不影響其他檔；檔名日期解析（含歧義與不合法）；high 略過與 `--include-high` 的閘門；非終端機執行 `--apply` 被拒；整批回復；`undo` 後搜尋找不到、`unhide` 可恢復、重新匯入被略過；匯入後 `record_tags` 與開場標籤清單不變；emLek 自己的資料夾與匯出目錄被略過；junction 被略過；匯出含 `import_log`；三萬檔在單一交易內遠快於逐筆的 27 分鐘。備份加密——往返相同；錯誤密碼被拒；改一位元組／交換兩段／截斷／尾端追加／分段大小欄位被竄改／惡意檔頭參數都被拒；明文剛好 1 MiB 倍數與空資料庫能往返；n=2^18 能成功；暫存明文已刪除；當機後殘留的 `.partial` 與 `tmp` 被清除；`doctor` 顯示加密狀態。
 
 ## 匯入既有資料
 
@@ -289,7 +301,7 @@ T14、T15、T16，以及新增的 T27（確認碼）、T28（PIN 儲存與狀態
 | M5 版本、連結、隱藏 | `amend`、`relation`、`superseded_by`、`linked_from`、`hide`／`unhide`、衍生失效（計算值）；**回傳瘦身**：搜尋預設只回片段與日期，結果過多（預設 >50 筆）時先回筆數、按月分布、最早與最晚日期，並固定標註「依關鍵字比對，可能漏掉不同說法」；隱藏與超過權限的記錄不計入；不新增獨立統計工具；全文用 `get`（D56、D57） | T12、T13、T26；Q08–10、Q22–23；題庫報告的每題平均輸入量不高於 M4 基準的 105%（D65）；規模彙整題（QUESTIONS 類別 I，數千筆合成資料）AI 須說明僅檢視部分或先縮小範圍 |
 | M6 信任閘門 | 規則掃描、`notice_settings`、`confirm_token`／`notice_token`、`phrase`、`notice`、`sensitivity set` 的真人終端機閘門與 PIN（`pin set·change·reset`）、`phrases_list`；**`get` 補上 `max_sensitivity`**（隱藏檢查已於 M5 完成，目前只有 `search` 有敏感度上限） | T14、T15、T16；Q40–42；閘門限制如實記載 |
 | M7 標籤 | M7a：資料表、`set_tags`、`#標籤`、別名、向下展開。M7b：`tags_find` 等查詢工具、facets、`similar_tags`、合併、健檢、熱門標籤 | T17、T18、T29–T31；Q03、Q33–Q36、Q76–Q78、Q80（Q05、Q32 由別題取代，Q79、Q81 延後）；每題平均輸入量 ≤ M6 基準的 110%（規格見 DESIGN_TAGS「M7 規格」） |
-| M8 匯入與備份加密 | `import`（含敏感掃描、`--split-by-heading`）、備份 `--encrypt` | T21；Q43；錯誤密碼與一位元組竄改被拒 |
+| M8 匯入與備份加密 | `import` 精簡版（敏感掃描、批次與還原隱藏；日期標題切段等延後）、備份 `--encrypt` | T21；Q43；錯誤密碼與一位元組竄改被拒 |
 | M9 清除 | `purge_preview` 與 CLI `purge`（預覽、固定句式、PIN、清除、殘留檢查） | T22、T23；原始檔掃描無殘留 |
 | M11 發布準備 | 首次發布前的檢查清單，見「發布準備（M11）」 | 清單逐項勾完；版本號進入 0.x 以上的規則生效 |
 | M10 | 依實際痛點決定（回頭補標籤、分層／主題摘要、觀察清單項目；**M7 後依題庫的花費數據決定**：查無時工具端回「資料裡出現過的相近詞」以減少輪數、規則檔分短版與按需長版；不自建向量資料庫，見 D56） | — |

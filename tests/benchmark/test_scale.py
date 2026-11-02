@@ -25,6 +25,35 @@ REPORT_DIR = Path(__file__).resolve().parents[2] / "benchmark-output"
 DISASTER_SECONDS = 15  # not a target: only catches something badly broken
 
 
+def _tag_the_records(db: Database) -> None:
+    """About three tags per record from a vocabulary of 200; tag-005 contains tag-006..tag-025."""
+    rng = random.Random(9)
+    with db.transaction() as conn:
+        for n in range(1, 201):
+            conn.execute(
+                "INSERT INTO tags (name, name_key, type, created_by, created_at)"
+                " VALUES (?, ?, 'topic', 'ai', '2026-01-01T00:00:00.000Z')",
+                (f"tag-{n:03d}", f"tag-{n:03d}"),
+            )
+        first = conn.execute("SELECT id FROM tags WHERE name_key = 'tag-001'").fetchone()[0]
+        for child in range(6, 26):
+            conn.execute(
+                "INSERT INTO tag_links (parent_tag_id, child_tag_id, created_by, created_at)"
+                " VALUES (?, ?, 'ai', '2026-01-01T00:00:00.000Z')",
+                (first + 4, first + child - 1),
+            )
+        rows = (
+            (record_id, first + rng.randrange(200), "ai", "2026-01-01T00:00:00.000Z")
+            for record_id in range(1, ROWS + 1)
+            for _ in range(3)
+        )
+        conn.executemany(
+            "INSERT OR IGNORE INTO record_tags (record_id, tag_id, added_by, added_at)"
+            " VALUES (?, ?, ?, ?)",
+            rows,
+        )
+
+
 @pytest.mark.scale
 def test_scale_36k(tmp_path: Path) -> None:
     caller = Caller(Channel.CLI)
@@ -41,6 +70,9 @@ def test_scale_36k(tmp_path: Path) -> None:
                     conn, record_id, 1, body, "original", created, event, precision, None
                 )
         load_seconds = time.perf_counter() - started
+        tag_started = time.perf_counter()
+        _tag_the_records(db)
+        tag_load_seconds = time.perf_counter() - tag_started
         db.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         size_mb = db.path.stat().st_size / 1e6
 
@@ -79,6 +111,14 @@ def test_scale_36k(tmp_path: Path) -> None:
             cursor=deep["next_cursor"],
         )
         timed(label="count_with_two_char_filter", query="東京", limit=1)
+        single = timed(label="tag_single", tags=["tag-007"], limit=20)
+        parent = timed(label="tag_parent_expanded_20_children", tags=["tag-005"], limit=20)
+        with_text = timed(label="tag_plus_text", tags=["tag-005"], query="新幹線", limit=20)
+        timed(label="tag_match_all", tags=["tag-005", "tag-006"], match="all", limit=20)
+        timed(label="tag_with_facets_and_coverage", tags=["tag-005"], facets=True, limit=20)
+        assert parent["total"] > single["total"] > 0
+        assert parent["tag_coverage"] is None  # the whole table: too big to count, skipped
+        assert with_text["tag_coverage"]["tagged"] > 0
 
         safety: dict[str, Any] = {}
         started = time.perf_counter()
@@ -106,7 +146,8 @@ def test_scale_36k(tmp_path: Path) -> None:
         REPORT_DIR.mkdir(exist_ok=True)
         report = {
             "layer": "system",
-            "milestone": "M4",
+            "milestone": "M7",
+            "tag_load_seconds": round(tag_load_seconds, 1),
             "rows": ROWS,
             "load_seconds": round(load_seconds, 1),
             "db_megabytes": round(size_mb, 1),
@@ -114,7 +155,7 @@ def test_scale_36k(tmp_path: Path) -> None:
             "safety_net": safety,
             "note": "synthetic text, one machine; recorded for comparison, not a target",
         }
-        (REPORT_DIR / "scale-m4.json").write_text(
+        (REPORT_DIR / "scale-m7.json").write_text(
             json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
         )
     finally:

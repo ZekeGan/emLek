@@ -55,6 +55,14 @@ PERMISSIONS: dict[str, frozenset[Channel]] = {
     "pin_set": _CLI,
     "pin_change": _CLI,
     "pin_reset": _CLI,
+    "set_tags": _WRITERS,
+    "tags_find": _ANY,
+    "tags_list": _ANY,
+    "tag_link": _WRITERS,
+    "tag_alias": _WRITERS,
+    "tag_merge": _CLI,
+    "tag_remove": _CLI,
+    "tags_audit": _CLI,
 }
 
 # Operations that only a person at a real terminal may run (stdin, stdout and stderr are all
@@ -70,12 +78,23 @@ INTERACTIVE_ONLY = frozenset(
         "pin_set",
         "pin_change",
         "pin_reset",
+        "tag_merge",
+        "tag_remove",
     }
 )
 # Of those, the ones that also need the PIN. `pin_set` has no PIN yet and `pin_reset` proves
 # itself with the recovery code instead.
 PIN_REQUIRED = frozenset(
-    {"restore", "phrase_add", "phrase_set", "phrase_remove", "notice_enable", "sensitivity_set"}
+    {
+        "restore",
+        "phrase_add",
+        "phrase_set",
+        "phrase_remove",
+        "notice_enable",
+        "sensitivity_set",
+        "tag_merge",
+        "tag_remove",
+    }
 )
 
 

@@ -48,7 +48,19 @@ def run(args: argparse.Namespace) -> Output:
             sensitivity=args.sensitivity,
             confirm_token=args.confirm_token,
             notice_token=args.notice_token,
+            tags=args.tags,
+            allow_new=args.allow_new or (),
         )
     finally:
         db.close()
-    return Output(result, f"已存入 {result['revision_ref']}")
+    lines = [f"已存入 {result['revision_ref']}"]
+    if result.get("tags"):
+        lines.append("標籤：" + "、".join(result["tags"]))
+    for item in result.get("tags_pending", []):
+        near = "、".join(item["similar"])
+        lines.append(
+            f"未新增標籤「{item['name']}」：與既有標籤相近（{near}）；確定要新增請加 --allow-new"
+        )
+    if result.get("hashtags_skipped"):
+        lines.append("略過不合格的 #標籤：" + "、".join(result["hashtags_skipped"]))
+    return Output(result, "\n".join(lines))

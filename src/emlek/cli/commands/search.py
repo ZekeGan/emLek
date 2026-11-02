@@ -29,6 +29,11 @@ def run(args: argparse.Namespace) -> Output:
             all_versions=args.all_versions,
             include_hidden=args.include_hidden,
             current_only=args.current_only,
+            tags=args.tags,
+            match=args.match,
+            tag_types=args.tag_types,
+            expand=not args.no_expand,
+            facets=args.facets,
             max_sensitivity=args.max_sensitivity,
             timezone=timezone,
         )
@@ -43,6 +48,22 @@ def run(args: argparse.Namespace) -> Output:
         + (f"，另有 {result['undated']} 筆沒有事件時間" if result["undated"] else "")
         + (f"，{result['withheld']} 筆因敏感度上限未顯示" if result["withheld"] else "")
     )
+    if result.get("expanded_tags") and len(result["expanded_tags"]) > 1:
+        lines.append("標籤展開：" + "、".join(result["expanded_tags"]))
+    if result.get("tag_coverage"):
+        share = result["tag_coverage"]
+        lines.append(
+            f"標籤覆蓋：{share['tagged']} 筆有標籤、{share['untagged']} 筆沒有"
+            "（沒標的不會被標籤搜尋找到）"
+        )
+    if result.get("unknown_tags"):
+        lines.append("找不到的標籤：" + "、".join(result["unknown_tags"]))
+    if result.get("similar_tags"):
+        lines.append("相近的標籤：" + "、".join(result["similar_tags"]))
+    if result.get("facets"):
+        lines.append(
+            "常見標籤：" + "、".join(f"{f['name']} {f['count']}" for f in result["facets"])
+        )
     summary = result.get("summary")
     if summary:
         spread = summary.get("by_month") or summary.get("by_year") or {}

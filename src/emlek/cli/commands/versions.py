@@ -29,6 +29,8 @@ def run_amend(args: argparse.Namespace) -> Output:
             sensitivity=args.sensitivity,
             confirm_token=args.confirm_token,
             notice_token=args.notice_token,
+            tags=args.tags,
+            allow_new=args.allow_new or (),
         )
     finally:
         db.close()

@@ -8,9 +8,15 @@ from emlek import __version__
 from emlek.core.phrases import KINDS as PHRASE_KINDS
 from emlek.core.search import DEFAULT_LIMIT, MAX_LIMIT, ORDERS, SENSITIVITY_LEVELS
 from emlek.core.service import CLEARABLE, KINDS
+from emlek.core.tags import TYPES as TAG_TYPES
 from emlek.core.versions import RELATIONS
 
 LINK_HELP = "連到較舊的記錄，如 r12 或 r12:supersedes（關係：" + "、".join(RELATIONS) + "）；可重複"
+
+
+def _tag_options(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--tag", dest="tags", action="append", help="加標籤（可重複）")
+    command.add_argument("--allow-new", action="append", help="確定要新增這個與既有標籤相近的名稱")
 
 
 def _sensitivity_options(command: argparse.ArgumentParser) -> None:
@@ -38,6 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     save.add_argument("--precision", help="事件時間精度：year、month、day、hour、minute、second")
     save.add_argument("--link", action="append", metavar="REF[:關係]", help=LINK_HELP)
     _sensitivity_options(save)
+    _tag_options(save)
 
     get = sub.add_parser("get", help="讀取一筆記憶")
     get.add_argument("ref", help="記錄編號，如 r12 或 r12.v3")
@@ -57,6 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     amend.add_argument("--clear", nargs="+", choices=CLEARABLE, help="清空這些欄位")
     amend.add_argument("--link", action="append", metavar="REF[:關係]", help=LINK_HELP)
     _sensitivity_options(amend)
+    _tag_options(amend)
 
     hide = sub.add_parser("hide", help="隱藏一筆記錄（可恢復）")
     hide.add_argument("ref", help="記錄編號，如 r12")
@@ -80,6 +88,11 @@ def build_parser() -> argparse.ArgumentParser:
     find.add_argument("--all-versions", action="store_true", help="也比對舊版本")
     find.add_argument("--include-hidden", action="store_true", help="包含已隱藏的記錄")
     find.add_argument("--current-only", action="store_true", help="排除已被推翻的記錄")
+    find.add_argument("--tag", dest="tags", action="append", help="只看有這個標籤的記錄（可重複）")
+    find.add_argument("--match", choices=("any", "all"), default="any", help="多個標籤：任一或全部")
+    find.add_argument("--tag-type", dest="tag_types", action="append", choices=TAG_TYPES)
+    find.add_argument("--no-expand", action="store_true", help="標籤不往下展開")
+    find.add_argument("--facets", action="store_true", help="附上結果中最常見的標籤")
     find.add_argument("--max-sensitivity", choices=SENSITIVITY_LEVELS, default="high")
 
     serve = sub.add_parser("mcp", help="以 MCP（stdio）提供工具給 AI 使用")
@@ -98,6 +111,39 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--exclude-high", action="store_true", help="排除最高敏感度的記錄")
 
     sub.add_parser("stats", help="記錄數、日期範圍、上次備份")
+
+    tag = sub.add_parser("tag", help="標籤：加減、階層、別名、合併、刪除")
+    tag_sub = tag.add_subparsers(dest="tag_command", required=True, metavar="<動作>")
+    tag_add = tag_sub.add_parser("add", help="替記錄加標籤")
+    tag_add.add_argument("ref")
+    tag_add.add_argument("names", nargs="+")
+    tag_add.add_argument("--allow-new", action="append")
+    tag_rm = tag_sub.add_parser("rm", help="從記錄移除標籤")
+    tag_rm.add_argument("ref")
+    tag_rm.add_argument("names", nargs="+")
+    tag_link = tag_sub.add_parser("link", help="宣告上層標籤包含下層標籤")
+    tag_link.add_argument("parent")
+    tag_link.add_argument("child")
+    tag_alias = tag_sub.add_parser("alias", help="替標籤加別名")
+    tag_alias.add_argument("alias")
+    tag_alias.add_argument("tag")
+    tag_merge = tag_sub.add_parser("merge", help="把舊標籤併入新標籤（需要 PIN）")
+    tag_merge.add_argument("old")
+    tag_merge.add_argument("new")
+    tag_remove = tag_sub.add_parser("remove", help="刪除標籤本身（需要 PIN）")
+    tag_remove.add_argument("name")
+
+    tags = sub.add_parser("tags", help="查標籤")
+    tags_sub = tags.add_subparsers(dest="tags_command", required=True, metavar="<動作>")
+    tags_find = tags_sub.add_parser("find", help="模糊查標籤")
+    tags_find.add_argument("text")
+    tags_find.add_argument("--limit", type=int, default=10)
+    tags_list = tags_sub.add_parser("list", help="列出常用標籤、階層或常一起出現的標籤")
+    tags_list.add_argument("--tree")
+    tags_list.add_argument("--related-to")
+    tags_list.add_argument("--type", choices=TAG_TYPES)
+    tags_list.add_argument("--limit", type=int, default=50)
+    tags_sub.add_parser("audit", help="標籤健檢：重複、只用一次、過度使用、覆蓋率")
 
     pin = sub.add_parser("pin", help="PIN（保護危險命令；只能在你自己的終端機）")
     pin_sub = pin.add_subparsers(dest="pin_command", required=True, metavar="<動作>")

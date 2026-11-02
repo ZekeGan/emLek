@@ -10,7 +10,7 @@ from __future__ import annotations
 import random
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from unittest.mock import patch
 
@@ -91,6 +91,8 @@ class Entry:
     fact: str | None = None
     # (fact name of an older entry, relation): saved as links to that entry's record
     links: tuple[tuple[str, str], ...] = ()
+    tags: tuple[str, ...] = ()  # tag names; the vocabulary below is created before any record
+    ai_tags: bool = False  # True: the tags are a guess made by the AI (emotions)
 
 
 @dataclass(frozen=True)
@@ -252,6 +254,67 @@ def _planted() -> list[Entry]:
     return e
 
 
+# The tag vocabulary every run starts with, as a user would have built it by hand: types,
+# a one-line description with synonyms, aliases in other scripts, and a small hierarchy.
+VOCABULARY = (
+    ("拉麵", "topic", "日式麵食；豚骨、醬油、味噌"),
+    ("淺草寺", "place", "東京淺草的寺廟"),
+    ("京都", "place", "日本關西的古都"),
+    ("日本", "place", "國家"),
+    ("東京", "place", "日本首都"),
+    ("小明", "person", "朋友"),
+    ("王大明", "person", "朋友，也被叫做老王"),
+    ("焦慮", "emotion", "不安、緊張、煩躁"),
+)
+ALIASES = (
+    ("ラーメン", "拉麵"),
+    ("ramen", "拉麵"),
+    ("浅草寺", "淺草寺"),
+    ("老王", "王大明"),
+)
+LINKS = (("日本", "京都"), ("日本", "東京"), ("東京", "淺草寺"))
+TAGS_BY_FACT = {
+    "ramen": ("拉麵",),
+    "asakusa": ("淺草寺",),
+    "kyoto_first": ("京都",),
+    "kyoto": ("京都",),
+    "kyoto_last": ("京都",),
+    "xiaoming": ("小明",),
+    "xiaoming_last": ("小明",),
+}
+
+
+def _tagged() -> list[Entry]:
+    """Records that exist to be found through tags. None of them contains the words of the
+    older questions (京都, 小明, ...), so text searches keep their old answers."""
+
+    def entry(fact: str, day: str, body: str, *tags: str, **kw: object) -> Entry:
+        links = kw.get("links", ())
+        ai = bool(kw.get("ai", False))
+        return Entry(body, day, _stamp(day), "original", fact, links, tags, ai)  # type: ignore[arg-type]
+
+    return [
+        entry("ming_kyoto", "2025-04-12", "朋友帶我去看了金閣寺，人很多", "小明", "京都"),
+        entry("ming_kyoto", "2026-05-03", "和朋友在錦市場邊走邊吃", "小明", "京都"),
+        entry("anxiety", "2025-09-10", "考試前一晚一直睡不著，心跳很快", "焦慮", ai=True),
+        entry("anxiety_late", "2026-03-15", "面試前一直在發抖，手心都是汗", "焦慮", ai=True),
+        entry("wang", "2026-06-02", "王大明約我週末一起吃飯", "王大明"),
+        entry("wang", "2026-06-20", "老王傳訊息說下週有空", "老王"),
+        entry("todo_today", "2026-11-01", "洗衣店今天要去取衣服", "待辦"),
+        entry("todo_deadline", "2026-11-03", "報稅資料的最後期限", "截止"),
+        entry("todo_appt", "2026-11-04", "和客戶約好下午三點開會", "約定"),
+        entry("todo_overdue", "2026-10-27", "要把借來的書寄還給圖書館", "待辦"),
+        entry("todo_done", "2026-10-30", "繳這個月的電費", "待辦"),
+        entry(
+            "todo_done_record",
+            "2026-10-30",
+            "電費已經繳完了",
+            "已完成",
+            links=(("todo_done", "supplements"),),
+        ),
+    ]
+
+
 def _story() -> list[Entry]:
     """A changing opinion, oldest first: A, then B replaces A, C replaces B, D replaces C and
     confirms A again. Appended after the shuffle so each entry can link to older record ids."""
@@ -289,9 +352,11 @@ def _story() -> list[Entry]:
 
 def build_corpus(seed: int = 7, filler: int = 600) -> Corpus:
     rng = random.Random(seed)
-    entries = _filler(rng, filler) + _planted()
+    entries = _filler(rng, filler) + [
+        replace(e, tags=TAGS_BY_FACT.get(e.fact or "", ())) for e in _planted()
+    ]
     rng.shuffle(entries)
-    return Corpus(entries + _story())
+    return Corpus(entries + _story() + _tagged())
 
 
 @contextmanager
@@ -300,8 +365,41 @@ def _clock(stamp: str) -> Iterator[None]:
         yield
 
 
+def _make_vocabulary(db: Database) -> None:
+    from emlek.core import tags as tagmod
+
+    with db.transaction() as conn:
+        for name, kind, description in VOCABULARY:
+            conn.execute(
+                "INSERT INTO tags (name, name_key, type, description, created_by, created_at)"
+                " VALUES (?, ?, ?, ?, 'user', '2025-01-01T00:00:00.000Z')",
+                (name, tagmod.normalize(name), kind, description),
+            )
+        for alias, name in ALIASES:
+            conn.execute(
+                "INSERT INTO tag_aliases (alias, alias_key, tag_id, created_by, created_at)"
+                " SELECT ?, ?, id, 'user', '2025-01-01T00:00:00.000Z' FROM tags WHERE name_key = ?",
+                (alias, tagmod.normalize(alias), tagmod.normalize(name)),
+            )
+        for parent, child in LINKS:
+            conn.execute(
+                "INSERT INTO tag_links (parent_tag_id, child_tag_id, created_by, created_at)"
+                " SELECT p.id, c.id, 'user', '2025-01-01T00:00:00.000Z'"
+                " FROM tags p, tags c WHERE p.name_key = ? AND c.name_key = ?",
+                (tagmod.normalize(parent), tagmod.normalize(child)),
+            )
+        for (tag_id,) in conn.execute("SELECT id FROM tags").fetchall():
+            tagmod.refresh_search(conn, int(tag_id))
+
+
+def _set_tag_source(db: Database, record_id: int, source: str) -> None:
+    with db.transaction() as conn:
+        conn.execute("UPDATE record_tags SET added_by = ? WHERE record_id = ?", (source, record_id))
+
+
 def load(db: Database, caller: Caller, corpus: Corpus) -> None:
     """Save every entry through the real service, with the intended created_at."""
+    _make_vocabulary(db)
     record_of: dict[str, int] = {}
     for position, entry in enumerate(corpus.entries, 1):
         with _clock(entry.created_at):
@@ -312,7 +410,10 @@ def load(db: Database, caller: Caller, corpus: Corpus) -> None:
                 kind=entry.kind,
                 event_time=entry.event_time,
                 links=[{"ref": f"r{record_of[t]}", "relation": rel} for t, rel in entry.links],
+                tags=list(entry.tags) or None,
             )
+        if entry.tags:
+            _set_tag_source(db, position, "ai" if entry.ai_tags else "user")
         assert saved["record_id"] == position  # ids follow insertion order; gold answers rely on it
         if entry.fact:
             record_of.setdefault(entry.fact, position)

@@ -10,6 +10,7 @@ from typing import Any
 
 from emlek.core import notice, tokens, versions
 from emlek.core import sensitivity as scanner
+from emlek.core import tags as tagmod
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
 from emlek.core.permissions import Caller, require
@@ -161,6 +162,40 @@ def _sensitivity_gate(
     return gate
 
 
+def _tag_step(
+    conn: sqlite3.Connection,
+    record_id: int,
+    *,
+    body: str,
+    kind: str,
+    caller: Caller,
+    tags: Sequence[object] | None,
+    allow_new: Sequence[str],
+) -> dict[str, Any]:
+    """Hashtags the user typed (original text only), then the tags the caller asked for."""
+    applied: list[str] = []
+    pending: list[dict[str, Any]] = []
+    skipped: list[str] = []
+    if kind == "original":
+        for name in tagmod.parse_hashtags(body):
+            try:  # a bad hashtag must never stop the text itself from being saved
+                done, _ = tagmod.attach(conn, record_id, [name], actor="user", allow_new=[name])
+            except EmlekError:
+                skipped.append(name)
+                continue
+            applied.extend(done)
+    if tags:
+        done, pending = tagmod.attach(
+            conn, record_id, tags, actor=tagmod.actor_for(caller), allow_new=allow_new
+        )
+        applied.extend(done)
+    return {
+        "tags": list(dict.fromkeys(applied)),
+        "tags_pending": pending,
+        **({"hashtags_skipped": skipped} if skipped else {}),
+    }
+
+
 def _before_commit() -> None:
     """Hook that tests replace to inject a failure after all writes, before COMMIT."""
 
@@ -178,6 +213,8 @@ def save(
     sensitivity: str | None = None,
     confirm_token: str | None = None,
     notice_token: str | None = None,
+    tags: Sequence[object] | None = None,
+    allow_new: Sequence[str] = (),
 ) -> dict[str, Any]:
     require(caller, "save")
     _check_body(body)
@@ -199,6 +236,15 @@ def save(
             conn, record_id, 1, body, kind, now, event_time, precision, source
         )
         added = versions.add_links(conn, revision_id, record_id, links, now)
+        tag_result = _tag_step(
+            conn,
+            record_id,
+            body=body,
+            kind=kind,
+            caller=caller,
+            tags=tags,
+            allow_new=allow_new,
+        )
         _before_commit()
     _log.info("save record=%d revision=%d channel=%s", record_id, revision_id, caller.channel)
     return {
@@ -210,6 +256,7 @@ def save(
         "links_added": added,
         "sensitivity": gate.level,
         "sensitivity_hint": gate.hint(),
+        **tag_result,
     }
 
 
@@ -228,6 +275,8 @@ def amend(
     sensitivity: str | None = None,
     confirm_token: str | None = None,
     notice_token: str | None = None,
+    tags: Sequence[object] | None = None,
+    allow_new: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Add the next version to an existing record. Omitted fields carry over; `clear` empties."""
     require(caller, "amend")
@@ -279,6 +328,15 @@ def amend(
             conn, record_id, version + 1, body, kind, now, event_time, precision, new_source
         )
         added = versions.add_links(conn, revision_id, record_id, links, now)
+        tag_result = _tag_step(
+            conn,
+            record_id,
+            body=body,
+            kind=kind,
+            caller=caller,
+            tags=tags,
+            allow_new=allow_new,
+        )
         gate.spend(conn)
         record_level = scanner.higher(old_level, gate.level)
         if record_level != old_level:
@@ -296,6 +354,7 @@ def amend(
         "links_added": added,
         "sensitivity": record_level,
         "sensitivity_hint": gate.hint(),
+        **tag_result,
     }
 
 
@@ -374,6 +433,7 @@ def get(
         "linked_from": linked,
         "linked_from_truncated": linked_truncated,
         "links_out": versions.links_out(conn, revision["id"]),
+        "tags": tagmod.tags_of(conn, record_id),
     }
 
 

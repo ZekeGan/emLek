@@ -32,6 +32,13 @@ _REVISION_COLUMNS = (
     "source",
 )
 _LINK_COLUMNS = ("id", "revision_id", "derived_from_revision_id", "relation", "created_at")
+_TAG_SCOPE_KEPT = (
+    "id IN (WITH RECURSIVE keep(id) AS ("
+    " SELECT rt.tag_id FROM record_tags rt WHERE rt.record_id IN"
+    " (SELECT id FROM records WHERE {keep})"
+    " UNION SELECT tl.parent_tag_id FROM tag_links tl JOIN keep ON tl.child_tag_id = keep.id)"
+    " SELECT id FROM keep)"
+)
 _LINK_SCOPE = (
     "FROM links l JOIN revisions sr ON sr.id = l.revision_id"
     " JOIN revisions tr ON tr.id = l.derived_from_revision_id"
@@ -68,18 +75,40 @@ def export_all(
     excluded = conn.execute(
         "SELECT count(*) FROM records WHERE sensitivity = 'high'" if exclude_high else "SELECT 0"
     ).fetchone()[0]
+    tag_filter = _TAG_SCOPE_KEPT.format(keep=keep) if exclude_high else "1"
+    event_filter = f"record_id IN (SELECT id FROM records WHERE {keep})" if exclude_high else "1"
+    tag_counts = {
+        "tag": conn.execute(f"SELECT count(*) FROM tags WHERE {tag_filter}").fetchone()[0],
+        "record_tag": conn.execute(
+            "SELECT count(*) FROM record_tags WHERE record_id IN"
+            f" (SELECT id FROM records WHERE {keep})"
+            f" AND tag_id IN (SELECT id FROM tags WHERE {tag_filter})"
+        ).fetchone()[0],
+        "tag_link": conn.execute(
+            "SELECT count(*) FROM tag_links WHERE parent_tag_id IN"
+            f" (SELECT id FROM tags WHERE {tag_filter})"
+            f" AND child_tag_id IN (SELECT id FROM tags WHERE {tag_filter})"
+        ).fetchone()[0],
+        "tag_alias": conn.execute(
+            "SELECT count(*) FROM tag_aliases WHERE tag_id IN"
+            f" (SELECT id FROM tags WHERE {tag_filter})"
+        ).fetchone()[0],
+        "tag_event": conn.execute(
+            f"SELECT count(*) FROM tag_events WHERE {event_filter}"
+        ).fetchone()[0],
+    }
     header = {
         "type": "header",
         "format_version": FORMAT_VERSION,
         "schema_version": db.user_version,
         "emlek_version": __version__,
         "exported_at": utc_now_iso(),
-        "counts": {"record": records, "revision": revisions, "link": link_count},
+        "counts": {"record": records, "revision": revisions, "link": link_count, **tag_counts},
         "excluded_high_records": excluded,
     }
     jsonl = folder / "export.jsonl"
     try:
-        _write_jsonl(db, jsonl, header, keep)
+        _write_jsonl(db, jsonl, header, keep, tag_filter, event_filter)
         _write_markdown(db, folder / "markdown", keep)
     except BaseException:
         shutil.rmtree(folder, ignore_errors=True)  # never leave a half-written export
@@ -93,7 +122,14 @@ def export_all(
     }
 
 
-def _write_jsonl(db: Database, jsonl: Path, header: dict[str, Any], keep: str) -> None:
+def _write_jsonl(
+    db: Database,
+    jsonl: Path,
+    header: dict[str, Any],
+    keep: str,
+    tag_filter: str = "1",
+    event_filter: str = "1",
+) -> None:
     conn = db.conn
     with jsonl.open("w", encoding="utf-8", newline="\n") as out:
         out.write(_line(header))
@@ -113,6 +149,39 @@ def _write_jsonl(db: Database, jsonl: Path, header: dict[str, Any], keep: str) -
             f"SELECT {columns} " + _LINK_SCOPE.format(keep=keep) + " ORDER BY l.id"
         ):
             out.write(_line({"type": "link", **dict(zip(_LINK_COLUMNS, row, strict=True))}))
+        tag_sets = (
+            (
+                "tag",
+                "id, name, name_key, type, description, created_by, created_at",
+                "tags",
+                tag_filter,
+            ),
+            (
+                "record_tag",
+                "record_id, tag_id, added_by, added_at",
+                "record_tags",
+                f"record_id IN (SELECT id FROM records WHERE {keep})"
+                f" AND tag_id IN (SELECT id FROM tags WHERE {tag_filter})",
+            ),
+            (
+                "tag_link",
+                "parent_tag_id, child_tag_id, created_by, created_at",
+                "tag_links",
+                f"parent_tag_id IN (SELECT id FROM tags WHERE {tag_filter})"
+                f" AND child_tag_id IN (SELECT id FROM tags WHERE {tag_filter})",
+            ),
+            (
+                "tag_alias",
+                "alias, alias_key, tag_id, created_by, created_at",
+                "tag_aliases",
+                f"tag_id IN (SELECT id FROM tags WHERE {tag_filter})",
+            ),
+            ("tag_event", "id, at, actor, action, record_id, detail", "tag_events", event_filter),
+        )
+        for kind, columns, table, where in tag_sets:
+            names = ["tag_type" if c.strip() == "type" else c.strip() for c in columns.split(",")]
+            for row in conn.execute(f"SELECT {columns} FROM {table} WHERE {where} ORDER BY 1, 2"):
+                out.write(_line({"type": kind, **dict(zip(names, row, strict=True))}))
 
 
 def _write_markdown(db: Database, folder: Path, keep: str) -> None:
@@ -186,6 +255,9 @@ def verify_export(folder: Path) -> dict[str, Any]:
         raise EmlekError(ErrorCode.INVALID_INPUT, "版本筆數與標頭不符")
     if counts.get("link", 0) != header["counts"].get("link", 0):
         raise EmlekError(ErrorCode.INVALID_INPUT, "連結筆數與標頭不符")
+    for kind in ("tag", "record_tag", "tag_link", "tag_alias", "tag_event"):
+        if counts.get(kind, 0) != header["counts"].get(kind, 0):
+            raise EmlekError(ErrorCode.INVALID_INPUT, f"{kind} 筆數與標頭不符")
     markdown = len(list((folder / "markdown").glob("r*.md")))
     if markdown != counts.get("record", 0) and counts.get("revision", 0) > 0:
         raise EmlekError(ErrorCode.INVALID_INPUT, "Markdown 檔數與記錄數不符")

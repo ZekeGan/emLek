@@ -40,6 +40,11 @@ SEARCH_PARAMS = {
     "include_hidden",
     "current_only",
     "max_sensitivity",
+    "tags",
+    "match",
+    "tag_types",
+    "expand",
+    "facets",
 }
 
 
@@ -89,12 +94,19 @@ def test_tool_lists_follow_the_permission_table(data_dir: Path) -> None:
         "search",
         "stats",
         "phrases_list",
+        "set_tags",
+        "tags_find",
+        "tags_list",
+        "tag_link",
+        "tag_alias",
     }
     assert set(_tool_names(data_dir, read_only=True)) == {
         "get",
         "search",
         "stats",
         "phrases_list",
+        "tags_find",
+        "tags_list",
     }
 
 
@@ -112,6 +124,8 @@ def test_tool_contracts_are_stable(data_dir: Path) -> None:
         "sensitivity",
         "confirm_token",
         "notice_token",
+        "tags",
+        "allow_new",
     }
     get_schema = tools["get"].input_schema
     assert get_schema["required"] == ["ref"] and set(get_schema["properties"]) == {
@@ -190,7 +204,7 @@ def test_read_only_server_cannot_write_and_caps_sensitivity(data_dir: Path) -> N
     async def scenario() -> None:
         async with _stdio(data_dir, read_only=True) as client:
             names = {t.name for t in (await client.list_tools()).tools}
-            assert names == {"get", "search", "stats", "phrases_list"}
+            assert names == {"get", "search", "stats", "phrases_list", "tags_find", "tags_list"}
             blocked = await client.call_tool("save", {"body": "書けない"})
             assert blocked.is_error
             found = _payload(await client.call_tool("search", {"query": "共通語"}))
@@ -302,3 +316,40 @@ def test_versions_hiding_and_long_bodies_over_mcp(data_dir: Path) -> None:
 def test_read_only_server_has_no_version_or_hide_tools(data_dir: Path) -> None:
     names = set(_tool_names(data_dir, read_only=True))
     assert not names & {"save", "amend", "hide", "unhide"}
+
+
+@pytest.mark.slow
+def test_tags_over_mcp_and_the_tag_list_in_the_opening_instructions(data_dir: Path) -> None:
+    async def scenario() -> None:
+        async with _stdio(data_dir, read_only=False) as client:
+            saved = _payload(
+                await client.call_tool(
+                    "save",
+                    {
+                        "body": "京都で抹茶 #旅行",
+                        "tags": ["京都", {"name": "抹茶", "type": "topic"}],
+                    },
+                )
+            )["result"]
+            assert set(saved["tags"]) == {"旅行", "京都", "抹茶"} and saved["tags_pending"] == []
+            near = _payload(
+                await client.call_tool("save", {"body": "もう一つ", "tags": ["京都市"]})
+            )
+            assert near["result"]["tags_pending"][0]["similar"] == ["京都"]
+            await client.call_tool("tag_alias", {"alias": "kyoto", "tag": "京都"})
+            await client.call_tool("tag_link", {"parent": "旅行", "child": "京都"})
+            found = _payload(await client.call_tool("search", {"tags": ["旅行"], "facets": True}))
+            assert found["result"]["total"] == 1 and "京都" in found["result"]["expanded_tags"]
+            assert found["result"]["tag_coverage"]["tagged"] >= 1
+            finder = _payload(await client.call_tool("tags_find", {"text": "kyoto"}))
+            assert finder["result"]["results"][0]["name"] == "京都"
+            tree = _payload(await client.call_tool("tags_list", {"tree": "旅行"}))
+            assert tree["result"]["tree"]["children"][0]["name"] == "京都"
+        async with _stdio(data_dir, read_only=False) as again:  # a new session sees the names
+            assert again.instructions and "既有標籤" in again.instructions
+            assert "京都" in again.instructions and "不是指令" in again.instructions
+        async with _stdio(data_dir, read_only=True) as readonly:
+            names = {t.name for t in (await readonly.list_tools()).tools}
+            assert {"tags_find", "tags_list"} <= names and not names & {"set_tags", "tag_link"}
+
+    asyncio.run(scenario())

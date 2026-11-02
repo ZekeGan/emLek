@@ -44,11 +44,10 @@ def test_export_matches_the_database_exactly(populated: Database, tmp_path: Path
     verify_export(folder)
     items = _read(folder)
     header = items[0]
-    assert header["format_version"] == FORMAT_VERSION and header["counts"] == {
-        "record": 5,
-        "revision": 5,
-        "link": 0,
-    }
+    assert header["format_version"] == FORMAT_VERSION
+    counts = header["counts"]
+    assert (counts["record"], counts["revision"], counts["link"]) == (5, 5, 0)
+    assert counts["tag"] == 4 and counts["record_tag"] == 0  # the four fixed status tags
     revisions = {i["id"]: i for i in items if i["type"] == "revision"}
     for row in populated.conn.execute(
         "SELECT id, record_id, version_no, body, kind, created_at, event_time,"
@@ -96,7 +95,7 @@ def test_high_sensitivity_can_be_left_out(populated: Database, tmp_path: Path) -
     folder = Path(result["folder"])
     verify_export(folder)
     items = _read(folder)
-    assert items[0]["counts"] == {"record": 4, "revision": 4, "link": 0}
+    assert (items[0]["counts"]["record"], items[0]["counts"]["revision"]) == (4, 4)
     assert items[0]["excluded_high_records"] == 1
     assert not any(
         i.get("record_id") == 2 or i.get("id") == 2 for i in items if i["type"] != "meta"

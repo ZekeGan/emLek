@@ -102,6 +102,33 @@ SPECS: dict[str, Spec] = {
     "Q02": Spec("我第一次去京都是什麼時候", facts("kyoto_first"), "single", "core"),
     "Q06": Spec("我跟小明最後一次見面是什麼時候", facts("xiaoming_last"), "single", "core"),
     "Q07": Spec("我寫過關於量子糾纏的筆記嗎", facts("topic"), "set", "core"),
+    # --- M7: tags (planted with a hand-made vocabulary, see synth.py)
+    "Q03": Spec("我去過哪些拉麵店", facts("ramen"), "set", "tags"),
+    "Q33": Spec("老王就是王大明，幫我找他所有的紀錄", facts("wang"), "set", "tags"),
+    "Q34": Spec(
+        "今天是 2026-11-01。今天到未來三天，我有什麼待辦、截止或約定的事",
+        facts("todo_today", "todo_deadline", "todo_appt"),
+        "set",
+        "tags",
+    ),
+    "Q35": Spec(
+        "三天內到期的事項有哪些（不含今天）",
+        facts("todo_deadline", "todo_appt"),
+        "set",
+        "tags",
+    ),
+    "Q36": Spec(
+        "過去一週內到期但還沒完成的事有哪些",
+        facts("todo_overdue"),
+        "set",
+        "tags",
+    ),
+    "Q76": Spec(
+        "2025 年我去過哪些拉麵店", between(("ramen",), "2025-01-01", "2025-12-31"), "set", "tags"
+    ),
+    "Q77": Spec("今年跟去年我去淺草寺的次數各是多少", facts("asakusa"), "set", "tags"),
+    "Q78": Spec("我跟小明在京都做了什麼", facts("ming_kyoto"), "set", "tags"),
+    "Q80": Spec("去年下半年我有什麼焦慮的紀錄", facts("anxiety"), "set", "tags"),
     "Q08": Spec(
         "我對留學的看法怎麼變的", facts("study_a", "study_b", "study_c", "study_d"), "set", "core"
     ),

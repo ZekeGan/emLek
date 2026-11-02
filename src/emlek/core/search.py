@@ -13,9 +13,11 @@ import logging
 import re
 import sqlite3
 from collections import Counter
+from collections.abc import Sequence
 from datetime import date
 from typing import Any
 
+from emlek.core import tags as tagmod
 from emlek.core import versions
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
@@ -30,6 +32,7 @@ ORDERS = ("relevance", "event_time", "created_at")
 DIRECTIONS = ("asc", "desc")
 SENSITIVITY_LEVELS = ("none", "medium", "high")
 FTS_MIN_CHARS = 3
+MAX_COVERAGE_SET = 20000  # beyond this the tag-coverage count is skipped
 AGGREGATE_THRESHOLD = 50  # above this many matches the response also carries a summary
 MAX_SUMMARY_MONTHS = 24
 SUMMARY_NOTE = "依關鍵字比對，可能漏掉不同說法的記錄；僅供縮小範圍，不代表全貌"
@@ -153,6 +156,8 @@ def _run(
     only_undated: bool,
     order: str,
     direction: str,
+    tag_groups: list[list[int]] | None = None,
+    tag_types: list[str] | None = None,
 ) -> list[sqlite3.Row | tuple[Any, ...]]:
     plan = _Plan(all_versions=all_versions)
     if fts_terms:
@@ -174,6 +179,18 @@ def _run(
         plan.add(f"r.kind IN ({','.join('?' * len(kinds))})", *kinds)
     if not include_hidden:
         plan.add("rec.hidden = 0")
+    for group in tag_groups or []:
+        plan.add(
+            "EXISTS (SELECT 1 FROM record_tags rt WHERE rt.record_id = rec.id"
+            f" AND rt.tag_id IN ({','.join('?' * len(group))}))",
+            *group,
+        )
+    if tag_types:
+        plan.add(
+            "EXISTS (SELECT 1 FROM record_tags rt JOIN tags tg ON tg.id = rt.tag_id"
+            f" WHERE rt.record_id = rec.id AND tg.type IN ({','.join('?' * len(tag_types))}))",
+            *tag_types,
+        )
     start, end = plan.latest("event_date_start"), plan.latest("event_date_end")
     if only_undated:
         plan.add(f"{start} IS NULL")
@@ -243,6 +260,11 @@ def search(
     current_only: bool = False,
     max_sensitivity: str = "high",
     timezone: str = "local",
+    tags: Sequence[str] | None = None,
+    match: str = "any",
+    tag_types: Sequence[str] | None = None,
+    expand: bool = True,
+    facets: bool = False,
 ) -> dict[str, Any]:
     require(caller, "search")
     terms = parse_terms(query)
@@ -258,6 +280,12 @@ def search(
         raise EmlekError(ErrorCode.INVALID_INPUT, "max_sensitivity 必須是 none、medium 或 high")
     if not 1 <= limit <= MAX_LIMIT:
         raise EmlekError(ErrorCode.INVALID_INPUT, f"limit 必須介於 1 與 {MAX_LIMIT}")
+    if match not in ("any", "all"):
+        raise EmlekError(ErrorCode.INVALID_INPUT, "match 必須是 any 或 all")
+    if tag_types is not None and (not tag_types or any(t not in tagmod.TYPES for t in tag_types)):
+        raise EmlekError(ErrorCode.INVALID_INPUT, f"tag_types 必須是 {', '.join(tagmod.TYPES)}")
+    if tags is not None and not 1 <= len(tags) <= 20:
+        raise EmlekError(ErrorCode.INVALID_INPUT, "tags 一次 1–20 個")
     modifiers = tz_modifiers(timezone)
     # validate dates up front so errors do not depend on which branch runs
     for value, is_end in ((date_from, False), (date_to, True)):
@@ -272,7 +300,41 @@ def search(
         applied, direction = "created_at", "desc"  # no rank without the index; newest first
     elif wanted == "relevance":
         direction = "asc"
+    groups: list[list[int]] = []
+    unknown: list[str] = []
+    expanded: list[str] = []
+    cut = False
+    impossible = False
+    if tags:
+        groups, unknown, expanded, cut = tagmod.resolve_filter(db.conn, tags, expand=expand)
+        impossible = not groups or (match == "all" and bool(unknown))
+        if match == "any" and groups:
+            merged = sorted({i for g in groups for i in g})
+            groups = [merged]
+    if impossible:
+        return {
+            "total": 0,
+            "undated": 0,
+            "withheld": 0,
+            "order": applied,
+            "dir": direction,
+            "results": [],
+            "next_cursor": None,
+            "warnings": [],
+            "hints": [],
+            "unknown_tags": unknown,
+            "expanded_tags": expanded,
+            "similar_tags": sorted(
+                {
+                    s
+                    for name in unknown
+                    for s in tagmod.similar_names(db.conn, tagmod.normalize(name))
+                }
+            )[:5],
+        }
     shared: dict[str, Any] = {
+        "tag_groups": groups or None,
+        "tag_types": list(tag_types) if tag_types else None,
         "kinds": kinds,
         "include_hidden": include_hidden,
         "all_versions": all_versions,
@@ -355,6 +417,34 @@ def search(
     summary = (
         _summary(db, ordered, date_field, modifiers) if len(ordered) > AGGREGATE_THRESHOLD else None
     )
+    extra: dict[str, Any] = {}
+    if tags:
+        extra["expanded_tags"] = expanded
+        if cut:
+            extra["expanded_truncated"] = True
+        if unknown:
+            extra["unknown_tags"] = unknown
+        plain = {**shared, "tag_groups": None, "tag_types": None}
+        base_rows = _run(
+            db,
+            fts_terms=[] if warnings else fts_terms,
+            like_terms=terms if warnings else like_terms,
+            only_undated=False,
+            **plain,
+        )
+        base_ids = sorted({int(r[1]) for r in base_rows})
+        extra["tag_coverage"] = (
+            tagmod.tagged_share(db.conn, base_ids) if len(base_ids) <= MAX_COVERAGE_SET else None
+        )
+    if facets:
+        extra["facets"] = tagmod.facets(db.conn, [row["record_id"] for row in ordered])
+    if not ordered and (terms or tags):
+        near = [
+            s for name in unknown for s in tagmod.similar_names(db.conn, tagmod.normalize(name))
+        ]
+        near += [s for term in terms for s in tagmod.similar_names(db.conn, tagmod.normalize(term))]
+        if near:
+            extra["similar_tags"] = list(dict.fromkeys(near))[:5]
     return {
         "total": len(ordered),
         "undated": undated,
@@ -366,6 +456,7 @@ def search(
         "warnings": warnings,
         "hints": hints,
         **({"summary": summary} if summary else {}),
+        **extra,
     }
 
 
@@ -465,7 +556,13 @@ def _describe(
         "hidden": bool(hidden),
         "sensitivity": sens,
         **versions.describe(db.conn, record_id, status_map),
+        **_tags_field(db, record_id),
     }
+
+
+def _tags_field(db: Database, record_id: int) -> dict[str, Any]:
+    names = [t["name"] for t in tagmod.tags_of(db.conn, record_id)]
+    return {"tags": names} if names else {}
 
 
 def index_status(db: Database) -> dict[str, Any]:
@@ -478,4 +575,6 @@ def reindex(db: Database, caller: Caller) -> dict[str, Any]:
     require(caller, "reindex")
     with db.transaction() as conn:
         conn.execute("INSERT INTO revisions_fts (revisions_fts) VALUES ('rebuild')")
+        for (tag_id,) in conn.execute("SELECT id FROM tags").fetchall():
+            tagmod.refresh_search(conn, int(tag_id))
     return index_status(db)

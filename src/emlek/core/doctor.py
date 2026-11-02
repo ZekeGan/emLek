@@ -152,9 +152,23 @@ def _check_database(data_dir: Path) -> list[Check]:
                 )
             checks.append(_check_backup(db, config))
             checks.append(_check_security(db, data_dir))
+            checks.append(_check_tags(db))
     finally:
         db.close()
     return checks
+
+
+def _check_tags(db: Database) -> Check:
+    tags = db.conn.execute("SELECT count(*) FROM tags").fetchone()[0]
+    indexed = db.conn.execute("SELECT count(*) FROM tags_fts_docsize").fetchone()[0]
+    if tags != indexed:
+        return Check(
+            "tags", "warn", f"標籤 {tags} 個，索引 {indexed} 筆不一致，請執行 emlek reindex"
+        )
+    used = db.conn.execute("SELECT count(DISTINCT record_id) FROM record_tags").fetchone()[0]
+    total = db.conn.execute("SELECT count(*) FROM records").fetchone()[0]
+    share = f"，{used}／{total} 筆記錄有標籤" if total else ""
+    return Check("tags", "ok", f"{tags} 個標籤{share}")
 
 
 def _check_security(db: Database, data_dir: Path) -> Check:

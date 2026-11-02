@@ -101,6 +101,64 @@ def q07(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
     return env.ids(result), env.corpus.ids_for("topic"), result
 
 
+def _tagged(env: Env, qid: str, **kwargs: Any) -> tuple[set[int], set[int], dict[str, Any]]:
+    result = env.ask(limit=100, **kwargs)
+    return env.ids(result), _gold(env, qid), result
+
+
+def q03(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    # the way an agent would: the user's word "拉麵店" finds the tag, the tag finds the records
+    return _tagged(env, "Q03", tags=["拉麵"])
+
+
+def q33(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _tagged(env, "Q33", tags=["老王"])  # an alias of 王大明
+
+
+def q34(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _tagged(
+        env, "Q34", tags=["待辦", "截止", "約定"], date_from="2026-11-01", date_to="2026-11-04"
+    )
+
+
+def q35(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _tagged(
+        env, "Q35", tags=["待辦", "截止", "約定"], date_from="2026-11-02", date_to="2026-11-04"
+    )
+
+
+def q36(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    """Due in the past week, minus whatever has a completion record linked to it."""
+    open_items = env.ask(
+        tags=["待辦", "截止", "約定"], date_from="2026-10-25", date_to="2026-10-31"
+    )
+    done_refs = {r["ref"] for r in env.ask(tags=["已完成"], limit=100)["results"]}
+    still_open: set[int] = set()
+    for item in open_items["results"]:
+        links = service.get(env.db, env.caller, ref=item["ref"])["linked_from"]
+        if not any(
+            link["relation"] == "supplements" and link["ref"] in done_refs for link in links
+        ):
+            still_open.add(int(item["ref"][1:]))
+    return still_open, _gold(env, "Q36"), open_items
+
+
+def q76(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _tagged(env, "Q76", tags=["拉麵"], date_from="2025-01-01", date_to="2025-12-31")
+
+
+def q77(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _tagged(env, "Q77", tags=["淺草寺"])
+
+
+def q78(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _tagged(env, "Q78", tags=["小明", "京都"], match="all")
+
+
+def q80(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    return _tagged(env, "Q80", tags=["焦慮"], date_from="2025-07-01", date_to="2025-12-31")
+
+
 def q08(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
     """The whole history of one opinion, in order, with its replacements visible."""
     result = env.ask(query="留學", order="created_at", direction="asc", limit=100)
@@ -305,6 +363,15 @@ QUESTIONS: dict[str, tuple[str, Question]] = {
     "Q02": ("我第一次去京都是什麼時候", q02),
     "Q06": ("我跟小明最後一次見面是什麼時候", q06),
     "Q07": ("我寫過關於量子糾纏的筆記嗎", q07),
+    "Q03": ("我去過哪些拉麵店（標籤）", q03),
+    "Q33": ("老王就是王大明（別名）", q33),
+    "Q34": ("今天到未來三天的待辦、截止、約定", q34),
+    "Q35": ("三天內到期的事項", q35),
+    "Q36": ("逾期未完成的事（已完成的不提醒）", q36),
+    "Q76": ("2025 年去過哪些拉麵店（標籤加日期）", q76),
+    "Q77": ("今年跟去年的淺草寺（跨期，標籤）", q77),
+    "Q78": ("我跟小明在京都做了什麼（兩個標籤）", q78),
+    "Q80": ("去年下半年焦慮的紀錄（情緒推測）", q80),
     "Q08": ("我對留學的看法怎麼變的", q08),
     "Q09": ("我現在對留學的結論是什麼", q09),
     "Q10": ("我當初為什麼決定去留學", q10),

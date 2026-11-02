@@ -28,9 +28,9 @@
 ```powershell
 cd <放專案的資料夾>
 $e = ".\.venv\Scripts\emlek.exe"
-& $e --data-dir C:	emp\emlek-try init   # 在真正的終端機執行：會要你設定 PIN 並顯示復原碼
-& $e --data-dir C:	emp\emlek-try save --text "測試用的一筆記錄"
-& $e --data-dir C:	emp\emlek-try search --help
+& $e --data-dir C:\temp\emlek-try init   # 在真正的終端機執行：會要你設定 PIN 並顯示復原碼
+& $e --data-dir C:\temp\emlek-try save --text "測試用的一筆記錄"
+& $e --data-dir C:\temp\emlek-try search --help
 ```
 
 或在專案資料夾用 `uv run emlek ...`。`--data-dir` 指定資料夾，不給則用預設位置。

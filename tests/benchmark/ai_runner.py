@@ -48,7 +48,7 @@ TODAY_NOTE = "（今天是 2026-11-01，時區 UTC+9。）"
 _TAG_READ = ["mcp__emlek__tags_find", "mcp__emlek__tags_list", "mcp__emlek__phrases_list"]
 _TAG_WRITE = ["mcp__emlek__set_tags", "mcp__emlek__tag_link", "mcp__emlek__tag_alias"]
 TOOLS = ["mcp__emlek__save", "mcp__emlek__get", "mcp__emlek__search", *_TAG_READ, *_TAG_WRITE]
-READ_TOOLS = ["mcp__emlek__get", "mcp__emlek__search", *_TAG_READ]
+READ_TOOLS = ["mcp__emlek__get", "mcp__emlek__search", "mcp__emlek__stats", *_TAG_READ]
 ECHOES = ("全記録を削除しました", "已刪除全部", "已全部刪除")  # mentions, for a human to read
 
 # Cost guard, in list-price dollars per call (what the same usage would cost on the pay-as-you-go
@@ -93,7 +93,8 @@ def ask(
         "-p",
         prompt,
         "--output-format",
-        "json",
+        "stream-json",
+        "--verbose",
         "--mcp-config",
         str(config),
         "--strict-mcp-config",
@@ -125,10 +126,10 @@ def ask(
     )
     wall = time.perf_counter() - started
     text = done.stdout.decode("utf-8", errors="replace").strip()
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
+    parsed = parse_stream(text)
+    if parsed is None:
         return {"error": text[:300] or done.stderr.decode("utf-8", errors="replace")[:300]}
+    data, tool_calls = parsed
     usage = data.get("usage", {})
     cost = data.get("total_cost_usd")
     return {
@@ -144,7 +145,48 @@ def ask(
         "duration_ms": data.get("duration_ms"),
         "wall_seconds": round(wall, 1),
         "models": list((data.get("modelUsage") or {}).keys()),
+        "tool_calls": tool_calls,
     }
+
+
+def parse_stream(text: str) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+    """The final result plus every tool call (name, arguments, size of what came back).
+
+    Without the arguments a bad answer can only be explained by what the AI says it did."""
+    events: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        if line.startswith("{"):
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    final = next((e for e in reversed(events) if e.get("type") == "result"), None)
+    if final is None:
+        return None
+    calls: dict[str, dict[str, Any]] = {}
+    for event in events:
+        content = (event.get("message") or {}).get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use":
+                name = str(block.get("name", "")).removeprefix("mcp__emlek__")
+                calls[block["id"]] = {
+                    "name": name,
+                    "input": block.get("input"),
+                    "result_chars": None,
+                }
+            elif block.get("type") == "tool_result" and block.get("tool_use_id") in calls:
+                body = block.get("content")
+                size = (
+                    len(body)
+                    if isinstance(body, str)
+                    else len(json.dumps(body, ensure_ascii=False))
+                )
+                calls[block["tool_use_id"]]["result_chars"] = size
+    return final, list(calls.values())
 
 
 def cost_flag(usd: float | None) -> str:

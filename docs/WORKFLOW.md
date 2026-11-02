@@ -21,13 +21,13 @@
 
 ## 技術決定（D40）
 
-- **目錄**：`pyproject.toml`、`uv.lock`；`src/emlek/`：`cli/`（`parser.py`、`commands/*.py`、`output.py`）、`mcp_server/`（唯一匯入 `mcp` 的地方）、`core/`（`service.py` 每個操作一個函式、`permissions.py`、`errors.py`、`schemas.py`、`db.py`、`vault.py`、`doctor.py`、`timeutil.py`、`migrations/0001_*.sql…`、`search.py`、`sensitivity.py`、`tags.py`、`backup.py`、`export.py`、`purge.py`）、`config.py`、`log.py`；`tests/`：`unit/`、`invariants/`（`test_t01_*.py`…）、`benchmark/`（`synth.py` 合成資料、`test_system_layer.py` 題庫系統層、`test_scale.py` 規模測試；AI 層於 M3 加入）。
+- **目錄**：`pyproject.toml`、`uv.lock`；`src/emlek/`：`cli/`（`parser.py`、`commands/*.py`、`output.py`）、`mcp_server/`（唯一匯入 `mcp` 的地方）、`core/`（`service.py` 每個操作一個函式、`permissions.py`、`errors.py`、`db.py`、`vault.py`、`doctor.py`、`timeutil.py`、`migrations/0001_*.sql…`、`search.py`、`sensitivity.py`、`tags.py`、`backup.py`、`export.py`、`purge.py`）、`config.py`、`log.py`；`tests/`：`unit/`、`invariants/`（`test_t01_*.py`…）、`benchmark/`（`synth.py` 合成資料、`test_system_layer.py` 題庫系統層、`test_scale.py` 規模測試；AI 層於 M3 加入）。
 - **權限在核心**：`core/permissions.py` 一張「操作×入口（cli、mcp、mcp-readonly）」的表；每個 `service` 函式收 `Caller(channel, interactive)`（唯讀是 `MCP_READONLY` 通道）。外殼只做輸入輸出轉換；MCP 依該表註冊工具，唯讀是工具清單的性質，不是每個工具裡的旗標檢查。
 - **封裝**：`[project.scripts] emlek = "emlek.cli:main"`；建置後端用 uv 預設的 `uv_build`。MCP 註冊用安裝後的絕對路徑 `.venv\Scripts\emlek.exe`，不用 `uv run`（啟動慢且受工作目錄影響）；`mcp` 延遲匯入，純 CLI 呼叫保持快速。
 - **CLI**：`argparse`（無依賴、約 30 個子命令足夠，自訂結束碼 0–5 本來就要手動對應）。內文輸入支援 `--body-file` 與標準輸入，明確以 UTF-8 解碼（中文 Windows 終端機可能預設 cp950）。
 - **MCP**：官方 `mcp` 套件包一層約百行的轉接層，版本 `>=2.3,<3`；不自己寫 JSON-RPC。伺服器行程絕不 `print()`，標準輸出只有協定；日誌走檔案或標準錯誤。
 - **遷移**：`PRAGMA user_version` 加編號 `.sql` 檔，每個在單一交易內，只往前；升級前自動 `VACUUM INTO` 備份。每個里程碑才加自己的表，讓遷移機制從 M1 就被使用。
-- **設定**：`tomllib` 讀資料夾內 `config.toml`；優先序為參數、環境變數、檔案、預設。只有 `timezone` 與 `data_dir`。
+- **設定**：`tomllib` 讀資料夾內 `config.toml`；優先序為參數、環境變數、檔案、預設。有 `timezone`、`data_dir`（命令列參數與環境變數）與 `backup_dir`。
 - **日誌**：標準庫 `logging`，輪替檔放資料夾 `logs/`，只記操作名稱與編號，不記內容。
 - **加密與權限**：`cryptography` 的 AES-256-GCM＋`hashlib.scrypt`；資料夾權限用 `icacls`（`os.chmod` 在 Windows 無效）。
 - **搜尋**：`revisions.body_norm` 為 NFKC＋casefold 副本，FTS5 外部內容表與 LIKE 都用它；結果以記錄為單位。

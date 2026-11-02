@@ -42,3 +42,39 @@ def test_rescoring_keeps_the_old_score(tmp_path: Path) -> None:
     ar.rescore(path)
     updated = json.loads(path.read_text(encoding="utf-8"))["questions"][0]
     assert updated["score_first_rule"] == 3 and updated["score"] == 5
+
+
+def test_the_stream_parser_keeps_every_tool_call_and_its_result_size() -> None:
+    import json as _json
+
+    import ai_runner
+
+    events = [
+        {"type": "system"},
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "t1",
+                        "name": "mcp__emlek__search",
+                        "input": {"query": "醫院 OR 診所"},
+                    }
+                ]
+            },
+        },
+        {
+            "type": "user",
+            "message": {
+                "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "x" * 40}]
+            },
+        },
+        {"type": "result", "result": "done", "num_turns": 2, "usage": {}},
+    ]
+    parsed = ai_runner.parse_stream("\n".join(_json.dumps(e, ensure_ascii=False) for e in events))
+    assert parsed is not None
+    final, calls = parsed
+    assert final["result"] == "done"
+    assert calls == [{"name": "search", "input": {"query": "醫院 OR 診所"}, "result_chars": 40}]
+    assert ai_runner.parse_stream("not json at all") is None

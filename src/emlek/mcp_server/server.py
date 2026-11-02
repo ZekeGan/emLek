@@ -213,6 +213,7 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
         tag_types: list[str] | None = None,
         expand: bool = True,
         facets: bool = False,
+        untagged: bool = False,
     ) -> dict[str, Any]:
         return run(
             "search",
@@ -236,6 +237,7 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
                 tag_types=tag_types,
                 expand=expand,
                 facets=facets,
+                untagged=untagged,
                 max_sensitivity=max_sensitivity or default_cap,
                 timezone=config.timezone,
             ),

@@ -45,6 +45,7 @@ SEARCH_PARAMS = {
     "tag_types",
     "expand",
     "facets",
+    "untagged",
 }
 
 

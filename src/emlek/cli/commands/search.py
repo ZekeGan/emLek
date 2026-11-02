@@ -34,6 +34,7 @@ def run(args: argparse.Namespace) -> Output:
             tag_types=args.tag_types,
             expand=not args.no_expand,
             facets=args.facets,
+            untagged=args.untagged,
             max_sensitivity=args.max_sensitivity,
             timezone=timezone,
         )

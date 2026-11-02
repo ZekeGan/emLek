@@ -63,6 +63,8 @@ PERMISSIONS: dict[str, frozenset[Channel]] = {
     "tag_merge": _CLI,
     "tag_remove": _CLI,
     "tags_audit": _CLI,
+    "tags_backfill_preview": _CLI,
+    "tags_backfill_apply": _CLI,
 }
 
 # Operations that only a person at a real terminal may run (stdin, stdout and stderr are all
@@ -80,6 +82,7 @@ INTERACTIVE_ONLY = frozenset(
         "pin_reset",
         "tag_merge",
         "tag_remove",
+        "tags_backfill_apply",
     }
 )
 # Of those, the ones that also need the PIN. `pin_set` has no PIN yet and `pin_reset` proves

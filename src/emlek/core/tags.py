@@ -710,6 +710,173 @@ def audit(db: Database, caller: Caller) -> dict[str, Any]:
     }
 
 
+# --- backfill: attach existing tags to older records by their literal name ---------------------
+
+BACKFILL_TYPES = ("place", "person", "topic", "activity")  # not status (intent) or emotion (guess)
+BACKFILL_MIN_CHARS = 2
+BACKFILL_MAX_SHARE = 0.5  # a tag that would land on more than half the records tells nothing
+BACKFILL_SAMPLES = 3
+
+
+def _keys_of(conn: sqlite3.Connection, tag_id: int, name_key: str) -> list[str]:
+    keys = [name_key]
+    keys += [
+        r[0] for r in conn.execute("SELECT alias_key FROM tag_aliases WHERE tag_id = ?", (tag_id,))
+    ]
+    return [k for k in dict.fromkeys(keys) if len(k) >= BACKFILL_MIN_CHARS]
+
+
+def _records_containing(conn: sqlite3.Connection, key: str) -> set[int]:
+    """Visible records whose current text contains the key (index for 3+ characters)."""
+    latest = (
+        "r.version_no = (SELECT MAX(v.version_no) FROM revisions v WHERE v.record_id = r.record_id)"
+    )
+    if len(key) >= 3:
+        quoted = '"' + key.replace('"', '""') + '"'
+        rows = conn.execute(
+            "SELECT DISTINCT r.record_id FROM revisions_fts f JOIN revisions r ON r.id = f.rowid"
+            f" JOIN records rec ON rec.id = r.record_id WHERE revisions_fts MATCH ? AND {latest}"
+            " AND rec.hidden = 0",
+            (quoted,),
+        )
+    else:
+        pattern = "%" + key.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        rows = conn.execute(
+            "SELECT DISTINCT r.record_id FROM revisions r JOIN records rec ON rec.id = r.record_id"
+            f" WHERE r.body_norm LIKE ? ESCAPE '\\' AND {latest} AND rec.hidden = 0",
+            (pattern,),
+        )
+    return {int(r[0]) for r in rows}
+
+
+def _outside_longer_names(
+    conn: sqlite3.Connection, key: str, longer: list[str], ids: set[int]
+) -> set[int]:
+    """Drop records where the key only occurs inside a longer tag name (京都 in 東京都)."""
+    kept: set[int] = set()
+    for record_id in ids:
+        body = conn.execute(
+            "SELECT body_norm FROM revisions WHERE record_id = ? ORDER BY version_no DESC LIMIT 1",
+            (record_id,),
+        ).fetchone()[0]
+        covered = [False] * len(body)
+        for other in longer:
+            start = body.find(other)
+            while start != -1:
+                for i in range(start, start + len(other)):
+                    covered[i] = True
+                start = body.find(other, start + 1)
+        position = body.find(key)
+        while position != -1:
+            if not all(covered[position : position + len(key)]):
+                kept.add(record_id)
+                break
+            position = body.find(key, position + 1)
+    return kept
+
+
+def backfill_plan(
+    db: Database, caller: Caller, *, only: Sequence[str] | None = None
+) -> dict[str, Any]:
+    """What `backfill_apply` would add: per tag, how many records and a few examples."""
+    require(caller, "tags_backfill_preview")
+    conn = db.conn
+    wanted = None
+    if only:
+        wanted = {tid for tid in (resolve_id(conn, n) for n in only) if tid is not None}
+    total_records = int(conn.execute("SELECT count(*) FROM records WHERE hidden = 0").fetchone()[0])
+    all_keys = [r[0] for r in conn.execute("SELECT name_key FROM tags")]
+    all_keys += [r[0] for r in conn.execute("SELECT alias_key FROM tag_aliases")]
+    plan: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+    for tag_id, name, name_key, kind in conn.execute(
+        "SELECT id, name, name_key, type FROM tags ORDER BY name_key"
+    ).fetchall():
+        if wanted is not None and tag_id not in wanted:
+            continue
+        if kind not in BACKFILL_TYPES:
+            skipped.append({"tag": name, "reason": f"{kind} 標籤不用字面回補"})
+            continue
+        keys = _keys_of(conn, tag_id, name_key)
+        if not keys:
+            skipped.append({"tag": name, "reason": "名稱太短"})
+            continue
+        hit: set[int] = set()
+        for key in keys:
+            ids = _records_containing(conn, key)
+            longer = [k for k in all_keys if k != key and key in k]
+            if longer and ids:
+                ids = _outside_longer_names(conn, key, longer, ids)
+            hit |= ids
+        have = {
+            int(r[0])
+            for r in conn.execute("SELECT record_id FROM record_tags WHERE tag_id = ?", (tag_id,))
+        }
+        new = sorted(hit - have)
+        if not new:
+            continue
+        if total_records and len(hit) > BACKFILL_MAX_SHARE * total_records:
+            skipped.append(
+                {
+                    "tag": name,
+                    "reason": f"會落在超過 {int(BACKFILL_MAX_SHARE * 100)}% 的記錄上，沒有區辨力",
+                }
+            )
+            continue
+        samples = []
+        for record_id in new[:BACKFILL_SAMPLES]:
+            body = conn.execute(
+                "SELECT body FROM revisions WHERE record_id = ? ORDER BY version_no DESC LIMIT 1",
+                (record_id,),
+            ).fetchone()[0]
+            samples.append({"ref": f"r{record_id}", "text": " ".join(body.split())[:60]})
+        plan.append(
+            {
+                "tag": name,
+                "tag_id": tag_id,
+                "records": len(new),
+                "record_ids": new,
+                "samples": samples,
+            }
+        )
+    return {
+        "plan": plan,
+        "new_links": sum(item["records"] for item in plan),
+        "skipped": skipped,
+    }
+
+
+def backfill_apply(
+    db: Database, caller: Caller, *, only: Sequence[str] | None = None
+) -> dict[str, Any]:
+    """Attach the planned tags with provenance 'rule'. Needs a person at a terminal."""
+    require(caller, "tags_backfill_apply")
+    plan = backfill_plan(db, Caller(Channel.CLI), only=only)
+    now = utc_now_iso()
+    with db.transaction() as conn:
+        for item in plan["plan"]:
+            conn.executemany(
+                "INSERT OR IGNORE INTO record_tags (record_id, tag_id, added_by, added_at)"
+                " VALUES (?, ?, 'rule', ?)",
+                ((rid, item["tag_id"], now) for rid in item["record_ids"]),
+            )
+            event(conn, "user", "tag_backfill", f"{item['tag']}: {item['records']} records")
+    _log.info("tag backfill links=%d", plan["new_links"])
+    return {
+        "tags": [{"tag": p["tag"], "records": p["records"]} for p in plan["plan"]],
+        "new_links": plan["new_links"],
+    }
+
+
+def backfill_undo(db: Database, caller: Caller) -> dict[str, Any]:
+    """Remove every tag that a rule attached (people's and AI's choices stay)."""
+    require(caller, "tags_backfill_apply")
+    with db.transaction() as conn:
+        removed = conn.execute("DELETE FROM record_tags WHERE added_by = 'rule'").rowcount
+        event(conn, "user", "tag_backfill_undo", f"{removed} links")
+    return {"removed": int(removed)}
+
+
 # --- helpers for search ----------------------------------------------------------------------
 
 

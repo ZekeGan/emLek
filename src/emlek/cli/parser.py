@@ -95,6 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
     find.add_argument("--tag-type", dest="tag_types", action="append", choices=TAG_TYPES)
     find.add_argument("--no-expand", action="store_true", help="標籤不往下展開")
     find.add_argument("--facets", action="store_true", help="附上結果中最常見的標籤")
+    find.add_argument("--untagged", action="store_true", help="只看還沒有任何標籤的記錄")
     find.add_argument("--max-sensitivity", choices=SENSITIVITY_LEVELS, default="high")
 
     serve = sub.add_parser("mcp", help="以 MCP（stdio）提供工具給 AI 使用")
@@ -146,6 +147,12 @@ def build_parser() -> argparse.ArgumentParser:
     tags_list.add_argument("--type", choices=TAG_TYPES)
     tags_list.add_argument("--limit", type=int, default=50)
     tags_sub.add_parser("audit", help="標籤健檢：重複、只用一次、過度使用、覆蓋率")
+    backfill = tags_sub.add_parser(
+        "backfill", help="把既有標籤依名稱與別名回補到舊記錄（預設只預覽）"
+    )
+    backfill.add_argument("--only", action="append", help="只處理這個標籤（可重複）")
+    backfill.add_argument("--apply", action="store_true", help="預覽後確認並實際套用（真人終端機）")
+    backfill.add_argument("--undo", action="store_true", help="移除所有由回補規則加上的標籤")
 
     pin = sub.add_parser("pin", help="PIN（保護危險命令；只能在你自己的終端機）")
     pin_sub = pin.add_subparsers(dest="pin_command", required=True, metavar="<動作>")

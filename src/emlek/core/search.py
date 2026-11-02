@@ -182,6 +182,7 @@ def _run(
     direction: str,
     tag_groups: list[list[int]] | None = None,
     tag_types: list[str] | None = None,
+    untagged: bool = False,
 ) -> list[sqlite3.Row | tuple[Any, ...]]:
     plan = _Plan(all_versions=all_versions)
     if fts_terms:
@@ -209,6 +210,8 @@ def _run(
             f" AND rt.tag_id IN ({','.join('?' * len(group))}))",
             *group,
         )
+    if untagged:
+        plan.add("NOT EXISTS (SELECT 1 FROM record_tags rt WHERE rt.record_id = rec.id)")
     if tag_types:
         plan.add(
             "EXISTS (SELECT 1 FROM record_tags rt JOIN tags tg ON tg.id = rt.tag_id"
@@ -367,6 +370,7 @@ def search(
     tag_types: Sequence[str] | None = None,
     expand: bool = True,
     facets: bool = False,
+    untagged: bool = False,
 ) -> dict[str, Any]:
     require(caller, "search")
     alternatives = parse_alternatives(query)
@@ -440,6 +444,7 @@ def search(
     shared: dict[str, Any] = {
         "tag_groups": groups or None,
         "tag_types": list(tag_types) if tag_types else None,
+        "untagged": untagged,
         "kinds": kinds,
         "include_hidden": include_hidden,
         "all_versions": all_versions,
@@ -529,7 +534,7 @@ def search(
             extra["expanded_truncated"] = True
         if unknown:
             extra["unknown_tags"] = unknown
-        plain = {**shared, "tag_groups": None, "tag_types": None}
+        plain = {**shared, "tag_groups": None, "tag_types": None, "untagged": False}
         base_rows = _gather(
             db,
             alternatives,

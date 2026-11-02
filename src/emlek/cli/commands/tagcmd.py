@@ -12,7 +12,9 @@ import sys
 from emlek.cli.commands.common import authorize, cli_caller, open_vault
 from emlek.cli.output import Output
 from emlek.core import tags as tagmod
+from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
+from emlek.core.permissions import Caller, require
 
 
 def _confirm(prompt: str) -> None:
@@ -115,6 +117,8 @@ def run_tags(args: argparse.Namespace) -> Output:
                 return Output(result, text or "沒有常一起出現的標籤")
             lines = [f"{t['name']}（{t['type']}，{t['uses']} 筆）" for t in result["tags"]]
             return Output(result, "\n".join(lines) or "（還沒有標籤）")
+        if action == "backfill":
+            return _backfill(db, caller, args)
         report = tagmod.audit(db, caller)
     finally:
         db.close()
@@ -133,6 +137,34 @@ def run_tags(args: argparse.Namespace) -> Output:
             shown = ["／".join(i) if isinstance(i, list) else i for i in items[:10]]
             lines.append(f"{label}：{'、'.join(shown)}")
     return Output(report, "\n".join(lines))
+
+
+def _backfill(db: Database, caller: Caller, args: argparse.Namespace) -> Output:
+    if args.undo:
+        require(caller, "tags_backfill_apply")
+        _confirm("將移除所有由回補規則加上的標籤（你或 AI 自己加的不受影響）。")
+        done = tagmod.backfill_undo(db, caller)
+        return Output(done, f"已移除 {done['removed']} 個由規則加上的標籤關聯")
+    plan = tagmod.backfill_plan(db, caller, only=args.only)
+    lines = []
+    for item in plan["plan"]:
+        examples = "；".join(f"{s['ref']} {s['text']}" for s in item["samples"])
+        lines.append(f"{item['tag']}：{item['records']} 筆　例：{examples}")
+    for item in plan["skipped"]:
+        lines.append(f"略過 {item['tag']}：{item['reason']}")
+    lines.append(
+        f"共 {plan['new_links']} 個新的標籤關聯"
+        + ("（只是預覽，加 --apply 才會套用）" if not args.apply else "")
+    )
+    if not args.apply:
+        return Output(plan, "\n".join(lines))
+    require(caller, "tags_backfill_apply")
+    if not plan["new_links"]:
+        return Output(plan, "\n".join(lines))
+    sys.stderr.write("\n".join(lines) + "\n")
+    _confirm(f"將套用 {plan['new_links']} 個標籤關聯（來源標記為 rule，可用 --undo 全部復原）。")
+    done = tagmod.backfill_apply(db, caller, only=args.only)
+    return Output(done, f"已套用 {done['new_links']} 個標籤關聯")
 
 
 def _render_tree(node: dict[str, object], depth: int) -> str:

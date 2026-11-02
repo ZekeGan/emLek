@@ -106,7 +106,14 @@ def status_of(conn: sqlite3.Connection, record_id: int) -> str:
     return statuses(conn).get(record_id, "current")
 
 
-def superseded_by(conn: sqlite3.Connection, record_id: int) -> list[dict[str, Any]]:
+def _allowed_levels(cap: str) -> str:
+    order = ("none", "medium", "high")
+    return ", ".join(f"'{level}'" for level in order[: order.index(cap) + 1])
+
+
+def superseded_by(
+    conn: sqlite3.Connection, record_id: int, *, max_sensitivity: str = "high"
+) -> list[dict[str, Any]]:
     """Visible records that supersede any version of this one, oldest link first (one hop)."""
     return [
         {"ref": f"r{rec}", "revision_ref": f"r{rec}.v{ver}", "linked_at": created}
@@ -116,6 +123,7 @@ def superseded_by(conn: sqlite3.Connection, record_id: int) -> list[dict[str, An
             " JOIN revisions sr ON sr.id = l.revision_id"
             " JOIN records src ON src.id = sr.record_id"
             " WHERE l.relation = 'supersedes' AND tr.record_id = ? AND src.hidden = 0"
+            f" AND src.sensitivity IN ({_allowed_levels(max_sensitivity)})"
             " GROUP BY sr.id ORDER BY MIN(l.id)",
             (record_id,),
         )
@@ -123,7 +131,11 @@ def superseded_by(conn: sqlite3.Connection, record_id: int) -> list[dict[str, An
 
 
 def linked_from(
-    conn: sqlite3.Connection, record_id: int, *, include_hidden: bool = False
+    conn: sqlite3.Connection,
+    record_id: int,
+    *,
+    include_hidden: bool = False,
+    max_sensitivity: str = "high",
 ) -> tuple[list[dict[str, Any]], bool]:
     """Everything that points at this record (one hop, at most MAX_LINKED_FROM)."""
     rows = conn.execute(
@@ -131,7 +143,8 @@ def linked_from(
         " JOIN revisions tr ON tr.id = l.derived_from_revision_id"
         " JOIN revisions sr ON sr.id = l.revision_id"
         " JOIN records src ON src.id = sr.record_id"
-        " WHERE tr.record_id = ? AND (src.hidden = 0 OR ?) ORDER BY l.id LIMIT ?",
+        " WHERE tr.record_id = ? AND (src.hidden = 0 OR ?)"
+        f" AND src.sensitivity IN ({_allowed_levels(max_sensitivity)}) ORDER BY l.id LIMIT ?",
         (record_id, 1 if include_hidden else 0, MAX_LINKED_FROM + 1),
     ).fetchall()
     items = [

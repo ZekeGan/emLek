@@ -16,7 +16,14 @@ from emlek.config import load_config
 from emlek.core import search, service
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
-from emlek.core.permissions import INTERACTIVE_ONLY, PERMISSIONS, Caller, Channel, require
+from emlek.core.permissions import (
+    INTERACTIVE_ONLY,
+    PERMISSIONS,
+    PIN_REQUIRED,
+    Caller,
+    Channel,
+    require,
+)
 from emlek.mcp_server.server import build_server
 
 SEARCH_PARAMS = {
@@ -41,13 +48,17 @@ SEARCH_PARAMS = {
 def test_permission_matrix(operation: str, channel: Channel) -> None:
     allowed = channel in PERMISSIONS[operation]
     if allowed:
-        require(Caller(channel, interactive=True), operation)
+        require(Caller(channel, interactive=True, pin_verified=True), operation)
         if operation in INTERACTIVE_ONLY:  # a script or an AI is not a person at a terminal
             with pytest.raises(EmlekError) as refused:
-                require(Caller(channel, interactive=False), operation)
+                require(Caller(channel, interactive=False, pin_verified=True), operation)
             assert refused.value.code is ErrorCode.NOT_PERMITTED
         else:
             require(Caller(channel, interactive=False), operation)
+        if operation in PIN_REQUIRED:  # a person at a terminal who has not given the PIN
+            with pytest.raises(EmlekError) as refused:
+                require(Caller(channel, interactive=True, pin_verified=False), operation)
+            assert refused.value.code is ErrorCode.NOT_PERMITTED
     else:
         with pytest.raises(EmlekError) as info:
             require(Caller(channel), operation)
@@ -77,8 +88,14 @@ def test_tool_lists_follow_the_permission_table(data_dir: Path) -> None:
         "get",
         "search",
         "stats",
+        "phrases_list",
     }
-    assert set(_tool_names(data_dir, read_only=True)) == {"get", "search", "stats"}
+    assert set(_tool_names(data_dir, read_only=True)) == {
+        "get",
+        "search",
+        "stats",
+        "phrases_list",
+    }
 
 
 def test_tool_contracts_are_stable(data_dir: Path) -> None:
@@ -92,6 +109,9 @@ def test_tool_contracts_are_stable(data_dir: Path) -> None:
         "event_time",
         "event_time_precision",
         "links",
+        "sensitivity",
+        "confirm_token",
+        "notice_token",
     }
     get_schema = tools["get"].input_schema
     assert get_schema["required"] == ["ref"] and set(get_schema["properties"]) == {
@@ -170,12 +190,15 @@ def test_read_only_server_cannot_write_and_caps_sensitivity(data_dir: Path) -> N
     async def scenario() -> None:
         async with _stdio(data_dir, read_only=True) as client:
             names = {t.name for t in (await client.list_tools()).tools}
-            assert names == {"get", "search", "stats"}
+            assert names == {"get", "search", "stats", "phrases_list"}
             blocked = await client.call_tool("save", {"body": "書けない"})
             assert blocked.is_error
             found = _payload(await client.call_tool("search", {"query": "共通語"}))
             assert found["result"]["total"] == 1 and found["result"]["withheld"] == 1
             assert "秘密" not in json.dumps(found, ensure_ascii=False)
+            denied = await client.call_tool("get", {"ref": "r2"})  # same cap on a direct read
+            assert denied.is_error and "秘密" not in json.dumps(denied.content[0].text)
+            assert "NOT_PERMITTED" in denied.content[0].text
         async with _stdio(data_dir, read_only=False) as client:
             everything = _payload(await client.call_tool("search", {"query": "共通語"}))
             assert everything["result"]["total"] == 2

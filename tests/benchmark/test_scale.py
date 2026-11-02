@@ -93,7 +93,7 @@ def test_scale_36k(tmp_path: Path) -> None:
         safety["export_verify_seconds"] = round(time.perf_counter() - started, 1)
         safety["export_jsonl_megabytes"] = round(exported["jsonl_bytes"] / 1e6, 1)
         clean = tmp_path / "clean"
-        person = Caller(Channel.CLI, interactive=True)
+        person = Caller(Channel.CLI, interactive=True, pin_verified=True)
         init_vault(person, clean)
         started = time.perf_counter()
         restored = restore_backup(person, clean, Path(made["file"]))

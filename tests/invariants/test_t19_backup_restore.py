@@ -22,7 +22,7 @@ from emlek.core.stats import stats
 from emlek.core.vault import init_vault
 
 Saver = Callable[..., dict[str, Any]]
-PERSON = Caller(Channel.CLI, interactive=True)
+PERSON = Caller(Channel.CLI, interactive=True, pin_verified=True)
 
 TEXTS = [
     "京都で抹茶を飲んだ 😀",

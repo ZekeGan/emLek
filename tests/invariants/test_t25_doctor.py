@@ -47,9 +47,11 @@ def _by_name(result: dict[str, object]) -> dict[str, str]:
 def test_fresh_vault_is_healthy(data_dir: Path, caller: Caller) -> None:
     result = run_checks(caller, data_dir)
     statuses = _by_name(result)
-    assert result["status"] == "warn"  # the only warning: no backup has been made yet
-    assert statuses["backup"] == "warn"
-    assert {n for n, s in statuses.items() if s == "warn"} == {"backup"}
+    assert (
+        result["status"] == "warn"
+    )  # no backup yet, and no PIN (the test vault is not interactive)
+    assert statuses["backup"] == "warn" and statuses["pin"] == "warn"
+    assert {n for n, s in statuses.items() if s == "warn"} == {"backup", "pin"}
     assert statuses["database"] == "ok"
     assert statuses["permissions"] == "ok"
     assert statuses["disk_encryption"] == "info"

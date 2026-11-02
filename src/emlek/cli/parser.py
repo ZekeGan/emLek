@@ -5,11 +5,18 @@ from __future__ import annotations
 import argparse
 
 from emlek import __version__
+from emlek.core.phrases import KINDS as PHRASE_KINDS
 from emlek.core.search import DEFAULT_LIMIT, MAX_LIMIT, ORDERS, SENSITIVITY_LEVELS
 from emlek.core.service import CLEARABLE, KINDS
 from emlek.core.versions import RELATIONS
 
 LINK_HELP = "連到較舊的記錄，如 r12 或 r12:supersedes（關係：" + "、".join(RELATIONS) + "）；可重複"
+
+
+def _sensitivity_options(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--sensitivity", choices=SENSITIVITY_LEVELS, help="宣告敏感度（只能調高）")
+    command.add_argument("--confirm-token", help="最高風險內容經使用者同意後的確認碼")
+    command.add_argument("--notice-token", help="個人資料提醒經使用者同意後的確認碼")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -30,11 +37,13 @@ def build_parser() -> argparse.ArgumentParser:
     save.add_argument("--event-time", help="事件時間，如 2026-01-15 或 2026-01-15T09:30+09:00")
     save.add_argument("--precision", help="事件時間精度：year、month、day、hour、minute、second")
     save.add_argument("--link", action="append", metavar="REF[:關係]", help=LINK_HELP)
+    _sensitivity_options(save)
 
     get = sub.add_parser("get", help="讀取一筆記憶")
     get.add_argument("ref", help="記錄編號，如 r12 或 r12.v3")
     get.add_argument("--version", type=int, help="指定版本（預設最新）")
     get.add_argument("--include-hidden", action="store_true", help="讀取已隱藏的記錄")
+    get.add_argument("--max-sensitivity", choices=SENSITIVITY_LEVELS, default="high")
     get.add_argument("--offset", type=int, default=0, help="從第幾個字元開始讀（長內容分段）")
 
     amend = sub.add_parser("amend", help="為既有記錄新增版本（改錯字、補充）")
@@ -47,6 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     amend.add_argument("--source", help="新的來源（省略＝沿用）")
     amend.add_argument("--clear", nargs="+", choices=CLEARABLE, help="清空這些欄位")
     amend.add_argument("--link", action="append", metavar="REF[:關係]", help=LINK_HELP)
+    _sensitivity_options(amend)
 
     hide = sub.add_parser("hide", help="隱藏一筆記錄（可恢復）")
     hide.add_argument("ref", help="記錄編號，如 r12")
@@ -88,6 +98,40 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--exclude-high", action="store_true", help="排除最高敏感度的記錄")
 
     sub.add_parser("stats", help="記錄數、日期範圍、上次備份")
+
+    pin = sub.add_parser("pin", help="PIN（保護危險命令；只能在你自己的終端機）")
+    pin_sub = pin.add_subparsers(dest="pin_command", required=True, metavar="<動作>")
+    pin_sub.add_parser("set", help="第一次設定 PIN，並顯示復原碼")
+    pin_sub.add_parser("change", help="更換 PIN（需要目前的 PIN）")
+    pin_sub.add_parser("reset", help="忘記 PIN 時用復原碼重設")
+
+    phrase = sub.add_parser("phrase", help="觸發語句（AI 只能讀，增改刪須在你的終端機並輸入 PIN）")
+    phrase_sub = phrase.add_subparsers(dest="phrase_command", required=True, metavar="<動作>")
+    phrase_list = phrase_sub.add_parser("list", help="列出語句")
+    phrase_list.add_argument("kind", nargs="?", choices=PHRASE_KINDS)
+    phrase_add = phrase_sub.add_parser("add", help="新增語句")
+    phrase_add.add_argument("kind", choices=PHRASE_KINDS)
+    phrase_add.add_argument("text")
+    phrase_set = phrase_sub.add_parser("set", help="改語句內容，或啟用、停用")
+    phrase_set.add_argument("id", type=int)
+    phrase_set.add_argument("--text")
+    toggle = phrase_set.add_mutually_exclusive_group()
+    toggle.add_argument("--enable", action="store_true")
+    toggle.add_argument("--disable", action="store_true")
+    phrase_remove = phrase_sub.add_parser("remove", help="刪除語句")
+    phrase_remove.add_argument("id", type=int)
+
+    notice = sub.add_parser("notice", help="個人資料（medium）提醒")
+    notice_sub = notice.add_subparsers(dest="notice_command", required=True, metavar="<動作>")
+    notice_sub.add_parser("status", help="目前是否會先詢問")
+    notice_enable = notice_sub.add_parser("enable", help="重新開啟提醒（需要 PIN）")
+    notice_enable.add_argument("level", choices=("medium",))
+
+    sens = sub.add_parser("sensitivity", help="直接設定記錄的敏感度（需要 PIN）")
+    sens_sub = sens.add_subparsers(dest="sensitivity_command", required=True, metavar="<動作>")
+    sens_set = sens_sub.add_parser("set", help="設定等級（可調高或調低）")
+    sens_set.add_argument("ref", help="記錄編號，如 r12")
+    sens_set.add_argument("level", choices=SENSITIVITY_LEVELS)
 
     sub.add_parser("reindex", help="重建全文索引（索引與資料不一致時使用）")
     return parser

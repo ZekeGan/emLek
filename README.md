@@ -28,7 +28,7 @@
 ```powershell
 cd <放專案的資料夾>
 $e = ".\.venv\Scripts\emlek.exe"
-& $e --data-dir C:	emp\emlek-try init
+& $e --data-dir C:	emp\emlek-try init   # 在真正的終端機執行：會要你設定 PIN 並顯示復原碼
 & $e --data-dir C:	emp\emlek-try save --text "測試用的一筆記錄"
 & $e --data-dir C:	emp\emlek-try search --help
 ```

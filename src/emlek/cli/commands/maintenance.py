@@ -6,14 +6,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from emlek.cli.commands.common import cli_caller, data_dir_of, open_vault
+from emlek.cli.commands.common import authorize, cli_caller, data_dir_of, open_vault
 from emlek.cli.output import Output
 from emlek.config import load_config
 from emlek.core import backup as core_backup
 from emlek.core import export as core_export
 from emlek.core import stats as core_stats
 from emlek.core.errors import EmlekError, ErrorCode
-from emlek.core.permissions import require
 
 
 def run_backup(args: argparse.Namespace) -> Output:
@@ -40,8 +39,7 @@ def run_backup(args: argparse.Namespace) -> Output:
 
 
 def run_restore(args: argparse.Namespace) -> Output:
-    caller = cli_caller()
-    require(caller, "restore")  # fail before asking anything if this is not a real terminal
+    caller = authorize(args, "restore")  # a real terminal first, then the PIN
     data_dir = data_dir_of(args)
     source = Path(args.file)
     info = core_backup.inspect_database(source)

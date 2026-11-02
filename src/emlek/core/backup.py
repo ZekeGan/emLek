@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from emlek.config import load_config
+from emlek.core import security
 from emlek.core.db import Database, load_migrations
 from emlek.core.errors import EmlekError, ErrorCode
 from emlek.core.permissions import Caller, require
@@ -84,6 +85,31 @@ def _sidecars(path: Path) -> list[Path]:
     return [p for p in (Path(f"{path}-wal"), Path(f"{path}-shm")) if p.exists()]
 
 
+def _carry_over_security(live: Path, staged: Path) -> None:
+    """The restored database keeps this machine's PIN marker and recovery code, not the backup's,
+    so restoring an old backup can never bring an old PIN back."""
+    keys = security.PRESERVED_META_KEYS
+    marks = ", ".join("?" for _ in keys)
+    values: list[tuple[str, str]] = []
+    if live.exists():
+        conn = sqlite3.connect(f"{live.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            values = conn.execute(
+                f"SELECT key, value FROM meta WHERE key IN ({marks})", keys
+            ).fetchall()
+        except sqlite3.Error:
+            values = []
+        finally:
+            conn.close()
+    conn = sqlite3.connect(staged)
+    try:
+        conn.execute(f"DELETE FROM meta WHERE key IN ({marks})", keys)
+        conn.executemany("INSERT INTO meta (key, value) VALUES (?, ?)", values)
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def restore_backup(caller: Caller, data_dir: Path, source: Path) -> dict[str, Any]:
     """Replace the live database with a verified backup. The old one is kept, renamed."""
     require(caller, "restore")
@@ -106,6 +132,7 @@ def restore_backup(caller: Caller, data_dir: Path, source: Path) -> dict[str, An
             upgrade.apply_migrations(load_migrations(), data_dir / "pre-migration")
         finally:
             upgrade.close()
+        _carry_over_security(target, staged)
         verified = inspect_database(staged)
         if (verified["records"], verified["revisions"]) != (info["records"], info["revisions"]):
             raise EmlekError(ErrorCode.INTERNAL, "還原前的檢查發現筆數不一致，未做任何替換")

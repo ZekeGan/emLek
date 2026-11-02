@@ -155,7 +155,7 @@ def q21(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
 def q25(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
     made = create_backup(env.db, env.caller, env.workdir / "bk25", env.workdir / "vault")
     clean = env.workdir / "new-computer"
-    person = Caller(Channel.CLI, interactive=True)
+    person = Caller(Channel.CLI, interactive=True, pin_verified=True)
     init_vault(person, clean)
     restore_backup(person, clean, Path(made["file"]))
     restored = Database.open(load_config(clean).db_path)

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from emlek.config import Config, load_config
+from emlek.core import security
 from emlek.core.db import Database, load_migrations, wal_safe
 from emlek.core.errors import EmlekError
 from emlek.core.permissions import Caller, require
@@ -150,9 +151,34 @@ def _check_database(data_dir: Path) -> list[Check]:
                     )
                 )
             checks.append(_check_backup(db, config))
+            checks.append(_check_security(db, data_dir))
     finally:
         db.close()
     return checks
+
+
+def _check_security(db: Database, data_dir: Path) -> Check:
+    info = security.status(db.conn, data_dir)
+    if info["state"] == security.UNSET:
+        return Check(
+            "pin",
+            "warn",
+            "尚未設定 PIN：還原、改觸發語句等危險命令目前一律拒絕。"
+            "請在你自己的終端機執行 emlek pin set（先設好，再把終端機權限交給 AI）",
+        )
+    if info["state"] == security.TAMPERED:
+        return Check("pin", "fail", "PIN 設定檔不見或損壞；只能用 emlek pin reset 以復原碼重設")
+    if info["locked"]:
+        return Check("pin", "warn", f"PIN 已鎖定至 {info['locked_until']}（有人連續輸入錯誤）")
+    if info["failures_since_success"]:
+        return Check(
+            "pin",
+            "warn",
+            f"上次成功後有 {info['failures_since_success']} 次 PIN 錯誤嘗試；"
+            "若不是你，可能有程式在猜 PIN",
+        )
+    last = info["last_success_at"] or "尚未使用"
+    return Check("pin", "ok", f"已設定；上次通過 {last}")
 
 
 def _check_backup(db: Database, config: Config) -> Check:

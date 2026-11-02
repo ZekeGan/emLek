@@ -32,3 +32,8 @@ def print_error(error: EmlekError, *, as_json: bool) -> None:
         sys.stdout.write("\n")
     else:
         sys.stderr.write(f"錯誤（{error.code.value}）：{error.message}\n")
+        for key in ("confirm_token", "notice_token"):
+            if key in error.data:
+                sys.stderr.write(
+                    f"{key}：{error.data[key]}（{error.data.get('expires_in', 600)} 秒內有效）\n"
+                )

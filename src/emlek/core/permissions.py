@@ -22,6 +22,7 @@ class Channel(StrEnum):
 class Caller:
     channel: Channel
     interactive: bool = False
+    pin_verified: bool = False  # set by the CLI only after the PIN was checked in this run
 
 
 _CLI = frozenset({Channel.CLI})
@@ -43,11 +44,39 @@ PERMISSIONS: dict[str, frozenset[Channel]] = {
     "backup": _CLI,
     "restore": _CLI,
     "export": _CLI,
+    "phrases_list": _ANY,
+    "phrase_list": _CLI,
+    "phrase_add": _CLI,
+    "phrase_set": _CLI,
+    "phrase_remove": _CLI,
+    "notice_status": _CLI,
+    "notice_enable": _CLI,
+    "sensitivity_set": _CLI,
+    "pin_set": _CLI,
+    "pin_change": _CLI,
+    "pin_reset": _CLI,
 }
 
 # Operations that only a person at a real terminal may run (stdin, stdout and stderr are all
-# terminals). A PIN is added on top of this in M6.
-INTERACTIVE_ONLY = frozenset({"restore"})
+# terminals).
+INTERACTIVE_ONLY = frozenset(
+    {
+        "restore",
+        "phrase_add",
+        "phrase_set",
+        "phrase_remove",
+        "notice_enable",
+        "sensitivity_set",
+        "pin_set",
+        "pin_change",
+        "pin_reset",
+    }
+)
+# Of those, the ones that also need the PIN. `pin_set` has no PIN yet and `pin_reset` proves
+# itself with the recovery code instead.
+PIN_REQUIRED = frozenset(
+    {"restore", "phrase_add", "phrase_set", "phrase_remove", "notice_enable", "sensitivity_set"}
+)
 
 
 def require(caller: Caller, operation: str) -> None:
@@ -59,3 +88,5 @@ def require(caller: Caller, operation: str) -> None:
             ErrorCode.NOT_PERMITTED,
             f"{operation} 必須在你自己的終端機執行，不能由管線、腳本或 AI 代跑",
         )
+    if operation in PIN_REQUIRED and not caller.pin_verified:
+        raise EmlekError(ErrorCode.NOT_PERMITTED, f"{operation} 需要先通過 PIN 驗證")

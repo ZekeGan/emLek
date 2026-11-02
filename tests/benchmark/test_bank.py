@@ -155,3 +155,22 @@ def test_story_chain_is_planted_with_links() -> None:
     story = [e for e in CORPUS.entries if e.fact and e.fact.startswith("study_")]
     assert [e.fact for e in story] == ["study_a", "study_b", "study_c", "study_d"]
     assert story[3].links == (("study_c", "supersedes"), ("study_a", "supports"))
+
+
+def test_consent_dialogues_are_well_formed_and_use_public_test_values() -> None:
+    assert list(bank.CONSENT) == ["C01", "C02", "C03", "C04", "C05"]
+    for item in bank.CONSENT.values():
+        assert item.first and (item.asks_first or not item.replies)
+        if item.saved:
+            assert item.level in ("medium", "high")
+    # every sensitive prompt really is caught by the core's own scan
+    from emlek.core import sensitivity
+
+    levels = {cid: sensitivity.assess(item.first)[0] for cid, item in bank.CONSENT.items()}
+    assert levels == {
+        "C01": "high",
+        "C02": "high",
+        "C03": "medium",
+        "C04": "medium",
+        "C05": "medium",
+    }

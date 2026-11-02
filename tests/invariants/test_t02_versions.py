@@ -53,7 +53,7 @@ def test_the_index_follows_amends_and_hiding(db: Database, caller: Caller) -> No
                 "SELECT hidden FROM records WHERE id = ?", (int(ref[1:]),)
             ).fetchone()[0]:
                 continue  # a hidden record cannot be amended (covered in T13)
-            service.amend(db, caller, ref=ref, body=f"改訂 {step} 京都 {rng.random()}")
+            service.amend(db, caller, ref=ref, body=f"改訂 {step} 京都 {rng.choice('あいうえお')}")
         elif action == "hide":
             versions.hide(db, caller, ref=ref)
         else:

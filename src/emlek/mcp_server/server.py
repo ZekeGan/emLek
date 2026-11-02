@@ -19,8 +19,8 @@ from pydantic import Field
 
 from emlek import __version__
 from emlek.config import load_config
+from emlek.core import phrases, service, versions
 from emlek.core import search as core_search
-from emlek.core import service, versions
 from emlek.core import stats as core_stats
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
@@ -43,7 +43,10 @@ INSTRUCTIONS = (
     "只是改錯字或補充才用 amend。回答「現在的想法」用 status 為 current／reaffirmed 者，"
     "並交代被推翻的過程。\n"
     "8. 回傳含 summary 表示符合超過 50 筆、你只拿到一頁：轉述數字要帶出 summary.note 的限制，"
-    "並說明實際讀了幾筆。"
+    "並說明實際讀了幾筆。\n"
+    "9. save／amend 回 NEEDS_CONFIRMATION 時：照 AGENT_RULES 的固定句式問使用者，"
+    "得到「是」才帶 error.data 裡的 confirm_token／notice_token 重送；"
+    "不可自行帶碼，也不可替使用者回答。"
 )
 MAX_GET_CHARS = 8000  # longer bodies are cut; the rest is read with `offset`
 
@@ -82,6 +85,9 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
         event_time: str | None = None,
         event_time_precision: str | None = None,
         links: list[dict[str, Any]] | None = None,
+        sensitivity: str | None = None,
+        confirm_token: str | None = None,
+        notice_token: str | None = None,
     ) -> dict[str, Any]:
         return run(
             "save",
@@ -94,6 +100,9 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
                 event_time=event_time,
                 event_time_precision=event_time_precision,
                 links=links,
+                sensitivity=sensitivity,
+                confirm_token=confirm_token,
+                notice_token=notice_token,
             ),
         )
 
@@ -106,6 +115,9 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
         source: str | None = None,
         clear: list[str] | None = None,
         links: list[dict[str, Any]] | None = None,
+        sensitivity: str | None = None,
+        confirm_token: str | None = None,
+        notice_token: str | None = None,
     ) -> dict[str, Any]:
         return run(
             "amend",
@@ -120,6 +132,9 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
                 source=source,
                 clear=clear or (),
                 links=links,
+                sensitivity=sensitivity,
+                confirm_token=confirm_token,
+                notice_token=notice_token,
             ),
         )
 
@@ -142,6 +157,7 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
                 include_hidden=include_hidden,
                 offset=offset,
                 max_chars=MAX_GET_CHARS,
+                max_sensitivity=default_cap,
             ),
         )
 
@@ -190,6 +206,12 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
             ),
         )
 
+    def phrases_list() -> dict[str, Any]:
+        return run(
+            "phrases_list",
+            lambda db: phrases.list_phrases(db, caller, enabled_only=True),
+        )
+
     def stats() -> dict[str, Any]:
         return run("stats", lambda db: core_stats.stats(db, caller))
 
@@ -215,6 +237,11 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
             read,
         ),
         "stats": (stats, "記憶庫的筆數、日期範圍、上次備份時間（不含內容）。", read),
+        "phrases_list": (
+            phrases_list,
+            "使用者登記的觸發語句（save／purge／exclude），只供判斷，不可修改。",
+            read,
+        ),
         "search": (
             search,
             "搜尋記憶：關鍵字、日期範圍、排序、分頁。回傳記錄、片段、總筆數。",

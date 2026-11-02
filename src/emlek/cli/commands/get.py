@@ -19,6 +19,7 @@ def run(args: argparse.Namespace) -> Output:
             version=args.version,
             include_hidden=args.include_hidden,
             offset=args.offset,
+            max_sensitivity=args.max_sensitivity,
         )
     finally:
         db.close()

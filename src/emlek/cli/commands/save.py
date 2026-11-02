@@ -45,6 +45,9 @@ def run(args: argparse.Namespace) -> Output:
             event_time=args.event_time,
             event_time_precision=args.precision,
             links=parse_links(args.link),
+            sensitivity=args.sensitivity,
+            confirm_token=args.confirm_token,
+            notice_token=args.notice_token,
         )
     finally:
         db.close()

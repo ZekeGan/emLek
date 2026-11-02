@@ -315,6 +315,60 @@ def _tagged() -> list[Entry]:
     ]
 
 
+# Vague-question suite: each question is answered by records that never use the question's
+# own words (far synonyms, other languages), so a plain word match cannot just find them.
+VAGUE = {
+    "vague_fight": (
+        ("2025-04-18", "同僚の田中さんと口論になってしまった"),
+        ("2025-09-05", "和室友為了垃圾的事大吵一架，兩天沒說話"),
+        ("2026-02-14", "Had a heated argument with my landlord about the deposit"),
+    ),
+    "vague_sweets": (
+        ("2025-05-22", "コンビニのプリンを食べた。甘すぎた"),
+        ("2025-12-07", "今天吃了一塊檸檬塔，很酸但很好吃"),
+        ("2026-06-09", "Tried a slice of cheesecake at the new cafe"),
+    ),
+    "vague_gadget": (
+        ("2025-03-11", "新しいイヤホンが届いた。音がいい"),
+        ("2025-10-26", "換了一支新手機，螢幕很大"),
+        ("2026-01-19", "A mechanical keyboard arrived in the mail today"),
+    ),
+    "vague_film": (
+        ("2025-06-28", "映画館でアニメを見て泣いた"),
+        ("2025-11-15", "昨晚在家看了一部懸疑片，結局很意外"),
+        ("2026-04-24", "Watched a documentary about deep sea creatures"),
+    ),
+    "vague_spend": (
+        ("2025-07-13", "ブランドの財布を衝動的に手に入れて後悔した"),
+        ("2025-12-21", "這個月外食花太多了，錢包見底"),
+        ("2026-05-30", "Paid way too much for a concert ticket"),
+    ),
+    "vague_instrument": (
+        ("2025-02-09", "ギターの練習で指が痛い"),
+        ("2025-08-17", "鋼琴課學了新的曲子，左手還不太順"),
+        ("2026-03-22", "Started learning the ukulele"),
+    ),
+    "vague_family": (
+        ("2025-04-05", "実家の母に連絡して近況を話した"),
+        ("2025-11-09", "週末回老家陪爸媽吃飯"),
+        ("2026-07-26", "Called my sister about the weekend trip"),
+    ),
+    "vague_worry": (
+        ("2025-05-08", "上司に企画を却下されて落ち込んだ"),
+        ("2025-10-14", "專案進度落後，壓力很大"),
+        ("2026-08-11", "Worried about the deadline for the quarterly report"),
+    ),
+}
+
+
+def _vague() -> list[Entry]:
+    entries: list[Entry] = []
+    for fact, items in VAGUE.items():
+        for day, text in items:
+            entries.append(Entry(text, day, _stamp(day), "original", fact))
+    return entries
+
+
 def _story() -> list[Entry]:
     """A changing opinion, oldest first: A, then B replaces A, C replaces B, D replaces C and
     confirms A again. Appended after the shuffle so each entry can link to older record ids."""
@@ -356,7 +410,7 @@ def build_corpus(seed: int = 7, filler: int = 600) -> Corpus:
         replace(e, tags=TAGS_BY_FACT.get(e.fact or "", ())) for e in _planted()
     ]
     rng.shuffle(entries)
-    return Corpus(entries + _story() + _tagged())
+    return Corpus(entries + _story() + _tagged() + _vague())
 
 
 @contextmanager

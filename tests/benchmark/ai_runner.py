@@ -535,6 +535,10 @@ def pick_ids() -> tuple[list[str], list[str]]:
     chosen = os.environ.get("EMLEK_AI_SET", "smoke")
     if chosen == "consent":
         return [], []
+    if (
+        chosen == "vague"
+    ):  # the yardstick for search-semantics changes: vague questions + the weak ones
+        return [*bank.VAGUE_IDS, "Q46", "Q47", "Q48", "Q49"], []
     if chosen == "scale":
         return list(bank.SCALE_IDS), []
     if chosen == "persona":

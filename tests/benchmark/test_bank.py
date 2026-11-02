@@ -174,3 +174,27 @@ def test_consent_dialogues_are_well_formed_and_use_public_test_values() -> None:
         "C04": "medium",
         "C05": "medium",
     }
+
+
+def test_vague_questions_are_answered_by_records_that_never_use_the_question_words() -> None:
+    words = {
+        "vague_fight": ("吵架", "爭吵", "跟人"),
+        "vague_sweets": ("甜點", "點心", "dessert"),
+        "vague_gadget": ("電子", "產品", "gadget"),
+        "vague_film": ("電影", "movie", "film"),
+        "vague_spend": ("花很多錢", "買東西", "spend"),
+        "vague_instrument": ("樂器", "instrument"),
+        "vague_family": ("家人", "family"),
+        "vague_worry": ("煩惱", "工作"),
+    }
+    for qid, (_text, fact) in bank.VAGUE_QUESTIONS.items():
+        gold = bank.SPECS[qid].gold(CORPUS)
+        assert len(gold) == 3, qid
+        for record in gold:
+            body = CORPUS.entries[record - 1].body.casefold()
+            assert not [w for w in words[fact] if w.casefold() in body], (qid, body)
+    # and they are not caught by the words other questions search for
+    others = " ".join(
+        e.body for e in CORPUS.entries if (e.fact or "").startswith("vague_")
+    ).casefold()
+    assert not [w for w in synth.TARGET_WORDS if w.casefold() in others]

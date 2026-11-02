@@ -215,6 +215,20 @@ CONSENT: dict[str, Consent] = {
 # Scale question (category I): thousands of records match, so a good answer says it only saw part.
 # It runs on its own, on a bigger corpus (EMLEK_AI_SET=scale), because the planted ids differ there.
 SCALE_FILLER = 3000
+# --- vague questions (category J): the answer records never contain the question's own words
+VAGUE_QUESTIONS = {
+    "Q82": ("我最近有跟人吵架嗎", "vague_fight"),
+    "Q83": ("我吃過哪些甜點", "vague_sweets"),
+    "Q84": ("我買過什麼電子產品", "vague_gadget"),
+    "Q85": ("我看過什麼電影", "vague_film"),
+    "Q86": ("我有沒有花很多錢買東西", "vague_spend"),
+    "Q87": ("我學過哪些樂器", "vague_instrument"),
+    "Q88": ("我跟家人有什麼互動", "vague_family"),
+    "Q89": ("我有沒有為了工作煩惱", "vague_worry"),
+}
+for _qid, (_text, _fact) in VAGUE_QUESTIONS.items():
+    SPECS[_qid] = Spec(_text, facts(_fact), "set", "vague")
+VAGUE_IDS = tuple(VAGUE_QUESTIONS)
 SCALE_WORD = "勉強"
 SPECS["Q75"] = Spec(f"我記錄過的「{SCALE_WORD}」都寫了些什麼？幫我總結", nothing, "scale", "scale")
 SCALE_IDS = ("Q75",)

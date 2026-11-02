@@ -60,7 +60,7 @@
 
 - AI 只能用 MCP 唯讀工具 `phrases_list`。語句只是 AI 的判斷依據，不是機械比對。沒有啟用的 `purge` 語句時，徹底清除關閉。
 - **需要真人終端機與 PIN 的 CLI 命令**：`phrase add·set·remove`（所有類別）、`notice enable`、`restore`、`tag merge·remove`、`sensitivity set`、`purge`、`import --include-high`、`pin change·reset`。檢查兩層：(1) 標準輸入、輸出、錯誤輸出都必須是終端機，否則回 `NOT_PERMITTED`（結束碼 3）；(2) 以 `getpass` 從主控台輸入 PIN，**絕不接受參數、環境變數或標準輸入傳入**。
-- **PIN**：至少 6 碼，以 `scrypt` 雜湊存於 `meta`，連續錯 5 次鎖定 5 分鐘；設定時一次性顯示復原碼（只存雜湊）供 `pin reset`。`init` 在 M6 起設定 PIN，早於 M6 建立的庫以 `emlek pin set` 補設。**PIN 不得告訴任何 AI**；若貼在對話，須立即 `emlek pin change`。
+- **PIN**：細節見「信任閘門規格（M6）」。**PIN 不得告訴任何 AI**；若貼在對話，須立即 `emlek pin change`。
 - 限制（已實測）：Claude Code 的 PowerShell 工具回報標準輸入是終端機、標準輸出不是，所以三條串流都要驗。PIN 擋得住只透過 CLI 操作的 AI；能開偽終端機並讀到使用者輸入、或直接開資料庫檔改資料的 AI 仍能繞過。這是主要防線而非絕對隔離。
 
 ## 版本與連結語意（M5）
@@ -106,7 +106,7 @@
 | `get` | 讀取指定記錄與版本；回傳 `status`、`invalidated`、`superseded_by`、`linked_from`、`links_out`；隱藏的記錄預設回 `NOT_FOUND`（`include_hidden=true` 可讀）；長內容分段（`offset`）；`max_sensitivity` 於 M6 |
 | `hide`／`unhide` | 隱藏與恢復（冪等；回傳被連帶失效的衍生記錄） |
 | `purge_preview` | 唯讀預覽徹底清除的範圍（實際清除只有 CLI `emlek purge`） |
-| `phrases_list` | 唯讀取得啟用語句 |
+| `phrases_list` | 唯讀取得啟用語句（依 `kind` 分組） |
 | `stats` | 唯讀：記錄數（不含隱藏）、隱藏數、版本數、最早與最晚日期、上次備份時間 |
 | 標籤工具 | `set_tags`、`tags_find`、`tags_list`、`tags_tree`、`tag_related`、`tag_link`、`tag_alias`，見 [DESIGN_TAGS](DESIGN_TAGS.md) |
 
@@ -142,12 +142,68 @@ MCP 伺服器的 `instructions` 放約 300 字的規則摘要（完整規則在 
 | none | 其他 | 不提示 |
 
 - 判斷：AI 依語意判斷；核心另以規則掃描當補強（私鑰區塊、常見金鑰格式、JWT、卡號 Luhn 檢查、電話與證號格式），回傳 `sensitivity_hint`，取兩者較高者。規則掃描不可能完整。
-- high：`save` 回傳 `NEEDS_CONFIRMATION`（`state=needs_confirmation`，`error.data` 含一次性 `confirm_token`，綁定內容雜湊，10 分鐘過期）；使用者答「是」才帶 token 重送。
+- high：`save` 回傳 `NEEDS_CONFIRMATION`（`state=needs_confirmation`，`error.data` 含一次性 `confirm_token`，綁定內容雜湊，10 分鐘過期；機制見「信任閘門規格（M6）」）；使用者答「是」才帶 token 重送。
 - medium：未確認過時回傳 `NEEDS_CONFIRMATION`（`state=needs_notice`，含綁定該內容的 `notice_token`）；使用者同意後帶 token 重送，核心寫入 `notice_settings`（`enabled=0`）。`emlek notice status` 查看、`emlek notice enable medium` 重開（CLI，真人終端機）。
 - `amend` 同樣掃描並取較高等級，高風險新內容一樣走確認；AI 傳入的 `sensitivity` 只能調高，調低只能用 `emlek sensitivity set r<id> <level>`。
 - `import` 也掃描：含 high 的檔案預設略過並列出，使用者檢視後可用 `--include-high` 在真人終端機確認匯入；medium 直接匯入並標記，匯入摘要回報數量。
 - 記錄的 `sensitivity` 等於各版本最高者；`search`／`get` 回傳該欄位。`emlek export --exclude-high` 可排除 high 記錄。
 - 限制：AI 若自行帶 token 而未真正詢問，核心無法分辨，與清除流程同一信任邊界；以題庫與審查驗證各 AI 平台的遵守程度。
+
+## 信任閘門規格（M6）
+
+### 儲存位置
+
+遷移 0004 新增資料表 `phrases`、`notice_settings`、`confirm_tokens`，以及 `meta` 的 `pin_initialized`、`recovery_salt`、`recovery_hash`、`recovery_failed`、`recovery_locked_until`。**PIN 雜湊與失敗計數不放資料庫，放資料夾內的 `security.json`**（`version`、`kdf` 參數與 salt、`pin_hash`、`failed_count`、`locked_until`；寫入用暫存檔加改名，權限同資料夾）。原因：還原舊備份不能讓 PIN 退回舊值，備份與匯出也不該帶著 PIN 雜湊。`restore` 換庫時保留目前的 `pin_*`、`recovery_*` 這幾個 `meta` 鍵，不用備份裡的。
+
+### PIN 狀態
+
+| 狀態 | 條件 | 行為 |
+|---|---|---|
+| 未設定 | `meta` 沒有 `pin_initialized` | 需 PIN 的命令一律拒絕（失敗即關閉），訊息指向 `emlek pin set`；`doctor` 以「注意」提示 |
+| 已設定 | 有標記且 `security.json` 有效 | 正常運作 |
+| 受損 | 有標記但 `security.json` 不見或損壞 | 需 PIN 的命令與 `pin set` 都拒絕，只剩 `pin reset`（用復原碼） |
+
+- 互動式 `emlek init`（真人終端機）建立資料夾後直接進入 `pin set`；非互動的 `init`（測試、腳本）略過並提示。**請在把終端機權限交給 AI 之前先設好 PIN**：未設定時，能開偽終端機的程式可以搶先設自己的 PIN。
+- PIN 規則：至少 6 個字元（任意字元）、輸入兩次須一致；以 `getpass` 從主控台讀取，不接受參數、環境變數或標準輸入；`hashlib.scrypt`（n=2^15、r=8、p=1、16 位元組 salt，參數寫入檔案）；比對用常數時間函式。
+- 失敗計數：**先寫入再驗證**（驗證中途被中斷也算一次）；成功歸零；連續 5 次錯誤鎖定 5 分鐘，鎖定期間不再詢問 PIN 直接拒絕。
+- 復原碼：`pin set` 顯示一次（20 個英數字、分 5 組），資料庫只存 scrypt 雜湊；`pin reset` 需復原碼加兩次新 PIN，並產生新復原碼；復原碼嘗試次數另計（`meta`，5 次鎖 5 分鐘），因為受損狀態下 `security.json` 不可信。`pin change` 需舊 PIN。
+- 復原碼與 PIN 都遺失的最後手段（文件說明，不做成指令）：停掉所有 emLek 行程，刪除 `security.json`，再用 SQLite 命令列清除 `meta` 的 `pin_initialized`，之後 `pin set`。同帳號的程式也能這麼做，這是已記載的限制。
+
+### 需 PIN 的命令共用流程
+
+順序固定：①三條串流都是真終端機 ②PIN 狀態 ③鎖定 ④讀 PIN ⑤驗證，通過才執行。命令清單見「自訂語句」。每次結果（命令名稱、成功／失敗／鎖定）寫入日誌，**不含內容**；`doctor` 顯示上次成功時間、自上次成功後的失敗次數與是否鎖定（失敗次數大於 0 為「注意」，提示可能有程式在猜 PIN）。
+
+### 觸發語句
+
+`phrases(id, kind, text, enabled, created_at, updated_at)`；遷移時寫入預設值（見「自訂語句」）。語句 1–100 字元、不含控制字元，同一 `kind` 內以 NFKC＋casefold 後不得重複。`phrase list [kind]` 不需 PIN；`add`、`set <id> [--text …] [--enable|--disable]`、`remove` 需 PIN。停用或刪除最後一個啟用中的 `purge` 語句＝關閉徹底清除。MCP `phrases_list`（三個入口皆有）只回啟用中的語句、依 `kind` 分組。核心**不**機械比對語句，它們只是 AI 的判斷依據。
+
+### 敏感掃描
+
+`core/sensitivity.py` 是純函式：輸入文字，先做 NFKC，回傳命中的（類別，等級）清單，**不回傳也不記錄命中的文字**。有效等級＝AI 宣告、掃描、既有記錄三者最高；AI 只能調高，調低只能 `sensitivity set`（需 PIN）。回應的 `sensitivity_hint` 只含等級與類別。
+
+| 等級 | 類別與規則 |
+|---|---|
+| high | 私鑰區塊（`-----BEGIN … PRIVATE KEY-----`）；常見金鑰格式（AWS `AKIA…`、GitHub `ghp_…`、Slack `xox…`、`sk-…`）；JWT（三段 base64url）；信用卡號（13–19 位數字，允許空白與橫線，Luhn 驗證）；密碼語句（密碼／パスワード／password／暗証番號等關鍵字後接冒號、等號或「是／は」再接 3 字元以上內容）；復原碼語句（復原碼／recovery code／backup code）；銀行帳號（帳號／口座／account 關鍵字近處 7–16 位數字） |
+| medium | 手機與市話格式（台灣 09xx-xxx-xxx、0x-xxxxxxx、日本 0x0-xxxx-xxxx、國際碼 +nn）；單純數字串只有在「電話／TEL／携帯／手機」等關鍵字 20 字內才算；郵遞區號加住址關鍵字（〒、住所、住址、地址、address）；台灣身分證字號（含檢查碼）；日本個人編號與護照（關鍵字加號碼）；生日（生日／誕生日／birthday 近處的日期）；電子郵件位址 |
+| none | 其餘。人名不掃描（太常見），交給 AI 語意判斷 |
+
+規則掃描不可能完整，誤判與漏判都會有；測資一律用公開的測試值（如 `4111 1111 1111 1111`、`AKIAIOSFODNN7EXAMPLE`、範例 JWT），不放真實資料。
+
+### 確認碼
+
+`confirm_tokens(token_hash, kind, content_hash, created_at, expires_at, used_at)`。確認碼為 128 位元隨機值，只存 SHA-256；`content_hash`＝SHA-256(操作名稱＋記錄編號（`save` 為空）＋內文)；10 分鐘過期；每次簽發時順手清掉一天前的舊列。
+
+1. 有效等級 high：`save`／`amend` 不帶碼 → `NEEDS_CONFIRMATION`，`error.data` 含 `state=needs_confirmation`、`confirm_token`、`categories`、`expires_in`。帶碼重送：驗證通過（存在、種類相符、未用過、未過期、內容雜湊相符）才寫入，且「標記已用」與寫入在**同一交易**（寫入失敗則碼不被消耗）。每次都要問，不可關閉。
+2. 有效等級 medium 且 `notice_settings.enabled=1`：同上，`state=needs_notice`、`notice_token`；通過後寫入並把 `enabled` 設為 0、記 `acknowledged_at`。**等級層級共用**：同意一次，所有 medium 類別都不再問（Q41 的「同類」指同一等級）。`notice enable medium`（需 PIN）重新開啟。
+3. 同時命中 high 與 medium 時只走 high。任何驗證失敗一律回 `TOKEN_INVALID`，訊息相同，不透露是哪一項不符。碼不寫入日誌。
+
+### 讀取端的敏感度上限
+
+`get` 新增 `max_sensitivity`（唯讀 MCP 預設 medium、其餘 MCP 預設 high、命令列預設 high）；超過上限回 `NOT_PERMITTED`（不回內文）。`get` 的 `linked_from`、`superseded_by`，以及 `search` 的 `summary`，一律略過超過上限的記錄，不洩漏其存在或筆數。
+
+### 完成標準
+
+T14、T15、T16，以及新增的 T27（確認碼）、T28（PIN 儲存與狀態）；Q40–Q42（需最小兩輪對話機制：以 `claude --resume` 接續同一工作階段，作為 M6 的一部分一起做）；使用者在自己的終端機完成：設定 PIN、輸入錯誤 PIN 到被鎖定、`restore` 需 PIN、在 Claude Code 的 PowerShell 工具執行 `phrase add` 被拒；通過後程式版本升 0.1.0。
 
 ## 匯入既有資料
 

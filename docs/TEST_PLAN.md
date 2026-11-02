@@ -20,7 +20,9 @@
 | T12 | 隱藏：搜尋與讀取看不到、恢復後回來、衍生摘要同步失效；隱藏與 `unhide` 冪等；隱藏者不計入 `summary` 數字；推翻者被隱藏則被推翻者恢復為 `current`；`supersedes` 不傳遞隱藏效果、`derived`／`summarizes` 會 | 隱藏、恢復、檢查 `status`、`superseded_by` 與衍生記錄狀態、`summary` 筆數 | M5 |
 | T13 | 推翻與支持：`superseded_by`、`linked_from`、`status` 正確還原 A→B→C→A（`current`／`superseded`／`reaffirmed`）；連到不存在、自己、隱藏者被拒；重複連結冪等；`amend` 的 `expected_version` 衝突、內文未變、隱藏中、`kind` 不可改、省略與 null 的差別；`current_only` 排除規則；`linked_from` 超過 50 條標 `truncated` | 建立四筆記錄與關係，逐一檢查各自回傳與錯誤碼 | M5 |
 | T26 | 結果過多摘要：超過 50 筆才有 `summary`；`by_month` 加總等於總筆數減未標日期；超過 24 個月改 `by_year`；固定 `basis` 與 `note`；`get` 超過 8000 字元截斷並可用 `offset` 取完；舊欄位不變 | 以合成 120 筆跨 30 個月的資料查詢，對照 SQL 直接統計 | M5 |
-| T14 | 語句與需真人終端機的命令（DESIGN 自訂語句清單）：標準輸入、輸出、錯誤輸出缺一個不是終端機就拒絕；AI 端對語句唯讀 | 管線、無終端機、子行程、只有輸入是終端機（如 Claude Code 的 PowerShell 工具）都應拒絕；PIN 不接受參數、環境變數、標準輸入；錯誤 PIN 被拒，連續錯誤鎖定 | M6 |
+| T27 | 確認碼：不帶碼回 `NEEDS_CONFIRMATION` 且不寫入；帶碼通過才寫入；單次有效（同碼第二次、並行兩個請求只有一個成功）；10 分鐘過期（注入時鐘）；綁內容（改一個字即拒）；種類不符（notice 碼不能當 confirm 碼）；寫入失敗時碼不被消耗；所有失敗訊息相同；碼不出現在日誌與資料庫明文；high 與 medium 同時命中只走 high；同意 medium 後 `notice_settings` 更新且之後同等級不再詢問、`notice enable medium` 後再問 | 注入時鐘與失敗點，逐項測；以兩個行程同時送出同一個碼 | M6 |
+| T28 | PIN 儲存與狀態：`security.json` 存在資料庫外且原子寫入；備份與匯出不含 PIN 雜湊；`restore` 保留目前的 PIN 設定（舊備份不會讓 PIN 退回）；三種狀態（未設定／已設定／受損）下各命令的行為；失敗計數先寫入再驗證，行程被殺也計入；鎖定期間不詢問；復原碼只顯示一次、只存雜湊、`pin reset` 換新碼；受損狀態只有 `pin reset` 可用；`get` 的 `max_sensitivity` 與 `linked_from`、`summary` 不洩漏超限記錄 | 以假的終端機與 `getpass` 驅動；用檔案損毀、刪除模擬受損 | M6 |
+| T14 | 語句與需真人終端機的命令（DESIGN 自訂語句清單與「信任閘門規格（M6）」，含 PIN 三種狀態與流程順序、日誌不含內容、`doctor` 顯示失敗次數）：標準輸入、輸出、錯誤輸出缺一個不是終端機就拒絕；AI 端對語句唯讀 | 管線、無終端機、子行程、只有輸入是終端機（如 Claude Code 的 PowerShell 工具）都應拒絕；PIN 不接受參數、環境變數、標準輸入；錯誤 PIN 被拒，連續錯誤鎖定 | M6 |
 | T15 | 敏感提示：high 每次要 token，token 單次有效、綁內容、過期；medium 只問一次且可重開；規則掃描命中常見格式；`amend` 重新掃描取較高等級；AI 無法調低 `sensitivity`；`import` 略過含 high 的檔案並列出 | 逐項測；偽造或重用 token 被拒；醒目樣本（合成金鑰格式）命中 | M6 |
 | T16 | 權限矩陣（每個操作×每個入口）：唯讀模式的工具清單根本沒有寫入、隱藏、清除工具；`max_sensitivity` 生效 | 以唯讀啟動，列出工具；對照核心權限表逐格驗證 | M3（每個里程碑重跑） |
 | T17 | 標籤：正規化、別名、只往下展開（最多 3 層）、循環關係被拒 | 建立含環與深層的階層，檢查展開結果 | M7 |

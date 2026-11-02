@@ -79,12 +79,16 @@ def read_new_pin(prompt: str = "設定新的 PIN（至少 6 個字元）：") ->
     return first
 
 
-def authorize(args: argparse.Namespace, operation: str) -> Caller:
+def authorize(args: argparse.Namespace, operation: str, *, pin: bool = True) -> Caller:
     """The gate for commands that change what the AI may do: a real terminal first, then the PIN.
 
     Order matters: nothing is asked of a non-terminal caller, and a locked or missing PIN is
     reported before any prompt. Outcomes go to the log without content."""
     person = cli_caller()
+    if not pin:  # operations that need a person at a terminal but not the PIN
+        require(Caller(Channel.CLI, interactive=person.interactive), operation)
+        _log.info("gate operation=%s result=ok", operation)
+        return Caller(Channel.CLI, interactive=True)
     require(Caller(Channel.CLI, interactive=person.interactive, pin_verified=True), operation)
     data_dir = data_dir_of(args)
     db = open_vault(args)

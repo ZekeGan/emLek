@@ -42,6 +42,7 @@ PERMISSIONS: dict[str, frozenset[Channel]] = {
     "mcp": _CLI,
     "stats": _ANY,
     "backup": _CLI,
+    "backup_encrypt": _CLI,
     "restore": _CLI,
     "export": _CLI,
     "phrases_list": _ANY,
@@ -65,6 +66,11 @@ PERMISSIONS: dict[str, frozenset[Channel]] = {
     "tags_audit": _CLI,
     "tags_backfill_preview": _CLI,
     "tags_backfill_apply": _CLI,
+    "import_preview": _CLI,
+    "import_apply": _CLI,
+    "import_apply_high": _CLI,
+    "import_undo": _CLI,
+    "import_list": _CLI,
 }
 
 # Operations that only a person at a real terminal may run (stdin, stdout and stderr are all
@@ -83,6 +89,10 @@ INTERACTIVE_ONLY = frozenset(
         "tag_merge",
         "tag_remove",
         "tags_backfill_apply",
+        "backup_encrypt",
+        "import_apply",
+        "import_apply_high",
+        "import_undo",
     }
 )
 # Of those, the ones that also need the PIN. `pin_set` has no PIN yet and `pin_reset` proves
@@ -97,6 +107,7 @@ PIN_REQUIRED = frozenset(
         "sensitivity_set",
         "tag_merge",
         "tag_remove",
+        "import_apply_high",
     }
 )
 

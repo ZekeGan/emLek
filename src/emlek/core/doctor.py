@@ -206,4 +206,8 @@ def _check_backup(db: Database, config: Config) -> Check:
     age = (datetime.now(UTC) - taken).days
     if age > MAX_BACKUP_AGE_DAYS:
         return Check("backup", "warn", f"上次備份是 {age} 天前（{last[0]}）{where}")
-    return Check("backup", "ok", f"上次備份 {last[0]} {where}")
+    encrypted = db.conn.execute(
+        "SELECT value FROM meta WHERE key = 'last_backup_encrypted'"
+    ).fetchone()
+    kind = "（已加密）" if encrypted and encrypted[0] == "1" else "（未加密）"
+    return Check("backup", "ok", f"上次備份 {last[0]}{kind} {where}")

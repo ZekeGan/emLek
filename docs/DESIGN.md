@@ -1,6 +1,6 @@
 # emLek 設計
 
-狀態：M1–M7 已實作（以 [PROGRESS](PROGRESS.md) 為準；M7 待使用者驗收），M8 起仍在規劃。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)；標籤系統與分層摘要見 [DESIGN_TAGS](DESIGN_TAGS.md)。
+狀態：M1–M8 已實作（以 [PROGRESS](PROGRESS.md) 為準；M8 待使用者驗收），M9 起仍在規劃。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)；標籤系統與分層摘要見 [DESIGN_TAGS](DESIGN_TAGS.md)。
 
 ## 定位
 
@@ -218,6 +218,8 @@ T14、T15、T16，以及新增的 T27（確認碼）、T28（PIN 儲存與狀態
 **範圍**：①備份加密（`backup --encrypt`、`restore` 讀加密檔）；②匯入精簡版（`emlek import`）。都只在命令列，不開放 MCP。
 
 **共同前置：共用寫入函式**。把 `service.save` 的寫入段抽成 `_write_record(conn, *, body, kind, level, event_time, precision, source, parse_hashtags)`：不開交易、不簽發確認碼。`save` 與 `import` 都呼叫它（現有 `save` 自己開 `BEGIN IMMEDIATE`，不能放進外部交易，`tokens.issue` 也自己開交易）。
+
+（M8 已依本規格實作；與規格的差異：不另抽 `_write_record`，匯入直接使用 `service._insert_record`／`_insert_revision`，它們本來就不開交易；`import --undo` 與 `--list` 是 `import` 的選項而非子命令。）
 
 ### 備份加密檔格式（版本 1，副檔名 `.db.enc`）
 - **檔頭**（固定 40 位元組）：魔術字 `EMLKBK01`（8）｜KDF 代碼 1（1）｜scrypt log2(n)、r、p（各 1）｜保留 0（3）｜salt（16）｜nonce 前綴（8，隨機）｜分段大小 log2（1）。檔頭整段是每一段的附加驗證資料（AAD）。

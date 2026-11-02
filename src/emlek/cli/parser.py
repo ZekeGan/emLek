@@ -105,9 +105,26 @@ def build_parser() -> argparse.ArgumentParser:
 
     backup = sub.add_parser("backup", help="建立一致性備份（預設放 config.toml 的 backup_dir）")
     backup.add_argument("--to", help="備份資料夾（覆寫設定）")
+    backup.add_argument(
+        "--encrypt",
+        action="store_true",
+        help="用密碼加密備份（必須在你自己的終端機執行；密碼遺失就無法還原）",
+    )
 
     restore = sub.add_parser("restore", help="以備份取代目前資料庫（必須在你自己的終端機執行）")
     restore.add_argument("file", help="備份檔路徑")
+
+    imp = sub.add_parser(
+        "import", help="匯入 .txt／.md 檔（預設只預覽；--apply 才寫入，必須在你自己的終端機）"
+    )
+    imp.add_argument("path", nargs="?", help="檔案或資料夾")
+    imp.add_argument("--apply", action="store_true", help="真的寫入（預設只預覽）")
+    imp.add_argument(
+        "--include-high", action="store_true", help="也匯入含最高風險內容的檔案（需要 PIN）"
+    )
+    imp.add_argument("--allow-duplicates", action="store_true", help="內容相同的檔案也匯入")
+    imp.add_argument("--list", action="store_true", help="列出匯入過的批次")
+    imp.add_argument("--undo", type=int, metavar="批次編號", help="把某個批次整批隱藏")
 
     export = sub.add_parser("export", help="匯出完整 JSONL 與可閱讀的 Markdown")
     export.add_argument("--out", help="輸出資料夾（預設為資料夾內的 exports）")

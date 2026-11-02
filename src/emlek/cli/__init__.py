@@ -6,7 +6,17 @@ import logging
 import sys
 from collections.abc import Callable, Sequence
 
-from emlek.cli.commands import doctor, get, init, maintenance, save, search, tagcmd, trust
+from emlek.cli.commands import (
+    doctor,
+    get,
+    importcmd,
+    init,
+    maintenance,
+    save,
+    search,
+    tagcmd,
+    trust,
+)
 from emlek.cli.commands import mcp as mcp_command
 from emlek.cli.commands import versions as versions_command
 from emlek.cli.output import Output, print_error, print_output
@@ -27,6 +37,7 @@ _HANDLERS: dict[str, Callable[..., Output | None]] = {
     "backup": maintenance.run_backup,
     "restore": maintenance.run_restore,
     "export": maintenance.run_export,
+    "import": importcmd.run,
     "stats": maintenance.run_stats,
     "pin": lambda a: {
         "set": trust.run_pin_set,

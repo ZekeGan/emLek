@@ -1,16 +1,16 @@
 # 進度
 
-最後更新：2026-11-02。只記實際狀態；未執行的不標通過。
+最後更新：2026-11-03。只記實際狀態；未執行的不標通過。
 
 ## 現況
 
-- 模式：**MODE B；M1–M6 已完成並經使用者驗收，程式版本 0.1.0（尚未對外發布、未打標籤）**。**M7 標籤已實作，待使用者驗收**。**M8（匯入與備份加密）規格已寫入 DESIGN 並經 Opus 審查修正（2026-11-03）；使用者決定「之後再開發」，尚未實作，等下一道明確指示。**
-- 已有 `src/emlek`：`init`、`doctor`、`save`、`amend`、`hide`／`unhide`、`get`、`search`、`reindex`、`mcp`、`backup`、`restore`、`export`、`stats`、`pin`、`phrase`、`notice`、`sensitivity`、`tag`、`tags`；結構遷移 0001–0006；552 項測試（快速）加 1 項 36000 筆規模測試；只有合成測試資料。
+- 模式：**MODE B；M1–M6 已完成並經使用者驗收，程式版本 0.1.0（尚未對外發布、未打標籤）**。**M7 標籤已實作，待使用者驗收**。**M8（匯入與備份加密）已依經 Opus 審查的規格實作（2026-11-03，D80、D81），待使用者驗收**（清單見下方「M8 待驗收」）。
+- 已有 `src/emlek`：`init`、`doctor`、`save`、`amend`、`hide`／`unhide`、`get`、`search`、`reindex`、`mcp`、`backup`、`restore`、`export`、`stats`、`pin`、`phrase`、`notice`、`sensitivity`、`tag`、`tags`、`import`；結構遷移 0001–0007；634 項測試（快速）加 1 項 36000 筆規模測試；只有合成測試資料。
 - Git：`main`，遠端 `origin`（公開的 GitHub 倉庫）；是否同步以 `git status` 為準。敏感詞檢查掛在本機 pre-commit 與 pre-push，清單內容只存在本機、不寫進文件。
 - 環境（已驗證）：Python 3.14.10（uv 0.13.6）、SQLite 3.53.1；套件由 `uv.lock` 鎖定；Claude Code 2.1.316；Codex CLI 0.166.0 已安裝並登入，但使用者的 ChatGPT 用量已用完，**2026-11-04 22:58 後才能測**。
 - 未驗證：Codex 端的 MCP 連線與沙箱；真實資料效能。
 - 搜尋（2026-11-02 起）：同組詞全部出現、大寫 `OR` 表示任一；多詞零結果回 `term_hits`；`untagged` 篩選；`emlek tags backfill`（預覽、套用、復原）。語意搜尋由使用者決定不做（D74）。
-- 已知限制：備份與匯出目前是明文（加密於 M8）；資料庫本體明文（Windows 家用版無 BitLocker，D44）；**真實資料（含舊日記）的條件已滿足（M4、M6 完成），仍只用使用者貼出的路徑**。
+- 已知限制：備份可用 `--encrypt` 加密，但匯出與遷移前副本仍是明文；資料庫本體明文（Windows 家用版無 BitLocker，D44）；**真實資料（含舊日記）的條件已滿足（M4、M6 完成），仍只用使用者貼出的路徑**。
 
 ## 使用者已決定
 
@@ -39,6 +39,24 @@ AI 層核心與擴充 51 題（含 M7 新增 9 題標籤題）、語氣集 48 �
 8. 在 Claude Code 請我執行 `emlek tag merge 京都 抹茶`，會被拒。
 9. 清理：`Remove-Item -Recurse -Force $d`。
 
+## M8 待驗收
+
+**做了什麼**：①`backup --encrypt`（密碼加密、立刻解密比對、不留明文暫存）與 `restore` 讀加密檔；②`emlek import <檔案或資料夾>`（只讀 .txt／.md、每檔一筆、檔名日期、預設只預覽、`--apply` 才寫入且必須在真人終端機、整批一個交易、重複與變更偵測、含最高風險內容預設略過、批次 `--list`／`--undo`）；③遷移 0007、匯出含匯入紀錄。延後的項目見 [ROADMAP](ROADMAP.md)。
+
+**實測**：634 項測試全過（含 1500 檔單次匯入、各種竄改的加密檔）；命令列煙霧測試確認「非終端機不能 `--apply`、不能 `backup --encrypt`」。尚未在真實終端機走過互動流程（請你驗收）；沒有用任何真實檔案。
+
+**驗收清單**（用拋棄式資料夾；PowerShell；`$e = ".\.venv\Scripts\emlek.exe"; $d = "C:\temp\emlek-m8"`）：
+1. 建樣本：`New-Item -ItemType Directory -Force C:\temp\emlek-m8-notes | Out-Null; Set-Content -Encoding utf8 C:\temp\emlek-m8-notes\2026-10-01.txt "京都で抹茶を飲んだ"; Set-Content -Encoding utf8 C:\temp\emlek-m8-notes\memo.md "日付のないメモ"`；`& $e --data-dir $d init`（輸入兩次 PIN）。
+2. 預覽：`& $e --data-dir $d import C:\temp\emlek-m8-notes` → 顯示「可匯入 2 個檔案」「這只是預覽」；`& $e --data-dir $d search 京都` → 找不到（沒寫入）。
+3. 寫入：`& $e --data-dir $d import C:\temp\emlek-m8-notes --apply` → 顯示摘要，輸入「是」→ 已匯入 2 筆、批次編號 1；`search 京都` 找到，事件日期 2026-10-01。
+4. 重跑：再執行一次第 3 步 → 顯示「已匯入過 2」「沒有需要匯入的檔案」。
+5. 批次：`& $e --data-dir $d import --list` 看到批次 1。
+6. 還原：`& $e --data-dir $d import --undo 1`，輸入「是」→ 隱藏 2 筆；`search 京都` 找不到；`& $e --data-dir $d unhide r1` 後找得到。
+7. 加密備份：`& $e --data-dir $d backup --encrypt --to C:\temp\emlek-m8-bk`，兩次輸入至少 10 個字元的密碼 → 顯示「已加密，並已解密比對確認可還原」；檔名結尾是 `.db.enc`；`& $e --data-dir $d doctor` 的備份行顯示（已加密）。
+8. 還原加密備份（驗證密碼）：`& $e --data-dir $d restore C:\temp\emlek-m8-bk\<檔名>.db.enc`，先輸入 PIN，再輸入**錯誤**密碼 → 被拒；重做並輸入正確密碼，輸入「是」→ 還原成功。
+9. AI 不能代跑：在 Claude Code 請我執行 `emlek import C:\temp\emlek-m8-notes --apply`，會被拒（要在真人終端機）。
+10. 清理：`Remove-Item -Recurse -Force $d, C:\temp\emlek-m8-notes, C:\temp\emlek-m8-bk`。
+
 ## 下一步
 
 1. **使用者驗收 M7**（上方 9 步清單；2026-11-02 之後的搜尋與標籤清單改動 D75–D77 在本機，是否已推送以 `git status` 為準）。
@@ -48,7 +66,7 @@ AI 層核心與擴充 51 題（含 M7 新增 9 題標籤題）、語氣集 48 �
    - 產品行為待決事項已於 2026-11-02 全部決定（D77）。
    - 搜尋效率與 token 再瘦身：等使用者決定是否請 Opus 做一輪限定範圍的審查（搜尋回傳格式、工具描述、規則；附最耗 token 題的呼叫紀錄），再以實測驗證。
    - 待做（不需決定）：補一組「只有開場說明、沒有完整規則」的 AI 情境、每題 3 次的正式驗收統計、T29 補無標點的命令句、M8 設計要點已寫進 DESIGN。
-3. M8 匯入與備份加密（規格已審查定案，**實作等使用者指示**）→ M9 清除 → M10 依數據決定 → M11 發布準備（見 DESIGN）。
+3. **使用者驗收 M8** → M9 清除 → M10 依數據決定 → M11 發布準備（見 DESIGN）。
 
 ## 近期決定與提醒
 

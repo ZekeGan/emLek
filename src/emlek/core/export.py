@@ -97,13 +97,26 @@ def export_all(
             f"SELECT count(*) FROM tag_events WHERE {event_filter}"
         ).fetchone()[0],
     }
+    import_counts = {
+        "import_batch": conn.execute("SELECT count(*) FROM import_batches").fetchone()[0],
+        "import_log": conn.execute(
+            "SELECT count(*) FROM import_log WHERE record_id IS NULL OR record_id IN"
+            f" (SELECT id FROM records WHERE {keep})"
+        ).fetchone()[0],
+    }
     header = {
         "type": "header",
         "format_version": FORMAT_VERSION,
         "schema_version": db.user_version,
         "emlek_version": __version__,
         "exported_at": utc_now_iso(),
-        "counts": {"record": records, "revision": revisions, "link": link_count, **tag_counts},
+        "counts": {
+            "record": records,
+            "revision": revisions,
+            "link": link_count,
+            **tag_counts,
+            **import_counts,
+        },
         "excluded_high_records": excluded,
     }
     jsonl = folder / "export.jsonl"
@@ -178,6 +191,23 @@ def _write_jsonl(
             ),
             ("tag_event", "id, at, actor, action, record_id, detail", "tag_events", event_filter),
         )
+        batch_names = ("id", "created_at", "file_count", "options_json", "undone_at")
+        for row in conn.execute(f"SELECT {', '.join(batch_names)} FROM import_batches ORDER BY id"):
+            out.write(_line({"type": "import_batch", **dict(zip(batch_names, row, strict=True))}))
+        log_names = (
+            "id",
+            "batch_id",
+            "file_name",
+            "content_hash",
+            "record_id",
+            "purged",
+            "imported_at",
+        )
+        for row in conn.execute(
+            f"SELECT {', '.join(log_names)} FROM import_log WHERE record_id IS NULL OR record_id"
+            f" IN (SELECT id FROM records WHERE {keep}) ORDER BY id"
+        ):
+            out.write(_line({"type": "import_log", **dict(zip(log_names, row, strict=True))}))
         for kind, columns, table, where in tag_sets:
             names = ["tag_type" if c.strip() == "type" else c.strip() for c in columns.split(",")]
             for row in conn.execute(f"SELECT {columns} FROM {table} WHERE {where} ORDER BY 1, 2"):
@@ -255,7 +285,15 @@ def verify_export(folder: Path) -> dict[str, Any]:
         raise EmlekError(ErrorCode.INVALID_INPUT, "版本筆數與標頭不符")
     if counts.get("link", 0) != header["counts"].get("link", 0):
         raise EmlekError(ErrorCode.INVALID_INPUT, "連結筆數與標頭不符")
-    for kind in ("tag", "record_tag", "tag_link", "tag_alias", "tag_event"):
+    for kind in (
+        "tag",
+        "record_tag",
+        "tag_link",
+        "tag_alias",
+        "tag_event",
+        "import_batch",
+        "import_log",
+    ):
         if counts.get(kind, 0) != header["counts"].get(kind, 0):
             raise EmlekError(ErrorCode.INVALID_INPUT, f"{kind} 筆數與標頭不符")
     markdown = len(list((folder / "markdown").glob("r*.md")))

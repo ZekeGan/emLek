@@ -6,10 +6,17 @@ import argparse
 import sys
 from pathlib import Path
 
-from emlek.cli.commands.common import authorize, cli_caller, data_dir_of, open_vault
+from emlek.cli.commands.common import (
+    authorize,
+    cli_caller,
+    data_dir_of,
+    open_vault,
+    read_secret,
+)
 from emlek.cli.output import Output
 from emlek.config import load_config
 from emlek.core import backup as core_backup
+from emlek.core import backup_crypto
 from emlek.core import export as core_export
 from emlek.core import stats as core_stats
 from emlek.core.errors import EmlekError, ErrorCode
@@ -22,16 +29,30 @@ def run_backup(args: argparse.Namespace) -> Output:
         raise EmlekError(
             ErrorCode.INVALID_INPUT, "請用 --to 指定備份資料夾，或在 config.toml 設定 backup_dir"
         )
+    password: str | None = None
+    if args.encrypt:
+        caller = authorize(args, "backup_encrypt", pin=False)  # a real terminal, no PIN
+        sys.stderr.write(
+            "備份密碼遺失就無法還原，我們沒有辦法找回。請不要使用和 PIN 相同的密碼。\n"
+        )
+        password = read_secret("備份密碼（至少 10 個字元）：")
+        backup_crypto.check_new_password(password)
+        if read_secret("再輸入一次：") != password:
+            raise EmlekError(ErrorCode.INVALID_INPUT, "兩次輸入的密碼不一致")
+    else:
+        caller = cli_caller()
     db = open_vault(args)
     try:
-        result = core_backup.create_backup(db, cli_caller(), target, data_dir)
+        result = core_backup.create_backup(db, caller, target, data_dir, password=password)
     finally:
         db.close()
     lines = [
         f"已備份：{result['file']}",
         f"{result['records']} 筆記錄、{result['revisions']} 個版本"
         f"，{result['bytes']:,} 位元組，完整性檢查通過",
-        "注意：這份備份沒有加密，內容是明文；請放在只有你能存取的位置。",
+        "已加密，並已解密比對確認可還原；密碼遺失就無法還原。"
+        if result["encrypted"]
+        else "注意：這份備份沒有加密，內容是明文；請放在只有你能存取的位置。",
     ]
     if result["same_drive_as_data"]:
         lines.append("注意：備份與資料在同一顆磁碟，磁碟故障時兩者會一起消失，建議改放另一顆。")
@@ -42,15 +63,25 @@ def run_restore(args: argparse.Namespace) -> Output:
     caller = authorize(args, "restore")  # a real terminal first, then the PIN
     data_dir = data_dir_of(args)
     source = Path(args.file)
-    info = core_backup.inspect_database(source)
-    sys.stderr.write(  # no bypass flag: this command is for a person at a terminal
-        f"將以備份取代目前的資料庫：{info['records']} 筆記錄、{info['revisions']} 個版本。\n"
-        "目前的資料庫會改名保留。輸入「是」繼續：\n"
-    )
-    sys.stderr.flush()
-    if sys.stdin.readline().strip() != "是":
-        raise EmlekError(ErrorCode.NEEDS_CONFIRMATION, "已取消，沒有做任何變更")
-    result = core_backup.restore_backup(caller, data_dir, source)
+    password = None
+    if backup_crypto.is_encrypted(source):
+        password = read_secret("備份密碼：")
+    plain, staged = core_backup.open_backup(source, data_dir, password)
+    try:
+        info = core_backup.inspect_database(plain)
+        sys.stderr.write(  # no bypass flag: this command is for a person at a terminal
+            f"將以備份取代目前的資料庫：{info['records']} 筆記錄、{info['revisions']} 個版本。\n"
+            "目前的資料庫會改名保留。輸入「是」繼續：\n"
+        )
+        sys.stderr.flush()
+        if sys.stdin.readline().strip() != "是":
+            raise EmlekError(ErrorCode.NEEDS_CONFIRMATION, "已取消，沒有做任何變更")
+        result = core_backup.restore_backup(
+            caller, data_dir, plain, consume=staged, restored_from=source
+        )
+    finally:
+        if staged:
+            plain.unlink(missing_ok=True)
     kept = result["previous_database_kept_as"]
     lines = [f"已還原：{result['records']} 筆記錄、{result['revisions']} 個版本"]
     if kept:

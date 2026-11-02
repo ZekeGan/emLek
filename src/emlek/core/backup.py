@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from emlek.config import load_config
-from emlek.core import security
+from emlek.core import backup_crypto, security
 from emlek.core.db import Database, load_migrations
 from emlek.core.errors import EmlekError, ErrorCode
 from emlek.core.permissions import Caller, require
@@ -51,15 +51,40 @@ def inspect_database(path: Path) -> dict[str, Any]:
         conn.close()
 
 
-def create_backup(db: Database, caller: Caller, backup_dir: Path, data_dir: Path) -> dict[str, Any]:
-    require(caller, "backup")
+def clean_leftovers(data_dir: Path, backup_dir: Path | None) -> None:
+    """Plain-text staging files and half-written encrypted backups left by a crash."""
+    tmp = data_dir / "tmp"
+    if tmp.is_dir():
+        for leftover in tmp.iterdir():
+            if leftover.is_file():
+                leftover.unlink(missing_ok=True)
+    if backup_dir is not None and backup_dir.is_dir():
+        for partial in backup_dir.glob("*.partial"):
+            partial.unlink(missing_ok=True)
+
+
+def create_backup(
+    db: Database,
+    caller: Caller,
+    backup_dir: Path,
+    data_dir: Path,
+    *,
+    password: str | None = None,
+) -> dict[str, Any]:
+    require(caller, "backup_encrypt" if password is not None else "backup")
     target_dir = backup_dir.resolve()
     if target_dir == data_dir.resolve() or data_dir.resolve() in target_dir.parents:
         raise EmlekError(ErrorCode.INVALID_INPUT, "備份資料夾不能放在資料夾裡面，請放到別的位置")
     target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / f"emlek-{_stamp()}.db"
-    db.backup_to(target)
-    info = inspect_database(target)
+    clean_leftovers(data_dir, target_dir)
+    if password is None:
+        target = target_dir / f"emlek-{_stamp()}.db"
+        db.backup_to(target)
+        info = inspect_database(target)
+    else:
+        backup_crypto.check_new_password(password)
+        target = target_dir / f"emlek-{_stamp()}.db.enc"
+        info = _encrypted_backup(db, data_dir, target, password)
     with db.transaction() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_backup_at', ?)",
@@ -69,6 +94,10 @@ def create_backup(db: Database, caller: Caller, backup_dir: Path, data_dir: Path
             "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_backup_file', ?)",
             (target.name,),
         )
+        conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_backup_encrypted', ?)",
+            ("1" if password is not None else "0",),
+        )
     same_drive = bool(target_dir.drive) and data_dir.resolve().drive == target_dir.drive
     return {
         "file": str(target),
@@ -77,8 +106,48 @@ def create_backup(db: Database, caller: Caller, backup_dir: Path, data_dir: Path
         "revisions": info["revisions"],
         "schema_version": info["schema_version"],
         "same_drive_as_data": same_drive,
-        "encrypted": False,
+        "encrypted": password is not None,
     }
+
+
+def _encrypted_backup(db: Database, data_dir: Path, target: Path, password: str) -> dict[str, Any]:
+    """Plain copy inside the data folder -> checked -> encrypted to .partial -> decrypted again and
+    compared -> renamed. The plain copy is always removed (deleting is all that can be promised on
+    an SSD)."""
+    tmp_dir = data_dir / "tmp"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    plain = tmp_dir / f"backup-{_stamp()}.db"
+    partial = target.with_name(target.name + ".partial")
+    try:
+        db.backup_to(plain)
+        info = inspect_database(plain)
+        expected = backup_crypto.encrypt_file(plain, partial, password)
+        if backup_crypto.decrypt_file(partial, None, password) != expected:
+            raise EmlekError(ErrorCode.INTERNAL, "加密後的驗證不一致，已放棄這份備份")
+        os.replace(partial, target)
+    finally:
+        plain.unlink(missing_ok=True)
+        partial.unlink(missing_ok=True)
+    return info
+
+
+def open_backup(source: Path, data_dir: Path, password: str | None) -> tuple[Path, bool]:
+    """The plain database file to restore from. An encrypted backup is decrypted to a staging
+    file inside the data folder (returned with True: the caller deletes or consumes it)."""
+    if not backup_crypto.is_encrypted(source):
+        return source, False
+    if not source.is_file():
+        raise EmlekError(ErrorCode.NOT_FOUND, "找不到備份檔")
+    if password is None:
+        raise EmlekError(ErrorCode.INVALID_INPUT, "這是加密的備份，需要輸入備份密碼")
+    staging = data_dir / "emlek.db.decrypted"
+    staging.unlink(missing_ok=True)
+    try:
+        backup_crypto.decrypt_file(source, staging, password)
+    except BaseException:
+        staging.unlink(missing_ok=True)
+        raise
+    return staging, True
 
 
 def _sidecars(path: Path) -> list[Path]:
@@ -110,7 +179,14 @@ def _carry_over_security(live: Path, staged: Path) -> None:
         conn.close()
 
 
-def restore_backup(caller: Caller, data_dir: Path, source: Path) -> dict[str, Any]:
+def restore_backup(
+    caller: Caller,
+    data_dir: Path,
+    source: Path,
+    *,
+    consume: bool = False,
+    restored_from: Path | None = None,
+) -> dict[str, Any]:
     """Replace the live database with a verified backup. The old one is kept, renamed."""
     require(caller, "restore")
     config = load_config(data_dir)
@@ -125,7 +201,10 @@ def restore_backup(caller: Caller, data_dir: Path, source: Path) -> dict[str, An
     staged = data_dir / "emlek.db.restoring"
     for leftover in (staged, *_sidecars(staged)):
         leftover.unlink(missing_ok=True)
-    shutil.copyfile(source, staged)
+    if consume:
+        os.replace(source, staged)  # the decrypted staging file: no second plain copy
+    else:
+        shutil.copyfile(source, staged)
     try:
         upgrade = Database(staged)
         try:
@@ -168,7 +247,7 @@ def restore_backup(caller: Caller, data_dir: Path, source: Path) -> dict[str, An
             os.replace(destination, original)
         raise
     return {
-        "restored_from": str(source),
+        "restored_from": str(restored_from or source),
         "records": result["records"],
         "revisions": result["revisions"],
         "schema_version": result["schema_version"],

@@ -21,6 +21,20 @@
 
 [設計](docs/DESIGN.md)・[標籤系統](docs/DESIGN_TAGS.md)・[AI 使用規則](docs/AGENT_RULES.md)・[每日簡報](docs/DAILY_BRIEFING.md)・[題庫](docs/QUESTIONS.md)・[基準測試](docs/BENCHMARK.md)・[測試計畫](docs/TEST_PLAN.md)・[進度](docs/PROGRESS.md)・[決策紀錄](docs/DECISIONS.md)・[開發 Agent 指引](AGENTS.md)・[舊藍圖](docs/archive/)（非現行）
 
+## 怎麼執行（開發版）
+
+`emlek` 裝在專案的 `.venv` 裡，沒有加進系統 PATH，所以在 PowerShell 要這樣用：
+
+```powershell
+cd D:\Programming\Project\emlek
+$e = ".\.venv\Scripts\emlek.exe"
+& $e --data-dir C:	emp\emlek-try init
+& $e --data-dir C:	emp\emlek-try save --text "測試用的一筆記錄"
+& $e --data-dir C:	emp\emlek-try search --help
+```
+
+或在專案資料夾用 `uv run emlek ...`。`--data-dir` 指定資料夾，不給則用預設位置。
+
 ## 環境
 
 Windows 11、Python 3.14；不需要 Docker、GPU 或付費 API。

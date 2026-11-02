@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ai_runner as ar
 import bank
+import personas
 import pytest
 import scoring as sc
 import synth
@@ -103,3 +104,25 @@ def test_resource_summary_counts_good_answers() -> None:
     assert summary["cost_per_good_answer"] == pytest.approx(0.08)
     assert summary["cost_flags"] == {"ok": 1, "warn": 1}
     assert summary["heaviest"]["id"] == "Q2"
+
+
+def test_persona_set_is_complete_synthetic_and_kept_out_of_the_other_sets() -> None:
+    assert len(bank.PERSONA_IDS) == len(personas.PERSONAS) * len(personas.BASES) == 48
+    for qid in bank.PERSONA_IDS:
+        _, persona, base = qid.split("-")
+        spec, original = bank.SPECS[qid], bank.SPECS[base]
+        assert spec.group == f"persona:{persona}"
+        assert spec.gold(CORPUS) == original.gold(CORPUS) and spec.mode == original.mode
+        assert spec.question != original.question
+    assert not set(bank.PERSONA_IDS) & set(bank.SMOKE)
+    texts = [s for phrasings in personas.PERSONAS.values() for s in phrasings]
+    assert len(texts) == len(set(texts))
+
+
+def test_group_averages_are_reported_per_persona() -> None:
+    rows = [
+        {"group": "persona:kansai", "score": 5},
+        {"group": "persona:kansai", "score": 3},
+        {"group": "core", "score": 4},
+    ]
+    assert ar.by_group(rows)["persona:kansai"] == {"questions": 2, "average_score": 4.0}

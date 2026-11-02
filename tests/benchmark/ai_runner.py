@@ -406,6 +406,18 @@ def resource_summary(rows: list[dict[str, Any]], budget: Budget) -> dict[str, An
     }
 
 
+def by_group(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Average score per question group (persona styles are reported apart from the core set)."""
+    grouped: dict[str, list[float]] = {}
+    for row in rows:
+        if isinstance(row.get("score"), int | float):
+            grouped.setdefault(str(row.get("group")), []).append(float(row["score"]))
+    return {
+        group: {"questions": len(scores), "average_score": round(sum(scores) / len(scores), 2)}
+        for group, scores in sorted(grouped.items())
+    }
+
+
 def pick_ids() -> tuple[list[str], list[str]]:
     only = [q for q in os.environ.get("EMLEK_AI_ONLY", "").split(",") if q]
     if only:
@@ -413,8 +425,11 @@ def pick_ids() -> tuple[list[str], list[str]]:
         if unknown:
             raise SystemExit(f"unknown ids: {unknown}")
         return [q for q in only if q in bank.SPECS], [q for q in only if q in bank.PROBES]
-    if os.environ.get("EMLEK_AI_SET", "smoke") == "full":
-        return list(bank.SPECS), list(bank.PROBES)
+    chosen = os.environ.get("EMLEK_AI_SET", "smoke")
+    if chosen == "persona":
+        return list(bank.PERSONA_IDS), []
+    if chosen == "full":  # the persona set is run on its own, never mixed into the core scores
+        return [q for q in bank.SPECS if q not in bank.PERSONA_IDS], list(bank.PROBES)
     return list(bank.SMOKE), list(bank.SMOKE_PROBES)
 
 
@@ -449,6 +464,7 @@ def main() -> None:
         "model_override": os.environ.get("EMLEK_AI_MODEL"),
         "questions": results,
         "by_question": by_question(results),
+        "by_group": by_group(results),
         "behavior_probes": probes,
         "write_probes_passed": f"{sum(p['passed'] for p in probes)}/{len(probes)}",
         "sandbox_probes": sandbox,

@@ -179,7 +179,7 @@ MCP 伺服器的 `instructions` 放約 300 字的規則摘要（完整規則在 
 | M2 搜尋與時間 | FTS5＋LIKE 逐詞路由、NFKC、日期範圍、`order`、`kinds`、分頁與總筆數；題庫系統層骨架與合成資料產生器 | T04、T08–T10；Q01/02/06/07/13/15/20 系統層通過；3.6 萬筆（含真實長度）規模測試有記錄 |
 | M3 權限與 MCP | `core/permissions.py`、MCP 完整與 `--read-only`、stdout 只輸出協定；Claude Code 與 Codex CLI 以合成庫實測；平台唯讀沙箱旗標實測；AI 層題庫開始（只報告不卡關） | T06、T07、T16；兩個 AI 都能存與找回合成資料；唯讀清單不含寫入工具 |
 | M4 安全網 | `backup`、`restore`（驗證再替換）、`export` v1、`stats`、遷移前自動備份 | T19、T20；還原到乾淨資料夾與原庫逐筆一致 |
-| M5 版本、連結、隱藏 | `amend`、`relation`、`superseded_by`、`linked_from`、`hide`／`unhide`、衍生失效（計算值）；**回傳瘦身**：搜尋預設只回片段與日期，結果過多時先回筆數與時間分布，全文用 `get`（D56） | T12、T13；Q08–10、Q22–23；題庫報告的平均回傳大小不高於 M4 基準 |
+| M5 版本、連結、隱藏 | `amend`、`relation`、`superseded_by`、`linked_from`、`hide`／`unhide`、衍生失效（計算值）；**回傳瘦身**：搜尋預設只回片段與日期，結果過多時先回筆數與時間分布，全文用 `get`（D56） | T12、T13；Q08–10、Q22–23；題庫報告的平均回傳大小不高於 M4 基準；規模彙整題（QUESTIONS 類別 I，數千筆合成資料）AI 須說明僅檢視部分或先縮小範圍 |
 | M6 信任閘門 | 規則掃描、`notice_settings`、`confirm_token`／`notice_token`、`phrase`、`notice`、`sensitivity set` 的真人終端機閘門與 PIN（`pin set·change·reset`）、`phrases_list` | T14、T15；Q40–42；閘門限制如實記載 |
 | M7 標籤 | M7a：資料表、`set_tags`、`#標籤`、別名、向下展開。M7b：`tags_find` 等查詢工具、facets、`similar_tags`、合併、健檢、熱門標籤 | T17、T18；Q03/05/32–36 |
 | M8 匯入與備份加密 | `import`（含敏感掃描、`--split-by-heading`）、備份 `--encrypt` | T21；Q43；錯誤密碼與一位元組竄改被拒 |

@@ -1,6 +1,6 @@
 # emLek 設計
 
-狀態：M1–M5 已實作（以 [PROGRESS](PROGRESS.md) 為準），M6 起仍在規劃。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)；標籤系統與分層摘要見 [DESIGN_TAGS](DESIGN_TAGS.md)。
+狀態：M1–M6 已實作（以 [PROGRESS](PROGRESS.md) 為準），M7 起仍在規劃。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)；標籤系統與分層摘要見 [DESIGN_TAGS](DESIGN_TAGS.md)。
 
 ## 定位
 
@@ -108,13 +108,13 @@
 | `purge_preview` | 唯讀預覽徹底清除的範圍（實際清除只有 CLI `emlek purge`） |
 | `phrases_list` | 唯讀取得啟用語句（依 `kind` 分組） |
 | `stats` | 唯讀：記錄數（不含隱藏）、隱藏數、版本數、最早與最晚日期、上次備份時間 |
-| 標籤工具 | `set_tags`、`tags_find`、`tags_list`、`tags_tree`、`tag_related`、`tag_link`、`tag_alias`，見 [DESIGN_TAGS](DESIGN_TAGS.md) |
+| 標籤工具 | `set_tags`、`tags_find`、`tags_list`（含階層目錄與共現）、`tag_link`、`tag_alias`，見 [DESIGN_TAGS](DESIGN_TAGS.md)「M7 規格」 |
 
 僅 CLI（不開放 MCP）：`init`、`doctor`、`reindex`、`mcp`（啟動 MCP 伺服器）、`backup`、`restore`、`export`、`import`、`purge`、`pin set·change·reset`、`notice status·enable`、`sensitivity set`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。
 
 MCP 伺服器的 `instructions` 放約 300 字的規則摘要（完整規則在 AGENT_RULES），工具說明保持簡短，因為每個 AI 會話都要為它們付 token；每次工具呼叫各自開關資料庫連線，伺服器行程不長期持有。
 
-**唯讀模式**：`emlek mcp --read-only` 的工具清單只含 `search`、`get`、`phrases_list`、`stats`、`tags_find`、`tags_list`、`tags_tree`、`tag_related`（寫入工具根本不存在，不是被拒絕），供無人看管的排程使用；`max_sensitivity` 預設為 medium。每日簡報見 [DAILY_BRIEFING](DAILY_BRIEFING.md)。
+**唯讀模式**：`emlek mcp --read-only` 的工具清單只含 `search`、`get`、`phrases_list`、`stats`、`tags_find`、`tags_list`（寫入工具根本不存在，不是被拒絕），供無人看管的排程使用；`max_sensitivity` 預設為 medium。每日簡報見 [DAILY_BRIEFING](DAILY_BRIEFING.md)。
 
 **搜尋規則**：
 - 命中單位是**記錄**；預設比對各記錄的最新版本並標示命中的版本，`all_versions=true` 才比對舊版。總筆數的單位也是記錄。
@@ -258,7 +258,7 @@ T14、T15、T16，以及新增的 T27（確認碼）、T28（PIN 儲存與狀態
 | M4 安全網 | `backup`、`restore`（驗證再替換）、`export` v1、`stats`、遷移前自動備份 | T19、T20；還原到乾淨資料夾與原庫逐筆一致 |
 | M5 版本、連結、隱藏 | `amend`、`relation`、`superseded_by`、`linked_from`、`hide`／`unhide`、衍生失效（計算值）；**回傳瘦身**：搜尋預設只回片段與日期，結果過多（預設 >50 筆）時先回筆數、按月分布、最早與最晚日期，並固定標註「依關鍵字比對，可能漏掉不同說法」；隱藏與超過權限的記錄不計入；不新增獨立統計工具；全文用 `get`（D56、D57） | T12、T13、T26；Q08–10、Q22–23；題庫報告的每題平均輸入量不高於 M4 基準的 105%（D65）；規模彙整題（QUESTIONS 類別 I，數千筆合成資料）AI 須說明僅檢視部分或先縮小範圍 |
 | M6 信任閘門 | 規則掃描、`notice_settings`、`confirm_token`／`notice_token`、`phrase`、`notice`、`sensitivity set` 的真人終端機閘門與 PIN（`pin set·change·reset`）、`phrases_list`；**`get` 補上 `max_sensitivity`**（隱藏檢查已於 M5 完成，目前只有 `search` 有敏感度上限） | T14、T15、T16；Q40–42；閘門限制如實記載 |
-| M7 標籤 | M7a：資料表、`set_tags`、`#標籤`、別名、向下展開。M7b：`tags_find` 等查詢工具、facets、`similar_tags`、合併、健檢、熱門標籤 | T17、T18；Q03/05/32–36 |
+| M7 標籤 | M7a：資料表、`set_tags`、`#標籤`、別名、向下展開。M7b：`tags_find` 等查詢工具、facets、`similar_tags`、合併、健檢、熱門標籤 | T17、T18、T29–T31；Q03/05/32–36、Q76–Q81；每題平均輸入量 ≤ M6 基準的 110%（規格見 DESIGN_TAGS「M7 規格」） |
 | M8 匯入與備份加密 | `import`（含敏感掃描、`--split-by-heading`）、備份 `--encrypt` | T21；Q43；錯誤密碼與一位元組竄改被拒 |
 | M9 清除 | `purge_preview` 與 CLI `purge`（預覽、固定句式、PIN、清除、殘留檢查） | T22、T23；原始檔掃描無殘留 |
 | M11 發布準備 | 首次發布前的檢查清單，見「發布準備（M11）」 | 清單逐項勾完；版本號進入 0.x 以上的規則生效 |

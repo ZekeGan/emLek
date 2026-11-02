@@ -307,7 +307,10 @@ def search(
     impossible = False
     if tags:
         groups, unknown, expanded, cut = tagmod.resolve_filter(db.conn, tags, expand=expand)
-        impossible = not groups or (match == "all" and bool(unknown))
+        # Unknown names are ignored (and reported). Only when nothing else narrows the
+        # search is a lone unknown tag a real "no result".
+        narrowed = bool(terms or date_from or date_to or kinds or tag_types)
+        impossible = not groups and not narrowed
         if match == "any" and groups:
             merged = sorted({i for g in groups for i in g})
             groups = [merged]
@@ -420,6 +423,8 @@ def search(
     extra: dict[str, Any] = {}
     if tags:
         extra["expanded_tags"] = expanded
+        if unknown:
+            warnings = [*warnings, "unknown_tags_ignored"]
         if cut:
             extra["expanded_truncated"] = True
         if unknown:

@@ -113,9 +113,20 @@ def test_all_versus_any_and_unknown_names(db: Database, caller: Caller) -> None:
     only_place = _save(db, caller, "京都だけ", "京都")
     assert _found(db, caller, tags=["小明", "京都"], match="all") == {both}
     assert _found(db, caller, tags=["小明", "京都"], match="any") == {both, only_person, only_place}
+    # a name nobody has made is ignored and reported, never a silent "nothing found"
     got = search.search(db, caller, tags=["小明", "存在しない"], match="all")
-    assert got["total"] == 0 and got["unknown_tags"] == ["存在しない"]
+    assert got["unknown_tags"] == ["存在しない"] and "unknown_tags_ignored" in got["warnings"]
+    assert {r["ref"] for r in got["results"]} == {both, only_person}
     assert _found(db, caller, tags=["小明", "存在しない"], match="any") == {both, only_person}
+
+
+def test_an_unknown_tag_never_hides_a_good_text_search(db: Database, caller: Caller) -> None:
+    ref = _save(db, caller, "北海道で雪まつりを見た")
+    got = search.search(db, caller, query="北海道", tags=["北海道"])
+    assert {r["ref"] for r in got["results"]} == {ref}
+    assert got["unknown_tags"] == ["北海道"] and "unknown_tags_ignored" in got["warnings"]
+    alone = search.search(db, caller, tags=["北海道"])  # nothing else to search with
+    assert alone["total"] == 0 and alone["unknown_tags"] == ["北海道"]
 
 
 def test_tags_combine_with_text_and_type_filters(db: Database, caller: Caller) -> None:

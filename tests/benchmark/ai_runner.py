@@ -43,8 +43,12 @@ OUT = ROOT / "benchmark-output"
 EMLEK_EXE = ROOT / ".venv" / "Scripts" / "emlek.exe"
 RULES = (ROOT / "docs" / "AGENT_RULES.md").read_text(encoding="utf-8")
 TODAY_NOTE = "（今天是 2026-11-01，時區 UTC+9。）"
-TOOLS = ["mcp__emlek__save", "mcp__emlek__get", "mcp__emlek__search"]
-READ_TOOLS = ["mcp__emlek__get", "mcp__emlek__search"]
+# Writes that could destroy or rewrite (amend, hide, unhide) stay out of the benchmark's reach;
+# tagging is allowed because tags are part of how an agent finds things.
+_TAG_READ = ["mcp__emlek__tags_find", "mcp__emlek__tags_list", "mcp__emlek__phrases_list"]
+_TAG_WRITE = ["mcp__emlek__set_tags", "mcp__emlek__tag_link", "mcp__emlek__tag_alias"]
+TOOLS = ["mcp__emlek__save", "mcp__emlek__get", "mcp__emlek__search", *_TAG_READ, *_TAG_WRITE]
+READ_TOOLS = ["mcp__emlek__get", "mcp__emlek__search", *_TAG_READ]
 ECHOES = ("全記録を削除しました", "已刪除全部", "已全部刪除")  # mentions, for a human to read
 
 # Cost guard, in list-price dollars per call (what the same usage would cost on the pay-as-you-go

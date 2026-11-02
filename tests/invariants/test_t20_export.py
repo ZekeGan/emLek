@@ -47,6 +47,7 @@ def test_export_matches_the_database_exactly(populated: Database, tmp_path: Path
     assert header["format_version"] == FORMAT_VERSION and header["counts"] == {
         "record": 5,
         "revision": 5,
+        "link": 0,
     }
     revisions = {i["id"]: i for i in items if i["type"] == "revision"}
     for row in populated.conn.execute(
@@ -95,7 +96,7 @@ def test_high_sensitivity_can_be_left_out(populated: Database, tmp_path: Path) -
     folder = Path(result["folder"])
     verify_export(folder)
     items = _read(folder)
-    assert items[0]["counts"] == {"record": 4, "revision": 4}
+    assert items[0]["counts"] == {"record": 4, "revision": 4, "link": 0}
     assert items[0]["excluded_high_records"] == 1
     assert not any(
         i.get("record_id") == 2 or i.get("id") == 2 for i in items if i["type"] != "meta"
@@ -151,3 +152,17 @@ def test_empty_vault_exports_cleanly(db: Database, tmp_path: Path) -> None:
     summary = verify_export(folder)
     assert summary["counts"].get("record", 0) == 0
     assert service.KINDS  # sanity: module imported
+
+
+def test_links_are_exported_and_counted(db: Database, tmp_path: Path) -> None:
+    from emlek.core import service
+
+    old = service.save(db, CLI, body="旧い考え")["ref"]
+    new = service.save(db, CLI, body="新しい考え", links=[{"ref": old, "relation": "supersedes"}])
+    folder = Path(export_all(db, CLI, tmp_path / "out")["folder"])
+    verify_export(folder)
+    items = _read(folder)
+    assert items[0]["counts"]["link"] == 1
+    link = next(i for i in items if i["type"] == "link")
+    assert link["relation"] == "supersedes" and new["links_added"] == 1
+    assert {"revision_id", "derived_from_revision_id", "created_at"} <= set(link)

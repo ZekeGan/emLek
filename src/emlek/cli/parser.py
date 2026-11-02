@@ -6,7 +6,10 @@ import argparse
 
 from emlek import __version__
 from emlek.core.search import DEFAULT_LIMIT, MAX_LIMIT, ORDERS, SENSITIVITY_LEVELS
-from emlek.core.service import KINDS
+from emlek.core.service import CLEARABLE, KINDS
+from emlek.core.versions import RELATIONS
+
+LINK_HELP = "連到較舊的記錄，如 r12 或 r12:supersedes（關係：" + "、".join(RELATIONS) + "）；可重複"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -26,10 +29,29 @@ def build_parser() -> argparse.ArgumentParser:
     save.add_argument("--source", help="來源說明（不知道就不填）")
     save.add_argument("--event-time", help="事件時間，如 2026-01-15 或 2026-01-15T09:30+09:00")
     save.add_argument("--precision", help="事件時間精度：year、month、day、hour、minute、second")
+    save.add_argument("--link", action="append", metavar="REF[:關係]", help=LINK_HELP)
 
     get = sub.add_parser("get", help="讀取一筆記憶")
     get.add_argument("ref", help="記錄編號，如 r12 或 r12.v3")
     get.add_argument("--version", type=int, help="指定版本（預設最新）")
+    get.add_argument("--include-hidden", action="store_true", help="讀取已隱藏的記錄")
+    get.add_argument("--offset", type=int, default=0, help="從第幾個字元開始讀（長內容分段）")
+
+    amend = sub.add_parser("amend", help="為既有記錄新增版本（改錯字、補充）")
+    amend.add_argument("ref", help="記錄編號，如 r12")
+    amend.add_argument("--text", help="新版內容（較長的內容請用 --body-file 或標準輸入）")
+    amend.add_argument("--body-file", help="從檔案讀取新版內容（UTF-8），- 表示標準輸入")
+    amend.add_argument("--expected-version", type=int, help="與最新版本不符就拒絕，防止互相覆蓋")
+    amend.add_argument("--event-time", help="新的事件時間（省略＝沿用）")
+    amend.add_argument("--precision", help="事件時間精度（須同時給 --event-time）")
+    amend.add_argument("--source", help="新的來源（省略＝沿用）")
+    amend.add_argument("--clear", nargs="+", choices=CLEARABLE, help="清空這些欄位")
+    amend.add_argument("--link", action="append", metavar="REF[:關係]", help=LINK_HELP)
+
+    hide = sub.add_parser("hide", help="隱藏一筆記錄（可恢復）")
+    hide.add_argument("ref", help="記錄編號，如 r12")
+    unhide = sub.add_parser("unhide", help="恢復被隱藏的記錄")
+    unhide.add_argument("ref", help="記錄編號，如 r12")
 
     find = sub.add_parser("search", help="搜尋（關鍵字、日期、排序、分頁）")
     find.add_argument(
@@ -47,6 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
     find.add_argument("--cursor", help="上一頁回傳的游標")
     find.add_argument("--all-versions", action="store_true", help="也比對舊版本")
     find.add_argument("--include-hidden", action="store_true", help="包含已隱藏的記錄")
+    find.add_argument("--current-only", action="store_true", help="排除已被推翻的記錄")
     find.add_argument("--max-sensitivity", choices=SENSITIVITY_LEVELS, default="high")
 
     serve = sub.add_parser("mcp", help="以 MCP（stdio）提供工具給 AI 使用")

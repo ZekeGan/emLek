@@ -12,9 +12,11 @@ import json
 import logging
 import re
 import sqlite3
+from collections import Counter
 from datetime import date
 from typing import Any
 
+from emlek.core import versions
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
 from emlek.core.permissions import Caller, require
@@ -28,6 +30,9 @@ ORDERS = ("relevance", "event_time", "created_at")
 DIRECTIONS = ("asc", "desc")
 SENSITIVITY_LEVELS = ("none", "medium", "high")
 FTS_MIN_CHARS = 3
+AGGREGATE_THRESHOLD = 50  # above this many matches the response also carries a summary
+MAX_SUMMARY_MONTHS = 24
+SUMMARY_NOTE = "依關鍵字比對，可能漏掉不同說法的記錄；僅供縮小範圍，不代表全貌"
 
 _TERM = re.compile(r'"([^"]+)"|(\S+)')
 _DATE_PART = re.compile(r"^\d{4}(?:-\d{2}(?:-\d{2})?)?$")
@@ -235,6 +240,7 @@ def search(
     cursor: str | None = None,
     all_versions: bool = False,
     include_hidden: bool = False,
+    current_only: bool = False,
     max_sensitivity: str = "high",
     timezone: str = "local",
 ) -> dict[str, Any]:
@@ -300,12 +306,15 @@ def search(
     ordered: list[dict[str, Any]] = []
     seen: set[int] = set()
     withheld = 0
+    status_map = versions.statuses(db.conn) if versions.has_links(db.conn) else {}
     for rev_id, record_id, version_no, rank_value, ev_start, created_at, sensitivity in rows:
         if record_id in seen:
             continue
         seen.add(record_id)
         if caps[sensitivity] > caps[max_sensitivity]:
             withheld += 1
+            continue
+        if current_only and status_map.get(record_id) == "superseded":
             continue
         if applied == "relevance":
             key: list[Any] = [rank_value, record_id]
@@ -314,7 +323,14 @@ def search(
         else:
             key = [created_at, record_id]
         ordered.append(
-            {"rev_id": rev_id, "record_id": record_id, "version": version_no, "key": key}
+            {
+                "rev_id": rev_id,
+                "record_id": record_id,
+                "version": version_no,
+                "key": key,
+                "ev_start": ev_start,
+                "created_at": created_at,
+            }
         )
 
     sign = 1 if direction == "asc" else -1
@@ -334,8 +350,11 @@ def search(
     more = start_at + limit < len(ordered)
     next_cursor = _encode_cursor(applied, direction, page[-1]["key"]) if page and more else None
 
-    results = [_describe(db, row, terms) for row in page]
+    results = [_describe(db, row, terms, status_map) for row in page]
     hints = _zero_result_hints(db) if terms and not ordered and not warnings else []
+    summary = (
+        _summary(db, ordered, date_field, modifiers) if len(ordered) > AGGREGATE_THRESHOLD else None
+    )
     return {
         "total": len(ordered),
         "undated": undated,
@@ -346,6 +365,7 @@ def search(
         "next_cursor": next_cursor,
         "warnings": warnings,
         "hints": hints,
+        **({"summary": summary} if summary else {}),
     }
 
 
@@ -375,7 +395,52 @@ def _zero_result_hints(db: Database) -> list[str]:
     ]
 
 
-def _describe(db: Database, row: dict[str, Any], terms: list[str]) -> dict[str, Any]:
+def _local_day(db: Database, created_at: str, modifiers: list[str], cache: dict[str, str]) -> str:
+    key = created_at[:13]
+    if key not in cache:
+        marks = ", ".join(["?"] * (1 + len(modifiers)))
+        cache[key] = db.conn.execute(f"SELECT date({marks})", (created_at, *modifiers)).fetchone()[
+            0
+        ]
+    return cache[key]
+
+
+def _summary(
+    db: Database, ordered: list[dict[str, Any]], date_field: str, modifiers: list[str]
+) -> dict[str, Any]:
+    """Counts and spread of everything that matched, so a reader sees the whole before a page."""
+    cache: dict[str, str] = {}
+    days: list[str] = []
+    undated = 0
+    for row in ordered:
+        if date_field == "event_time":
+            if row["ev_start"] is None:
+                undated += 1
+                continue
+            days.append(row["ev_start"])
+        else:
+            days.append(_local_day(db, row["created_at"], modifiers, cache))
+    by_month = Counter(day[:7] for day in days)
+    distribution = (
+        {"by_month": dict(sorted(by_month.items()))}
+        if len(by_month) <= MAX_SUMMARY_MONTHS
+        else {"by_year": dict(sorted(Counter(day[:4] for day in days).items()))}
+    )
+    return {
+        "total": len(ordered),
+        "date_field": date_field,
+        "first": min(days) if days else None,
+        "last": max(days) if days else None,
+        **distribution,
+        "undated": undated,
+        "basis": "keyword",
+        "note": SUMMARY_NOTE,
+    }
+
+
+def _describe(
+    db: Database, row: dict[str, Any], terms: list[str], status_map: dict[int, str]
+) -> dict[str, Any]:
     rev = db.conn.execute(
         "SELECT r.body, r.kind, r.source, r.event_time, r.event_time_precision, r.created_at,"
         " (SELECT MAX(version_no) FROM revisions WHERE record_id = r.record_id),"
@@ -399,6 +464,7 @@ def _describe(db: Database, row: dict[str, Any], terms: list[str]) -> dict[str, 
         "created_at": rec_created,
         "hidden": bool(hidden),
         "sensitivity": sens,
+        **versions.describe(db.conn, record_id, status_map),
     }
 
 

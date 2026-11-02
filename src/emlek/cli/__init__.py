@@ -8,6 +8,7 @@ from collections.abc import Callable, Sequence
 
 from emlek.cli.commands import doctor, get, init, maintenance, save, search
 from emlek.cli.commands import mcp as mcp_command
+from emlek.cli.commands import versions as versions_command
 from emlek.cli.output import Output, print_error, print_output
 from emlek.cli.parser import build_parser
 from emlek.core.errors import EmlekError, ErrorCode
@@ -17,6 +18,9 @@ _HANDLERS: dict[str, Callable[..., Output | None]] = {
     "doctor": doctor.run,
     "save": save.run,
     "get": get.run,
+    "amend": versions_command.run_amend,
+    "hide": versions_command.run_hide,
+    "unhide": versions_command.run_unhide,
     "search": search.run,
     "reindex": search.run_reindex,
     "mcp": mcp_command.run,

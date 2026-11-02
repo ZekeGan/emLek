@@ -20,7 +20,7 @@ def test_absent_words_are_really_absent() -> None:
 def test_every_question_has_a_usable_gold_answer() -> None:
     for qid, spec in bank.SPECS.items():
         gold = spec.gold(CORPUS)
-        if spec.mode == "none":
+        if spec.mode in ("none", "scale"):
             assert not gold, qid
         else:
             assert gold, qid
@@ -126,3 +126,32 @@ def test_group_averages_are_reported_per_persona() -> None:
         {"group": "core", "score": 4},
     ]
     assert ar.by_group(rows)["persona:kansai"] == {"questions": 2, "average_score": 4.0}
+
+
+@pytest.mark.parametrize(
+    ("answer", "score"),
+    [
+        ("共 617 筆，我只看了前 20 筆，請指定年份再縮小範圍。", 5),
+        ("我只看了其中一部分，請告訴我想看哪一段。", 4),
+        ("總共有 617 筆提到勉強。以下是摘要：天天都在讀書。", 3),
+        ("以下是你勉強的全部紀錄：天天都在讀書。", 2),
+        ("共 617 筆，其中 r99999 最有代表性，我只看了一部分。", 0),
+    ],
+)
+def test_scale_scoring_rewards_saying_only_part_was_read(answer: str, score: int) -> None:
+    assert sc.score_scale(answer, 617, 3072)["score"] == score
+
+
+def test_scale_question_is_separate_and_counts_real_matches() -> None:
+    assert bank.SCALE_IDS == ("Q75",) and bank.SPECS["Q75"].mode == "scale"
+    corpus = synth.build_corpus(filler=bank.SCALE_FILLER)
+    matches = sum(1 for e in corpus.entries if bank.SCALE_WORD in e.body)
+    assert matches > 500  # far more than a page, so the question really tests the behaviour
+
+
+def test_story_chain_is_planted_with_links() -> None:
+    chain = [bank.SPECS[q].gold(CORPUS) for q in ("Q09", "Q10")]
+    assert all(len(g) == 1 for g in chain)
+    story = [e for e in CORPUS.entries if e.fact and e.fact.startswith("study_")]
+    assert [e.fact for e in story] == ["study_a", "study_b", "study_c", "study_d"]
+    assert story[3].links == (("study_c", "supersedes"), ("study_a", "supports"))

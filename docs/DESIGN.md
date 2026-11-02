@@ -1,6 +1,6 @@
 # emLek 設計
 
-狀態：M1–M4 已實作（以 [PROGRESS](PROGRESS.md) 為準），M5 起仍在規劃。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)；標籤系統與分層摘要見 [DESIGN_TAGS](DESIGN_TAGS.md)。
+狀態：M1–M5 已實作（以 [PROGRESS](PROGRESS.md) 為準），M6 起仍在規劃。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)；標籤系統與分層摘要見 [DESIGN_TAGS](DESIGN_TAGS.md)。
 
 ## 定位
 
@@ -78,7 +78,7 @@
 | `linked_from` | 列出所有指向該記錄的連結（含關係、來源記錄、日期），預設不含隱藏的來源；最多 50 條，超過標 `truncated`；一層即可，AI 要完整時間線時逐筆 `get`，不做遞移展開 |
 | 衍生失效的遞移範圍 | 只沿 `derived`、`summarizes` 兩種關係向上追（來源是被隱藏的記錄則其衍生者失效），有深度保護與環保護；`supersedes`、`supports`、`supplements` **不**傳遞隱藏效果 |
 | 隱藏 | `hide`／`unhide` 對已隱藏／未隱藏者為冪等（不報錯）；隱藏不改動任何連結；搜尋預設不含隱藏者，`include_hidden=true` 時隱藏者照回傳並標 `hidden`。回應附被連帶失效的衍生記錄數量 |
-| `amend` | 參數：`ref`、`body`，可選 `expected_version`（與最新版不符回 `CONFLICT`，防止兩個 AI 同時改）、`event_time`／`event_time_precision`／`source`（省略＝沿用最新版；明確傳 null＝清空）、`links`。`kind` 沿用且不可更改（改變來源性質須另存新記錄並連結）。內文與最新版完全相同回 `INVALID_INPUT`（沒有變化）；已隱藏的記錄不可 `amend`（`CONFLICT`，須先 `unhide`）。重新掃描敏感度，只升不降 |
+| `amend` | 參數：`ref`、`body`，可選 `expected_version`（與最新版不符回 `CONFLICT`，防止兩個 AI 同時改）、`event_time`／`event_time_precision`／`source`（省略＝沿用最新版；要清空用 `clear=["event_time","source"]`，因為 MCP 無法分辨省略與 null）、`links`。`kind` 沿用且不可更改（改變來源性質須另存新記錄並連結）。內文與最新版完全相同回 `INVALID_INPUT`（沒有變化）；已隱藏的記錄不可 `amend`（`CONFLICT`，須先 `unhide`）。重新掃描敏感度，只升不降 |
 | 版本與新記錄 | 改錯字、補充＝`amend`；改變看法或推翻結論＝`save` 新記錄加 `supersedes` 連結（沿用「資料模型」規則） |
 
 ## 刪除
@@ -103,8 +103,8 @@
 | `save` | 新增；參數：內容、`kind`、來源、事件時間與精度（可空）、標籤（可空，見 DESIGN_TAGS）、依據或關聯版本與 `relation`（可空）、`sensitivity`（可空）；回傳 `similar_tags`、`sensitivity_hint` |
 | `amend` | 為既有記錄新增版本；重新掃描敏感內容並取較高等級 |
 | `search` | 見下方「搜尋規則」 |
-| `get` | 讀取指定記錄與版本；回傳 `superseded_by`、`linked_from`；支援 `max_sensitivity` |
-| `hide`／`unhide` | 隱藏與恢復 |
+| `get` | 讀取指定記錄與版本；回傳 `status`、`invalidated`、`superseded_by`、`linked_from`、`links_out`；隱藏的記錄預設回 `NOT_FOUND`（`include_hidden=true` 可讀）；長內容分段（`offset`）；`max_sensitivity` 於 M6 |
+| `hide`／`unhide` | 隱藏與恢復（冪等；回傳被連帶失效的衍生記錄） |
 | `purge_preview` | 唯讀預覽徹底清除的範圍（實際清除只有 CLI `emlek purge`） |
 | `phrases_list` | 唯讀取得啟用語句 |
 | `stats` | 唯讀：記錄數（不含隱藏）、隱藏數、版本數、最早與最晚日期、上次備份時間 |
@@ -123,6 +123,7 @@ MCP 伺服器的 `instructions` 放約 300 字的規則摘要（完整規則在 
 - 一律回傳總筆數並分頁（預設 20 筆、上限 100，附下一頁游標）；過長內容標明已截斷並提供取得剩餘部分的方式。同一天或同一時段的日期範圍即可瀏覽當天或當期所有紀錄。查詢詞有值但沒有任何結果時，回應多一個 `hints`，提醒換另一種語言或寫法再試（內容依記憶庫實際含有的文字種類：日文假名、漢字、英文字母）。
 - `superseded_by` 由 `links` 中 `relation=supersedes` 推算，不另存欄位；若之後又有 `supports` 重新確認，一併回傳，讓 AI 能還原 A→B→C→A 的完整過程。`linked_from` 列出所有指向該記錄的連結與關係（如完成紀錄）。
 - **結果過多時的摘要（M5，D56／D57）**：當總筆數超過 50（`aggregate_threshold`），回應多一個 `summary` 物件，`results` 仍是依 `limit` 分頁的片段（預設 20 筆），所以舊客戶端不受影響：
+  - `summary.undated` 與頂層的 `undated` 不同：前者數**所有**符合者中沒有事件日期的，後者只在有日期過濾時才計。
   - `summary.total`、`summary.first` 與 `summary.last`（依 `date_field` 的最早與最晚日期）、`summary.by_month`（`YYYY-MM` 對筆數，超過 24 個月改為 `by_year`）、`summary.undated`（沒有日期者的數量）。
   - `summary.basis` 固定為 `"keyword"`，`summary.note` 固定為「依關鍵字比對，可能漏掉不同說法的記錄；僅供縮小範圍，不代表全貌」。AI 轉述數字時必須帶出這個限制（AGENT_RULES）。
   - 隱藏的、超過 `max_sensitivity` 的記錄**不計入**任何數字，也不洩漏其筆數（`withheld` 仍只在權限內的呼叫端有意義，沿用現行行為）。
@@ -200,7 +201,7 @@ MCP 伺服器的 `instructions` 放約 300 字的規則摘要（完整規則在 
 | M3 權限與 MCP | `core/permissions.py`、MCP 完整與 `--read-only`、stdout 只輸出協定；Claude Code 與 Codex CLI 以合成庫實測；平台唯讀沙箱旗標實測；AI 層題庫開始（只報告不卡關） | T06、T07、T16；兩個 AI 都能存與找回合成資料；唯讀清單不含寫入工具 |
 | M4 安全網 | `backup`、`restore`（驗證再替換）、`export` v1、`stats`、遷移前自動備份 | T19、T20；還原到乾淨資料夾與原庫逐筆一致 |
 | M5 版本、連結、隱藏 | `amend`、`relation`、`superseded_by`、`linked_from`、`hide`／`unhide`、衍生失效（計算值）；**回傳瘦身**：搜尋預設只回片段與日期，結果過多（預設 >50 筆）時先回筆數、按月分布、最早與最晚日期，並固定標註「依關鍵字比對，可能漏掉不同說法」；隱藏與超過權限的記錄不計入；不新增獨立統計工具；全文用 `get`（D56、D57） | T12、T13、T26；Q08–10、Q22–23；題庫報告的平均回傳大小不高於 M4 基準；規模彙整題（QUESTIONS 類別 I，數千筆合成資料）AI 須說明僅檢視部分或先縮小範圍 |
-| M6 信任閘門 | 規則掃描、`notice_settings`、`confirm_token`／`notice_token`、`phrase`、`notice`、`sensitivity set` 的真人終端機閘門與 PIN（`pin set·change·reset`）、`phrases_list`；**`get` 補上 `max_sensitivity` 與隱藏檢查**（目前只有 `search` 有） | T14、T15、T16；Q40–42；閘門限制如實記載 |
+| M6 信任閘門 | 規則掃描、`notice_settings`、`confirm_token`／`notice_token`、`phrase`、`notice`、`sensitivity set` 的真人終端機閘門與 PIN（`pin set·change·reset`）、`phrases_list`；**`get` 補上 `max_sensitivity`**（隱藏檢查已於 M5 完成，目前只有 `search` 有敏感度上限） | T14、T15、T16；Q40–42；閘門限制如實記載 |
 | M7 標籤 | M7a：資料表、`set_tags`、`#標籤`、別名、向下展開。M7b：`tags_find` 等查詢工具、facets、`similar_tags`、合併、健檢、熱門標籤 | T17、T18；Q03/05/32–36 |
 | M8 匯入與備份加密 | `import`（含敏感掃描、`--split-by-heading`）、備份 `--encrypt` | T21；Q43；錯誤密碼與一位元組竄改被拒 |
 | M9 清除 | `purge_preview` 與 CLI `purge`（預覽、固定句式、PIN、清除、殘留檢查） | T22、T23；原始檔掃描無殘留 |

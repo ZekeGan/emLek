@@ -31,6 +31,7 @@ SEARCH_PARAMS = {
     "cursor",
     "all_versions",
     "include_hidden",
+    "current_only",
     "max_sensitivity",
 }
 
@@ -68,7 +69,15 @@ def _tool_names(data_dir: Path, *, read_only: bool) -> dict[str, Any]:
 
 
 def test_tool_lists_follow_the_permission_table(data_dir: Path) -> None:
-    assert set(_tool_names(data_dir, read_only=False)) == {"save", "get", "search", "stats"}
+    assert set(_tool_names(data_dir, read_only=False)) == {
+        "save",
+        "amend",
+        "hide",
+        "unhide",
+        "get",
+        "search",
+        "stats",
+    }
     assert set(_tool_names(data_dir, read_only=True)) == {"get", "search", "stats"}
 
 
@@ -82,9 +91,15 @@ def test_tool_contracts_are_stable(data_dir: Path) -> None:
         "source",
         "event_time",
         "event_time_precision",
+        "links",
     }
     get_schema = tools["get"].input_schema
-    assert get_schema["required"] == ["ref"] and set(get_schema["properties"]) == {"ref", "version"}
+    assert get_schema["required"] == ["ref"] and set(get_schema["properties"]) == {
+        "ref",
+        "version",
+        "include_hidden",
+        "offset",
+    }
     assert not tools["stats"].input_schema.get("properties")
     search_schema = tools["search"].input_schema
     assert set(search_schema["properties"]) == SEARCH_PARAMS
@@ -220,3 +235,47 @@ def test_two_processes_can_write_at_the_same_time(data_dir: Path, tmp_path: Path
         }
     finally:
         db.close()
+
+
+@pytest.mark.slow
+def test_versions_hiding_and_long_bodies_over_mcp(data_dir: Path) -> None:
+    long_text = "あ" * 9000
+
+    async def scenario() -> None:
+        async with _stdio(data_dir, read_only=False) as client:
+            first = _payload(await client.call_tool("save", {"body": "旧い考え"}))
+            assert first["api_version"] == 1
+            old = first["result"]["ref"]
+            new = _payload(
+                await client.call_tool(
+                    "save",
+                    {"body": "新しい考え", "links": [{"ref": old, "relation": "supersedes"}]},
+                )
+            )["result"]["ref"]
+            got = _payload(await client.call_tool("get", {"ref": old}))["result"]
+            assert got["status"] == "superseded"
+            assert [i["ref"] for i in got["superseded_by"]] == [new]
+            amended = _payload(
+                await client.call_tool("amend", {"ref": new, "body": "新しい考え（補足）"})
+            )
+            assert amended["result"]["version"] == 2
+            hidden = _payload(await client.call_tool("hide", {"ref": new}))
+            assert hidden["result"]["hidden"] is True
+            found = _payload(await client.call_tool("search", {"query": "新しい"}))
+            assert found["result"]["total"] == 0
+            await client.call_tool("unhide", {"ref": new})
+            big = _payload(await client.call_tool("save", {"body": long_text}))["result"]["ref"]
+            part = _payload(await client.call_tool("get", {"ref": big}))["result"]
+            assert part["truncated"] and len(part["body"]) == 8000
+            rest = _payload(
+                await client.call_tool("get", {"ref": big, "offset": part["next_offset"]})
+            )["result"]
+            assert part["body"] + rest["body"] == long_text and not rest["truncated"]
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.slow
+def test_read_only_server_has_no_version_or_hide_tools(data_dir: Path) -> None:
+    names = set(_tool_names(data_dir, read_only=True))
+    assert not names & {"save", "amend", "hide", "unhide"}

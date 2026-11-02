@@ -31,6 +31,13 @@ _REVISION_COLUMNS = (
     "event_time_precision",
     "source",
 )
+_LINK_COLUMNS = ("id", "revision_id", "derived_from_revision_id", "relation", "created_at")
+_LINK_SCOPE = (
+    "FROM links l JOIN revisions sr ON sr.id = l.revision_id"
+    " JOIN revisions tr ON tr.id = l.derived_from_revision_id"
+    " WHERE sr.record_id IN (SELECT id FROM records WHERE {keep})"
+    " AND tr.record_id IN (SELECT id FROM records WHERE {keep})"
+)
 
 
 def _line(value: dict[str, Any]) -> str:
@@ -57,6 +64,7 @@ def export_all(
     revisions = conn.execute(
         f"SELECT count(*) FROM revisions WHERE record_id IN (SELECT id FROM records WHERE {keep})"
     ).fetchone()[0]
+    link_count = conn.execute("SELECT count(*) " + _LINK_SCOPE.format(keep=keep)).fetchone()[0]
     excluded = conn.execute(
         "SELECT count(*) FROM records WHERE sensitivity = 'high'" if exclude_high else "SELECT 0"
     ).fetchone()[0]
@@ -66,7 +74,7 @@ def export_all(
         "schema_version": db.user_version,
         "emlek_version": __version__,
         "exported_at": utc_now_iso(),
-        "counts": {"record": records, "revision": revisions},
+        "counts": {"record": records, "revision": revisions, "link": link_count},
         "excluded_high_records": excluded,
     }
     jsonl = folder / "export.jsonl"
@@ -100,6 +108,11 @@ def _write_jsonl(db: Database, jsonl: Path, header: dict[str, Any], keep: str) -
             f" WHERE {keep} ORDER BY r.record_id, r.version_no"
         ):
             out.write(_line({"type": "revision", **dict(zip(_REVISION_COLUMNS, row, strict=True))}))
+        columns = ", ".join(f"l.{c}" for c in _LINK_COLUMNS)
+        for row in conn.execute(
+            f"SELECT {columns} " + _LINK_SCOPE.format(keep=keep) + " ORDER BY l.id"
+        ):
+            out.write(_line({"type": "link", **dict(zip(_LINK_COLUMNS, row, strict=True))}))
 
 
 def _write_markdown(db: Database, folder: Path, keep: str) -> None:
@@ -171,6 +184,8 @@ def verify_export(folder: Path) -> dict[str, Any]:
         raise EmlekError(ErrorCode.INVALID_INPUT, "記錄筆數與標頭不符")
     if counts.get("revision", 0) != header["counts"]["revision"]:
         raise EmlekError(ErrorCode.INVALID_INPUT, "版本筆數與標頭不符")
+    if counts.get("link", 0) != header["counts"].get("link", 0):
+        raise EmlekError(ErrorCode.INVALID_INPUT, "連結筆數與標頭不符")
     markdown = len(list((folder / "markdown").glob("r*.md")))
     if markdown != counts.get("record", 0) and counts.get("revision", 0) > 0:
         raise EmlekError(ErrorCode.INVALID_INPUT, "Markdown 檔數與記錄數不符")

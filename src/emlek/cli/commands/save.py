@@ -6,13 +6,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from emlek.cli.commands.common import cli_caller, open_vault
+from emlek.cli.commands.common import cli_caller, open_vault, parse_links
 from emlek.cli.output import Output
 from emlek.core import service
 from emlek.core.errors import EmlekError, ErrorCode
 
 
-def _read_body(args: argparse.Namespace) -> str:
+def read_body(args: argparse.Namespace) -> str:
     if args.text is not None and args.body_file is not None:
         raise EmlekError(ErrorCode.INVALID_INPUT, "--text 與 --body-file 只能擇一")
     if args.text is not None:
@@ -33,7 +33,7 @@ def _read_body(args: argparse.Namespace) -> str:
 
 
 def run(args: argparse.Namespace) -> Output:
-    body = _read_body(args)
+    body = read_body(args)
     db = open_vault(args)
     try:
         result = service.save(
@@ -44,6 +44,7 @@ def run(args: argparse.Namespace) -> Output:
             source=args.source,
             event_time=args.event_time,
             event_time_precision=args.precision,
+            links=parse_links(args.link),
         )
     finally:
         db.close()

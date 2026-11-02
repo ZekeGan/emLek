@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 from emlek.config import load_config, resolve_data_dir
 from emlek.core.db import Database
@@ -48,3 +49,12 @@ def open_vault(args: argparse.Namespace) -> Database:
     if data_dir.exists():
         setup_logging(data_dir)
     return Database.open(config.db_path)
+
+
+def parse_links(values: list[str] | None) -> list[dict[str, Any]]:
+    """`r12` or `r12:supersedes` -> {"ref": "r12", "relation": "supersedes"}."""
+    links: list[dict[str, Any]] = []
+    for value in values or []:
+        ref, _, relation = value.partition(":")
+        links.append({"ref": ref, "relation": relation or None})
+    return links

@@ -145,14 +145,14 @@ def cost_flag(usd: float | None) -> str:
     return "warn" if usd > WARN_USD else "ok"
 
 
-def build_vault() -> tuple[Path, synth.Corpus]:
+def build_vault(filler: int = 600) -> tuple[Path, synth.Corpus]:
     vault = OUT / "ai-vault"
     if vault.exists():
         shutil.rmtree(vault)
     OUT.mkdir(exist_ok=True)
     caller = Caller(Channel.CLI)
     init_vault(caller, vault)
-    corpus = synth.build_corpus()
+    corpus = synth.build_corpus(filler=filler)
     db = Database.open(load_config(vault).db_path)
     try:
         synth.load(db, caller, corpus)
@@ -351,12 +351,13 @@ def run_sandbox_probe() -> list[dict[str, Any]]:
 
 def rescore(path: Path) -> None:
     """Re-apply the current scoring rule to saved answers (no new model calls)."""
-    corpus = synth.build_corpus()
+    corpora = {600: synth.build_corpus(), bank.SCALE_FILLER: synth.build_corpus(bank.SCALE_FILLER)}
     data = json.loads(path.read_text(encoding="utf-8"))
     for row in data["questions"]:
         if "answer" not in row or row["id"] not in bank.SPECS:
             continue
         row.setdefault("score_first_rule", row.get("score"))
+        corpus = corpora[bank.SCALE_FILLER if row["id"] in bank.SCALE_IDS else 600]
         row.update(scoring.score_spec(bank.SPECS[row["id"]], corpus, row["answer"]))
     data["rescored"] = "scores re-applied with the current rules"
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -426,10 +427,13 @@ def pick_ids() -> tuple[list[str], list[str]]:
             raise SystemExit(f"unknown ids: {unknown}")
         return [q for q in only if q in bank.SPECS], [q for q in only if q in bank.PROBES]
     chosen = os.environ.get("EMLEK_AI_SET", "smoke")
+    if chosen == "scale":
+        return list(bank.SCALE_IDS), []
     if chosen == "persona":
         return list(bank.PERSONA_IDS), []
     if chosen == "full":  # the persona set is run on its own, never mixed into the core scores
-        return [q for q in bank.SPECS if q not in bank.PERSONA_IDS], list(bank.PROBES)
+        core = [q for q in bank.SPECS if q not in bank.PERSONA_IDS + bank.SCALE_IDS]
+        return core, list(bank.PROBES)
     return list(bank.SMOKE), list(bank.SMOKE_PROBES)
 
 
@@ -447,7 +451,8 @@ def main() -> None:
         raise SystemExit("預估超過上限：縮小題目、減少次數，或明確調高 EMLEK_AI_BUDGET_USD")
 
     out_name = os.environ.get("EMLEK_AI_OUT", "ai-run.json")
-    vault, corpus = build_vault()
+    scale = os.environ.get("EMLEK_AI_SET") == "scale"
+    vault, corpus = build_vault(bank.SCALE_FILLER if scale else 600)
     rw = write_config(vault, "rw", read_only=False)
     ro = write_config(vault, "ro", read_only=True)
     budget = Budget(cap)

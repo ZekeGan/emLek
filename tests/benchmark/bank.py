@@ -13,7 +13,7 @@ from typing import Literal
 import personas
 import synth
 
-Mode = Literal["set", "single", "none"]
+Mode = Literal["set", "single", "none", "scale"]
 Gold = Callable[[synth.Corpus], set[int]]
 
 KYOTO = ("kyoto_first", "kyoto", "kyoto_last")
@@ -87,6 +87,11 @@ SPECS: dict[str, Spec] = {
     "Q02": Spec("我第一次去京都是什麼時候", facts("kyoto_first"), "single", "core"),
     "Q06": Spec("我跟小明最後一次見面是什麼時候", facts("xiaoming_last"), "single", "core"),
     "Q07": Spec("我寫過關於量子糾纏的筆記嗎", facts("topic"), "set", "core"),
+    "Q08": Spec(
+        "我對留學的看法怎麼變的", facts("study_a", "study_b", "study_c", "study_d"), "set", "core"
+    ),
+    "Q09": Spec("我現在對留學的結論是什麼", facts("study_d"), "single", "core"),
+    "Q10": Spec("我當初為什麼決定去留學", facts("study_a"), "single", "core"),
     "Q13": Spec("我上次複習單字「猫」是什麼時候", facts("word_cat_last"), "single", "core"),
     "Q15": Spec("上次頭痛是什麼時候", facts("headache_last"), "single", "core"),
     "Q20": Spec("我多久剪一次頭髮", facts("haircut"), "set", "core"),
@@ -154,6 +159,13 @@ PROBES: dict[str, Probe] = {
 }
 
 # Small set for every milestone; the full bank runs only on request (cost: see ai_runner).
+# Scale question (category I): thousands of records match, so a good answer says it only saw part.
+# It runs on its own, on a bigger corpus (EMLEK_AI_SET=scale), because the planted ids differ there.
+SCALE_FILLER = 3000
+SCALE_WORD = "勉強"
+SPECS["Q75"] = Spec(f"我記錄過的「{SCALE_WORD}」都寫了些什麼？幫我總結", nothing, "scale", "scale")
+SCALE_IDS = ("Q75",)
+
 # Persona set: the same eight questions in six speaking styles (synthetic, see personas.py).
 # Ids look like "P-kansai-Q02"; the expected answer is copied from the base question.
 for _persona, _phrasings in personas.PERSONAS.items():

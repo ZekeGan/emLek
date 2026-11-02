@@ -101,6 +101,26 @@ def q07(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
     return env.ids(result), env.corpus.ids_for("topic"), result
 
 
+def q08(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    """The whole history of one opinion, in order, with its replacements visible."""
+    result = env.ask(query="留學", order="created_at", direction="asc", limit=100)
+    chain = [r["status"] for r in result["results"]]
+    assert chain == ["reaffirmed", "superseded", "superseded", "current"]
+    return env.ids(result), _gold(env, "Q08"), result
+
+
+def q09(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    """The current conclusion: newest among what is not superseded."""
+    result = env.ask(query="留學", current_only=True, order="created_at", direction="desc", limit=1)
+    return env.ids(result), _gold(env, "Q09"), result
+
+
+def q10(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
+    """The reason given when the first decision was made: the oldest record that says why."""
+    result = env.ask(query="留學 理由", order="created_at", direction="asc", limit=1)
+    return env.ids(result), _gold(env, "Q10"), result
+
+
 def q13(env: Env) -> tuple[set[int], set[int], dict[str, Any]]:
     result = env.ask(query="猫", kinds=["original"], order="event_time", direction="desc", limit=1)
     return env.ids(result), env.corpus.ids_for("word_cat_last"), result
@@ -285,6 +305,9 @@ QUESTIONS: dict[str, tuple[str, Question]] = {
     "Q02": ("我第一次去京都是什麼時候", q02),
     "Q06": ("我跟小明最後一次見面是什麼時候", q06),
     "Q07": ("我寫過關於量子糾纏的筆記嗎", q07),
+    "Q08": ("我對留學的看法怎麼變的", q08),
+    "Q09": ("我現在對留學的結論是什麼", q09),
+    "Q10": ("我當初為什麼決定去留學", q10),
     "Q13": ("我上次複習某個單字（猫）是什麼時候", q13),
     "Q15": ("上次頭痛是什麼時候", q15),
     "Q20": ("我多久剪一次頭髮", q20),
@@ -367,3 +390,45 @@ def test_injected_records_come_back_as_plain_data(env: Env) -> None:
     before = env.db.conn.execute("SELECT count(*) FROM records").fetchone()[0]
     env.ask(query="北海道", limit=100)
     assert env.db.conn.execute("SELECT count(*) FROM records").fetchone()[0] == before
+
+
+def test_q22_change_it_to_makes_a_new_version_and_keeps_the_old(tmp_path: Path) -> None:
+    from emlek.core import versions as _versions  # noqa: F401  (the feature under test lives here)
+
+    path = tmp_path / "vault"
+    caller = Caller(Channel.CLI)
+    init_vault(caller, path)
+    db = Database.open(load_config(path).db_path)
+    try:
+        ref = service.save(db, caller, body="来週の会議は火曜日", event_time="2026-11-03")["ref"]
+        service.amend(db, caller, ref=ref, body="来週の会議は水曜日に変更", event_time="2026-11-04")
+        assert service.get(db, caller, ref=ref)["body"].endswith("水曜日に変更")
+        assert service.get(db, caller, ref=f"{ref}.v1")["body"] == "来週の会議は火曜日"
+        found = search.search(db, caller, query="会議", timezone=TZ)
+        assert found["total"] == 1 and found["results"][0]["latest_version"] == 2
+        old = search.search(db, caller, query="火曜日", timezone=TZ)
+        assert old["total"] == 0  # searches look at the newest text unless asked otherwise
+        both = search.search(db, caller, query="火曜日", all_versions=True, timezone=TZ)
+        assert both["total"] == 1
+    finally:
+        db.close()
+
+
+def test_q23_delete_that_hides_and_restore_brings_it_back(tmp_path: Path) -> None:
+    from emlek.core import versions
+
+    path = tmp_path / "vault"
+    caller = Caller(Channel.CLI)
+    init_vault(caller, path)
+    db = Database.open(load_config(path).db_path)
+    try:
+        ref = service.save(db, caller, body="間違えて書いた記録 鎌倉")["ref"]
+        assert search.search(db, caller, query="鎌倉")["total"] == 1
+        versions.hide(db, caller, ref=ref)
+        assert search.search(db, caller, query="鎌倉")["total"] == 0
+        assert search.search(db, caller, query="鎌倉", include_hidden=True)["total"] == 1
+        versions.unhide(db, caller, ref=ref)
+        assert search.search(db, caller, query="鎌倉")["total"] == 1
+        assert service.get(db, caller, ref=ref)["body"] == "間違えて書いた記録 鎌倉"
+    finally:
+        db.close()

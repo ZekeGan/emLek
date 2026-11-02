@@ -21,6 +21,8 @@ from emlek.core.timeutil import utc_now_iso
 
 TODAY = date(2026, 11, 1)
 TARGET_WORDS = (
+    "留學",
+    "留学",
     "京都",
     "小明",
     "頭痛",
@@ -87,6 +89,8 @@ class Entry:
     created_at: str
     kind: str = "original"
     fact: str | None = None
+    # (fact name of an older entry, relation): saved as links to that entry's record
+    links: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -248,11 +252,46 @@ def _planted() -> list[Entry]:
     return e
 
 
+def _story() -> list[Entry]:
+    """A changing opinion, oldest first: A, then B replaces A, C replaces B, D replaces C and
+    confirms A again. Appended after the shuffle so each entry can link to older record ids."""
+
+    def entry(fact: str, day: str, body: str, *links: tuple[str, str]) -> Entry:
+        return Entry(body, None, _stamp(day), "original", fact, links)
+
+    return [
+        entry(
+            "study_a",
+            "2026-02-01",
+            "決定去日本留學。理由：想認真學好日文，而且想離開現在的工作環境。",
+        ),
+        entry(
+            "study_b",
+            "2026-05-10",
+            "改變主意了，不去留學，回台灣。因為存款不夠。",
+            ("study_a", "supersedes"),
+        ),
+        entry(
+            "study_c",
+            "2026-08-20",
+            "撤回回台灣的想法，獎學金有機會，所以還是留學。",
+            ("study_b", "supersedes"),
+        ),
+        entry(
+            "study_d",
+            "2026-10-05",
+            "最後結論：獎學金沒拿到，但決定半工半讀繼續留學；當初的理由到現在還是對的。",
+            ("study_c", "supersedes"),
+            ("study_a", "supports"),
+        ),
+    ]
+
+
 def build_corpus(seed: int = 7, filler: int = 600) -> Corpus:
     rng = random.Random(seed)
     entries = _filler(rng, filler) + _planted()
     rng.shuffle(entries)
-    return Corpus(entries)
+    return Corpus(entries + _story())
 
 
 @contextmanager
@@ -263,9 +302,20 @@ def _clock(stamp: str) -> Iterator[None]:
 
 def load(db: Database, caller: Caller, corpus: Corpus) -> None:
     """Save every entry through the real service, with the intended created_at."""
-    for entry in corpus.entries:
+    record_of: dict[str, int] = {}
+    for position, entry in enumerate(corpus.entries, 1):
         with _clock(entry.created_at):
-            service.save(db, caller, body=entry.body, kind=entry.kind, event_time=entry.event_time)
+            saved = service.save(
+                db,
+                caller,
+                body=entry.body,
+                kind=entry.kind,
+                event_time=entry.event_time,
+                links=[{"ref": f"r{record_of[t]}", "relation": rel} for t, rel in entry.links],
+            )
+        assert saved["record_id"] == position  # ids follow insertion order; gold answers rely on it
+        if entry.fact:
+            record_of.setdefault(entry.fact, position)
 
 
 _JA = (

@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -36,14 +37,15 @@ def test_multibyte_size_is_counted_in_bytes(db: Database, caller: Caller) -> Non
 
 
 def test_bad_metadata_is_rejected(db: Database, caller: Caller) -> None:
-    for kwargs in (
+    cases: tuple[dict[str, Any], ...] = (
         {"kind": "note"},
         {"source": "s" * 501},
         {"event_time": "2026-02-30"},
         {"event_time": "2026-01-15", "event_time_precision": "month"},
         {"event_time_precision": "day"},
         {"event_time": "2026-01-15T09:30"},
-    ):
+    )
+    for kwargs in cases:
         with pytest.raises(EmlekError) as info:
             service.save(db, caller, body="ok", **kwargs)
         assert info.value.code is ErrorCode.INVALID_INPUT

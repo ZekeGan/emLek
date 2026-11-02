@@ -28,6 +28,7 @@ def run(args: argparse.Namespace) -> Output:
             cursor=args.cursor,
             all_versions=args.all_versions,
             include_hidden=args.include_hidden,
+            current_only=args.current_only,
             max_sensitivity=args.max_sensitivity,
             timezone=timezone,
         )
@@ -42,6 +43,14 @@ def run(args: argparse.Namespace) -> Output:
         + (f"，另有 {result['undated']} 筆沒有事件時間" if result["undated"] else "")
         + (f"，{result['withheld']} 筆因敏感度上限未顯示" if result["withheld"] else "")
     )
+    summary = result.get("summary")
+    if summary:
+        spread = summary.get("by_month") or summary.get("by_year") or {}
+        lines.append(
+            f"摘要：{summary['total']} 筆，{summary['first']} ～ {summary['last']}；"
+            + "、".join(f"{k} {v}" for k, v in spread.items())
+            + f"（{summary['note']}）"
+        )
     if result["next_cursor"]:
         lines.append(f"下一頁：--cursor {result['next_cursor']}")
     for hint in result["hints"]:

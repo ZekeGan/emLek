@@ -73,7 +73,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     find = sub.add_parser("search", help="搜尋（關鍵字、日期、排序、分頁）")
     find.add_argument(
-        "query", nargs="?", help="關鍵字，空白分隔表示全部都要出現；可用雙引號包住片語"
+        "query",
+        nargs="?",
+        help="關鍵字，空白分隔表示全部都要出現，大寫 OR 表示任一；可用雙引號包住片語",
     )
     find.add_argument("--kinds", nargs="+", choices=KINDS, help="只看這些種類")
     find.add_argument("--date-field", choices=("event_time", "created_at"), default="event_time")

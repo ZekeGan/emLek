@@ -94,6 +94,11 @@ def test_scale_36k(tmp_path: Path) -> None:
         timed(label="like_1_char_common", query="寺", limit=20)
         timed(label="fts_plus_like", query="新幹線 東京", limit=20)
         timed(label="absent_term_fallback", query="存在しない言葉です")
+        timed(label="or_three_groups", query="新幹線 OR 東京 OR 針山", limit=20)
+        empty = timed(
+            label="zero_result_with_word_counts", query="新幹線 存在しない言葉です", limit=20
+        )
+        assert empty["term_hits"]["新幹線"] > 0 and empty["term_hits"]["存在しない言葉です"] == 0
         timed(label="date_range_month_by_event", date_from="2026-05", date_to="2026-05", limit=20)
         timed(
             label="date_range_by_created",

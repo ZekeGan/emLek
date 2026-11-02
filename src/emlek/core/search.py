@@ -26,6 +26,8 @@ from emlek.core.service import KINDS, normalize_for_search
 
 MAX_QUERY_CHARS = 512
 MAX_TERMS = 20
+MAX_ALTERNATIVES = 8
+MAX_TERM_HITS = 12  # how many words get a hit count when a query finds nothing
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
 ORDERS = ("relevance", "event_time", "created_at")
@@ -43,18 +45,40 @@ _OFFSET = re.compile(r"^([+-])(\d{2}):(\d{2})$")
 _log = logging.getLogger("emlek")
 
 
-def parse_terms(query: str | None) -> list[str]:
+def parse_alternatives(query: str | None) -> list[list[str]]:
+    """Split a query on a bare, uppercase OR. Inside one alternative every word must appear;
+    across alternatives any one is enough. A quoted "OR" or a lowercase or is just a word."""
     if query is None or not query.strip():
         return []
     if len(query) > MAX_QUERY_CHARS:
         raise EmlekError(ErrorCode.INVALID_INPUT, "查詢不可超過 512 字元")
-    terms: list[str] = []
+    alternatives: list[list[str]] = [[]]
+    total = 0
     for match in _TERM.finditer(query):
-        term = normalize_for_search(match.group(1) or match.group(2)).strip()
-        if term and term not in terms:
-            terms.append(term)
-    if len(terms) > MAX_TERMS:
+        quoted, bare = match.group(1), match.group(2)
+        if bare == "OR":
+            if alternatives[-1]:
+                alternatives.append([])
+            continue
+        term = normalize_for_search(quoted or bare).strip()
+        if term and term not in alternatives[-1]:
+            alternatives[-1].append(term)
+            total += 1
+    alternatives = [alt for alt in alternatives if alt]
+    if total > MAX_TERMS:
         raise EmlekError(ErrorCode.INVALID_INPUT, "查詢詞不可超過 20 個")
+    if len(alternatives) > MAX_ALTERNATIVES:
+        raise EmlekError(ErrorCode.INVALID_INPUT, f"OR 最多 {MAX_ALTERNATIVES} 組")
+    return alternatives
+
+
+def parse_terms(query: str | None) -> list[str]:
+    """All distinct words of a query (for snippets and hints), OR operators removed."""
+    terms: list[str] = []
+    for alternative in parse_alternatives(query):
+        for term in alternative:
+            if term not in terms:
+                terms.append(term)
     return terms
 
 
@@ -224,6 +248,84 @@ def _run(
         raise EmlekError(ErrorCode.INTERNAL, "搜尋時發生資料庫錯誤") from exc
 
 
+def _gather(
+    db: Database,
+    alternatives: list[list[str]],
+    *,
+    stale: bool,
+    notes: list[str] | None = None,
+    **kwargs: Any,
+) -> list[tuple[Any, ...]]:
+    """Run every OR alternative and merge: a record counts once, with its best rank.
+
+    One alternative (the usual case) is exactly the old single query."""
+    order, direction = kwargs["order"], kwargs["direction"]
+    if len(alternatives) <= 1:
+        words = alternatives[0] if alternatives else []
+        fts = [] if stale else [t for t in words if len(t) >= FTS_MIN_CHARS]
+        like = words if stale else [t for t in words if len(t) < FTS_MIN_CHARS]
+        return [tuple(row) for row in _run(db, fts_terms=fts, like_terms=like, **kwargs)]
+    merged: dict[int, tuple[Any, ...]] = {}
+    for words in alternatives:
+        fts = [] if stale else [t for t in words if len(t) >= FTS_MIN_CHARS]
+        like = words if stale else [t for t in words if len(t) < FTS_MIN_CHARS]
+        found_rows = list(_run(db, fts_terms=fts, like_terms=like, **kwargs))
+        if not found_rows and fts:
+            # one group answering from the index while another group's index is stale would
+            # hide records silently: an empty index answer is checked again without the index
+            again = list(_run(db, fts_terms=[], like_terms=words, **kwargs))
+            if again:
+                found_rows = again
+                if notes is not None and "index_stale" not in notes:
+                    notes.append("index_stale")
+        for found in found_rows:
+            row = tuple(found)
+            if order == "relevance" and row[3] is None:
+                row = (*row[:3], 0.0, *row[4:])  # matched without the index: neutral rank
+            known = merged.get(row[1])
+            if known is None or (order == "relevance" and row[3] < known[3]):
+                merged[row[1]] = row
+    rows = list(merged.values())
+    descending = direction == "desc"
+    if order == "relevance":
+        return sorted(rows, key=lambda r: (r[3], r[1]))
+    if order == "event_time":
+        dated = sorted(
+            (r for r in rows if r[4] is not None), key=lambda r: (r[4], r[1]), reverse=descending
+        )
+        undated = sorted((r for r in rows if r[4] is None), key=lambda r: r[1], reverse=descending)
+        return dated + undated
+    return sorted(rows, key=lambda r: (r[5], r[1]), reverse=descending)
+
+
+def _term_hits(
+    db: Database, terms: list[str], include_hidden: bool, max_sensitivity: str
+) -> dict[str, int]:
+    """How many current records contain each word on its own (one pass over the table)."""
+    allowed = ",".join(
+        f"'{lvl}'" for lvl in SENSITIVITY_LEVELS[: SENSITIVITY_LEVELS.index(max_sensitivity) + 1]
+    )
+    columns = ", ".join("COALESCE(SUM(r.body_norm LIKE ? ESCAPE '\\'), 0)" for _ in terms)
+    row = db.conn.execute(
+        f"SELECT {columns} FROM revisions r JOIN records rec ON rec.id = r.record_id"
+        " WHERE r.version_no ="
+        " (SELECT MAX(v.version_no) FROM revisions v WHERE v.record_id = r.record_id)"
+        f" AND (rec.hidden = 0 OR ?) AND rec.sensitivity IN ({allowed})",
+        [*(_like_pattern(t) for t in terms), 1 if include_hidden else 0],
+    ).fetchone()
+    return {term: int(count) for term, count in zip(terms, row, strict=True)}
+
+
+def _word_hint(alternatives: list[list[str]], hits: dict[str, int]) -> str:
+    found = [t for t, n in hits.items() if n]
+    base = "沒有一筆同時含有全部的詞（同一組的詞須全部出現）；各詞單獨命中數見 term_hits。"
+    if found:
+        return (
+            base + f"其中 {'、'.join(found)} 有資料：用大寫 OR 表示任一（如 A OR B），或分開搜尋。"
+        )
+    return base + "每個詞單獨都沒有命中，請換說法或換語言。"
+
+
 def _snippet(body: str, terms: list[str]) -> str:
     flat = " ".join(body.split())
     norm = normalize_for_search(flat)
@@ -267,6 +369,7 @@ def search(
     facets: bool = False,
 ) -> dict[str, Any]:
     require(caller, "search")
+    alternatives = parse_alternatives(query)
     terms = parse_terms(query)
     if kinds is not None and (not kinds or any(k not in KINDS for k in kinds)):
         raise EmlekError(ErrorCode.INVALID_INPUT, f"kinds 必須是 {', '.join(KINDS)} 其中的值")
@@ -292,11 +395,10 @@ def search(
         if value:
             date_bound(value, end=is_end)
 
-    fts_terms = [t for t in terms if len(t) >= FTS_MIN_CHARS]
-    like_terms = [t for t in terms if len(t) < FTS_MIN_CHARS]
+    has_index_terms = any(len(t) >= FTS_MIN_CHARS for t in terms)
     wanted = order or ("relevance" if terms else "event_time")
     applied = wanted
-    if wanted == "relevance" and not fts_terms:
+    if wanted == "relevance" and not has_index_terms:
         applied, direction = "created_at", "desc"  # no rank without the index; newest first
     elif wanted == "relevance":
         direction = "asc"
@@ -349,22 +451,16 @@ def search(
         "direction": direction,
     }
     warnings: list[str] = []
-    rows = _run(db, fts_terms=fts_terms, like_terms=like_terms, only_undated=False, **shared)
-    if not rows and fts_terms:
+    rows = _gather(db, alternatives, stale=False, notes=warnings, only_undated=False, **shared)
+    if not rows and has_index_terms:
         # an empty index answer is not proof of absence: look again without the index
-        fallback = _run(db, fts_terms=[], like_terms=terms, only_undated=False, **shared)
+        fallback = _gather(db, alternatives, stale=True, only_undated=False, **shared)
         if fallback:
             _log.warning("search index is stale; answered from a full scan")
             rows, warnings = fallback, ["index_stale"]
     undated = 0
     if date_field == "event_time" and (date_from or date_to):
-        undated_rows = _run(
-            db,
-            fts_terms=[] if warnings else fts_terms,
-            like_terms=terms if warnings else like_terms,
-            only_undated=True,
-            **shared,
-        )
+        undated_rows = _gather(db, alternatives, stale=bool(warnings), only_undated=True, **shared)
         undated = len({r[1] for r in undated_rows})
 
     caps = {level: i for i, level in enumerate(SENSITIVITY_LEVELS)}
@@ -417,6 +513,10 @@ def search(
 
     results = [_describe(db, row, terms, status_map) for row in page]
     hints = _zero_result_hints(db) if terms and not ordered and not warnings else []
+    term_hits: dict[str, int] | None = None
+    if not ordered and len(terms) >= 2 and not tags:
+        term_hits = _term_hits(db, terms[:MAX_TERM_HITS], include_hidden, max_sensitivity)
+        hints = [*hints, _word_hint(alternatives, term_hits)]
     summary = (
         _summary(db, ordered, date_field, modifiers) if len(ordered) > AGGREGATE_THRESHOLD else None
     )
@@ -430,10 +530,10 @@ def search(
         if unknown:
             extra["unknown_tags"] = unknown
         plain = {**shared, "tag_groups": None, "tag_types": None}
-        base_rows = _run(
+        base_rows = _gather(
             db,
-            fts_terms=[] if warnings else fts_terms,
-            like_terms=terms if warnings else like_terms,
+            alternatives,
+            stale="index_stale" in warnings,
             only_undated=False,
             **plain,
         )
@@ -461,6 +561,7 @@ def search(
         "warnings": warnings,
         "hints": hints,
         **({"summary": summary} if summary else {}),
+        **({"term_hits": term_hits} if term_hits is not None else {}),
         **extra,
     }
 

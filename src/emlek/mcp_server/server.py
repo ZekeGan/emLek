@@ -335,7 +335,7 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
         ),
         "search": (
             search,
-            "搜尋記憶：關鍵字、日期、標籤、排序、分頁。",
+            "搜尋記憶：關鍵字（空白＝全部都要出現，大寫 OR＝任一）、日期、標籤、排序、分頁。",
             read,
         ),
     }

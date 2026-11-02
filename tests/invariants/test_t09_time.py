@@ -126,12 +126,13 @@ def test_created_at_filter_with_the_system_zone(
 
 
 def test_bad_date_arguments(db: Database, caller: Caller) -> None:
-    for kwargs in (
+    bad: tuple[dict[str, Any], ...] = (
         {"date_from": "2026-13"},
         {"date_to": "yesterday"},
         {"timezone": "Asia/Tokyo"},
         {"date_field": "updated_at"},
-    ):
+    )
+    for kwargs in bad:
         with pytest.raises(EmlekError) as info:
             search.search(db, caller, **kwargs)
         assert info.value.code is ErrorCode.INVALID_INPUT

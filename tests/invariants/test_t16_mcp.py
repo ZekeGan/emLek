@@ -106,7 +106,8 @@ def _stdio(data_dir: Path, *, read_only: bool) -> Any:
 
 def _payload(result: Any) -> dict[str, Any]:
     text = result.content[0].text
-    return json.loads(text[text.index("{") :])
+    payload: dict[str, Any] = json.loads(text[text.index("{") :])
+    return payload
 
 
 @pytest.mark.slow

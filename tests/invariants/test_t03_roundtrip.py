@@ -39,7 +39,7 @@ def test_examples_come_back_byte_identical(db: Database, caller: Caller, text: s
 @settings(max_examples=150, deadline=None)
 @given(
     st.text(
-        alphabet=st.characters(blacklist_categories=("Cs",), blacklist_characters="\x00"),
+        alphabet=st.characters(blacklist_categories=["Cs"], blacklist_characters="\x00"),
         min_size=1,
         max_size=500,
     ).filter(lambda s: s.strip() != "")

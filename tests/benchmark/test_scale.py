@@ -17,6 +17,7 @@ from emlek.core.backup import create_backup, restore_backup
 from emlek.core.db import Database
 from emlek.core.export import export_all, verify_export
 from emlek.core.permissions import Caller, Channel
+from emlek.core.timeutil import infer_precision
 from emlek.core.vault import init_vault
 
 ROWS = 36_000
@@ -35,7 +36,7 @@ def test_scale_36k(tmp_path: Path) -> None:
         with db.transaction() as conn:
             for body, event, created in synth.bulk_rows(random.Random(5), ROWS):
                 record_id = service._insert_record(conn, created)
-                precision = service.infer_precision(event) if event else None
+                precision = infer_precision(event) if event else None
                 service._insert_revision(
                     conn, record_id, 1, body, "original", created, event, precision, None
                 )

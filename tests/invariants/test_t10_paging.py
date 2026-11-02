@@ -66,7 +66,7 @@ def test_pages_cover_everything_once(
 
 
 def test_cursor_survives_new_records(filled: Database, caller: Caller, save_at: Saver) -> None:
-    kwargs = {"query": "共通のことば", "order": "created_at", "direction": "asc"}
+    kwargs: dict[str, Any] = {"query": "共通のことば", "order": "created_at", "direction": "asc"}
     first = search.search(filled, caller, limit=20, **kwargs)
     before = {r["ref"] for r in first["results"]}
     for i in range(5):

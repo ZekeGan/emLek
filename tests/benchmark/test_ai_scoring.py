@@ -7,6 +7,7 @@ from pathlib import Path
 
 import ai_runner as ar
 import pytest
+import synth
 
 
 def test_single_answer_is_judged_by_the_first_record_named() -> None:
@@ -32,7 +33,7 @@ def test_set_answers_use_f1_bands(cited: str, expected: int) -> None:
 
 
 def test_rescoring_keeps_the_old_score(tmp_path: Path) -> None:
-    corpus = ar.synth.build_corpus()
+    corpus = synth.build_corpus()
     gold = next(iter(corpus.ids_for("kyoto_first")))
     path = tmp_path / "report.json"
     row = {"id": "Q02", "score": 3, "answer": f"2025-03-20 是第一次（r{gold}），另有 r1、r2"}

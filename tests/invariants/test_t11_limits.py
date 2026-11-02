@@ -45,7 +45,7 @@ def test_bad_metadata_is_rejected(db: Database, caller: Caller) -> None:
         {"event_time": "2026-01-15T09:30"},
     ):
         with pytest.raises(EmlekError) as info:
-            service.save(db, caller, body="ok", **kwargs)  # type: ignore[arg-type]
+            service.save(db, caller, body="ok", **kwargs)
         assert info.value.code is ErrorCode.INVALID_INPUT
 
 

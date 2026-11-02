@@ -117,6 +117,7 @@ MCP 伺服器的 `instructions` 放精簡的規則摘要（目前約 600 字元�
 **唯讀模式**：`emlek mcp --read-only` 的工具清單只含 `search`、`get`、`phrases_list`、`stats`、`tags_find`、`tags_list`（寫入工具根本不存在，不是被拒絕），供無人看管的排程使用；`max_sensitivity` 預設為 medium。每日簡報見 [DAILY_BRIEFING](DAILY_BRIEFING.md)。
 
 **搜尋規則**：
+- **關鍵字語法（2026-11-02 起）**：空白分隔的詞在同一組內必須**全部**出現；裸的大寫 `OR` 把查詢分成幾組，**任一組成立**即命中（最多 8 組、全部詞合計 ≤ 20）。小寫的 or、加引號的 "OR" 只是普通的字。回應多個詞但**零結果**時多一個 `term_hits`（每個詞單獨命中幾筆，只算可見記錄）與一句提示，讓 AI 知道哪個詞有資料、該用 OR 或分開搜尋（D75）。`untagged=true` 只看還沒有任何標籤的記錄。
 - 命中單位是**記錄**；預設比對各記錄的最新版本並標示命中的版本，`all_versions=true` 才比對舊版。總筆數的單位也是記錄。
 - 過濾：`kinds`、`tags`、`tag_types`、日期範圍（`date_field=event_time|created_at`，前者看最新版本，後者是記錄首次存入時間；事件時間未知的記錄不排除，另列 `undated` 數量）、`include_hidden`（預設否）、`current_only`（排除已被推翻者，預設只標示）、`max_sensitivity`（超過上限的記錄不回內文，只計入 `withheld`）。
 - 排序：`order=relevance|event_time|created_at`，`dir=asc|desc`；有關鍵字時預設 relevance、無關鍵字時預設 event_time desc。游標以排序鍵加記錄編號為準，頁間穩定。只有短詞（沒有 3 字元以上的詞）時沒有相關度，改以 `created_at desc`，回應的 `order` 欄位會註明實際採用的排序。

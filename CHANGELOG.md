@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 搜尋：裸的大寫 `OR` 表示任一組；多詞零結果時回 `term_hits` 與提示；`untagged` 篩選。標籤回補 `emlek tags backfill`（預覽、套用、復原，來源 `rule`，遷移 0006）。題庫新增模糊問法題 Q82–Q89。
+
 - M7：標籤（階層、別名、`#標籤`、向下展開、`tags_pending`、覆蓋率、facets）、`tags_find`／`tags_list`／`set_tags`／`tag_link`／`tag_alias`、命令列 `tag`／`tags`、匯出含標籤、熱門標籤名稱進 AI 開場說明（只含名稱）、遷移 0005；搜尋時不存在的標籤名會被忽略並警告。
 
 ## 0.1.0 — 2026-11-02（M1–M6 完成並驗收；尚未對外發布、未打標籤）

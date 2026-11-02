@@ -11,7 +11,7 @@ DESIGN 的分冊，只在做標籤、查詢定位或寬泛問題時讀。標籤�
 | 表 | 欄位 |
 |---|---|
 | `tags` | `id`、`name`（顯示用）、`name_key`（NFKC＋casefold，唯一）、`type`、`description`（含近義詞，進索引）、`created_by`（user／ai／system）、`created_at` |
-| `record_tags` | （`record_id`、`tag_id`）唯一、`added_by`（user／ai）、`added_at`；索引 `(tag_id, record_id)` |
+| `record_tags` | （`record_id`、`tag_id`）唯一、`added_by`（user／ai／rule）、`added_at`；索引 `(tag_id, record_id)`；`rule`＝由回補規則依名稱字面比對加上（遷移 0006） |
 | `tag_links` | （`parent_tag_id`、`child_tag_id`）唯一，只有「包含」關係，不得成環、不得連到自己 |
 | `tag_aliases` | `alias`、`alias_key`（唯一）、`tag_id` |
 | `tag_events` | `id`、`at`、`actor`、`action`、`record_id`（可空）、`detail`；標籤系統所有變動的紀錄，只放標籤名稱與編號，不放記錄內容；`record_id` 讓清除（M9）找得到涉及該記錄的明細 |
@@ -83,7 +83,16 @@ AI 不能刪除或合併，只有命令列能。權限：
 - 匯出補上 `tag`、`record_tag`、`tag_link`、`tag_alias`、`tag_event` 列與標頭筆數（`tag` 列的類型欄位叫 `tag_type`，避免蓋掉列種類 `type`），`format_version` 維持 1（只增加列種類，舊讀取程式略過未知種類）。`--exclude-high` 時，只匯出仍被匯出記錄使用的標籤、它們的上層標籤與別名，且只匯出屬於被匯出記錄的 `tag_event`。
 - 清除（M9）：清掉該記錄的 `record_tags` 與涉及它的 `tag_events`；使用次數降為 0 的標籤**列給使用者**（名稱本身可能透露被清除的內容），由使用者決定是否 `tag remove`。
 
-## 舊記錄與補標籤
+## 舊記錄與補標籤（回補，D75）
+
+M7 之前存的記錄沒有標籤，查詢仍須回頭搜內文；`tag_coverage` 負責誠實揭露。補救有兩條路：
+
+1. **規則回補**（命令列，不花 AI 額度）：`emlek tags backfill` 預設**只預覽**——對每個標籤及其別名，找出內文含該名稱、但還沒掛這個標籤的記錄（隱藏的不算），列出每個標籤的筆數與三個例子。加 `--apply` 在預覽後要求你回答「是」才套用，新增的關聯來源標為 `rule`；`--undo` 一次移除所有 `rule` 關聯（你或 AI 自己加的不受影響）。套用與復原必須是真人在終端機（腳本與 AI 只能預覽）；不需要 PIN，因為可完全復原、不改動原文。
+   - 不處理 `status`（那是意圖）與 `emotion`（那是推測）類標籤；名稱少於 2 個字元者略過；回補後會落在超過一半記錄上的標籤略過（沒有區辨力）；名稱只出現在更長的標籤名稱裡面時不算（「京都」在「東京都」裡）。`--only` 可限定標籤。
+   - 這是**字面**比對：會漏掉同義說法，也可能把巧合算進去，所以才有預覽與復原。
+2. **AI 補標籤**：`search` 的 `untagged=true` 列出還沒有標籤的記錄，AI 讀過後用 `set_tags` 補（來源記為 ai）。花額度，只在有需要時做。
+
+不預先灌入世界知識（AI 本來就懂），圖只記使用者個人的分類與別名。
 
 M7 之前存的記錄沒有標籤，查詢仍須回頭搜內文；`tag_coverage` 負責誠實揭露。批次補標籤（AI 搜尋、列預覽、使用者確認後批次補）維持「已規劃、暫不開發」，等真實資料匯入（M8）後依覆蓋率決定。不預先灌入世界知識（AI 本來就懂），圖只記使用者個人的分類與別名。
 

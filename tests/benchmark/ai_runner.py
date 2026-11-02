@@ -539,6 +539,8 @@ def pick_ids() -> tuple[list[str], list[str]]:
         chosen == "vague"
     ):  # the yardstick for search-semantics changes: vague questions + the weak ones
         return [*bank.VAGUE_IDS, "Q46", "Q47", "Q48", "Q49"], []
+    if chosen == "bigscale":
+        return list(bank.BIG_SET), []
     if chosen == "scale":
         return list(bank.SCALE_IDS), []
     if chosen == "persona":
@@ -563,8 +565,12 @@ def main() -> None:
         raise SystemExit("預估超過上限：縮小題目、減少次數，或明確調高 EMLEK_AI_BUDGET_USD")
 
     out_name = os.environ.get("EMLEK_AI_OUT", "ai-run.json")
-    scale = os.environ.get("EMLEK_AI_SET") == "scale"
-    vault, corpus = build_vault(bank.SCALE_FILLER if scale else 600)
+    kind = os.environ.get("EMLEK_AI_SET")
+    filler = {"scale": bank.SCALE_FILLER, "bigscale": bank.BIG_FILLER}.get(kind or "", 600)
+    started_build = time.perf_counter()
+    vault, corpus = build_vault(filler)
+    built = time.perf_counter() - started_build
+    print(f"vault of {len(corpus.entries)} records built in {built:.0f}s", flush=True)
     rw = write_config(vault, "rw", read_only=False)
     ro = write_config(vault, "ro", read_only=True)
     budget = Budget(cap)

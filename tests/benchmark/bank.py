@@ -215,6 +215,40 @@ CONSENT: dict[str, Consent] = {
 # Scale question (category I): thousands of records match, so a good answer says it only saw part.
 # It runs on its own, on a bigger corpus (EMLEK_AI_SET=scale), because the planted ids differ there.
 SCALE_FILLER = 3000
+BIG_FILLER = 30000  # "tens of thousands of records" run: tokens, time and accuracy at that size
+BIG_SET = (
+    "Q01",
+    "Q02",
+    "Q15",
+    "Q37",
+    "Q44",
+    "Q50",
+    "Q59",
+    "Q64",
+    "Q68",
+    "Q70",
+    "Q71",  # smoke minus Q20/60
+    "Q03",
+    "Q33",
+    "Q34",
+    "Q36",
+    "Q76",
+    "Q78",
+    "Q80",
+    "Q75",  # tags and the scale question
+    "Q46",
+    "Q47",
+    "Q48",
+    "Q49",  # the weak ones
+    "Q82",
+    "Q83",
+    "Q84",
+    "Q85",
+    "Q86",
+    "Q87",
+    "Q88",
+    "Q89",  # vague
+)
 # --- vague questions (category J): the answer records never contain the question's own words
 VAGUE_QUESTIONS = {
     "Q82": ("我最近有跟人吵架嗎", "vague_fight"),

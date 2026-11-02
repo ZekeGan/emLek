@@ -26,7 +26,7 @@
 `emlek` 裝在專案的 `.venv` 裡，沒有加進系統 PATH，所以在 PowerShell 要這樣用：
 
 ```powershell
-cd D:\Programming\Project\emlek
+cd <放專案的資料夾>
 $e = ".\.venv\Scripts\emlek.exe"
 & $e --data-dir C:	emp\emlek-try init
 & $e --data-dir C:	emp\emlek-try save --text "測試用的一筆記錄"

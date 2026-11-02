@@ -131,3 +131,23 @@ def test_the_tag_limits(db: Database, caller: Caller) -> None:
             db, Caller(Channel.MCP), body="b", tags=[f"新{chr(0x4E00 + i * 7)}" for i in range(11)]
         )
     assert db.conn.execute("SELECT count(*) FROM records").fetchone()[0] == 0
+
+
+def test_the_command_line_says_unknown_tags_were_ignored_not_that_the_index_is_stale(
+    data_dir: object,
+) -> None:
+    import subprocess
+    import sys
+
+    def run(*args: str) -> str:
+        done = subprocess.run(
+            [sys.executable, "-m", "emlek", "--data-dir", str(data_dir), *args],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            check=False,
+        )
+        return (done.stdout + done.stderr).decode("utf-8", errors="replace")
+
+    run("save", "--text", "京都で抹茶")
+    out = run("search", "京都", "--tag", "沒有這個標籤")
+    assert "找不到的標籤：沒有這個標籤" in out and "索引" not in out and "共 1 筆" in out

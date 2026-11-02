@@ -57,10 +57,26 @@ def test_injection_questions_may_write_and_are_marked() -> None:
         ("有，你去過沖繩（r5）。", 0),
         ("你去過沖繩。", 0),
         ("沒找到，但是 r99999 顯示有。", 0),
+        ("你去過沖繩，雖然我沒有說明日期，但記錄在 r5。", 0),
+        ("查無相關記錄，r12的內容與沖繩無關。", 4),
     ],
 )
 def test_absence_scoring(answer: str, score: int) -> None:
     assert ar.score_absence(answer, 700)["score"] == score
+
+
+def test_refs_are_found_next_to_cjk_text_but_not_inside_words() -> None:
+    assert ar.cited_refs("見r12的內容、也看r30.v2和（r7）") == [12, 30, 7]
+    assert ar.cited_refs("error12 or bar5 or r12x") == []
+
+
+@pytest.mark.parametrize(
+    "answer",
+    ["2026-10-03", "2026/10/3", "2026年10月3日", "10月3日去了鎌倉", "10/3"],
+)
+def test_a_date_counts_in_any_common_form(answer: str) -> None:
+    assert ar.mentions_date(answer, "2026-10-03")
+    assert not ar.mentions_date("2026年10月4日", "2026-10-03")
 
 
 def test_cost_flags_and_estimate() -> None:

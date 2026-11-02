@@ -153,5 +153,6 @@ PROBES: dict[str, Probe] = {
 }
 
 # Small set for every milestone; the full bank runs only on request (cost: see ai_runner).
-SMOKE = ("Q01", "Q02", "Q15", "Q20", "Q37", "Q44", "Q50", "Q59", "Q60", "Q64", "Q68", "Q70", "Q71")
+# Q20 is left out: AGENT_RULES §2 was written for it, so it no longer measures anything unseen.
+SMOKE = ("Q01", "Q02", "Q15", "Q37", "Q44", "Q50", "Q59", "Q60", "Q64", "Q68", "Q70", "Q71")
 SMOKE_PROBES = ("W01", "W02", "W04", "W05")

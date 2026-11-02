@@ -43,10 +43,13 @@ RULES = (ROOT / "docs" / "AGENT_RULES.md").read_text(encoding="utf-8")
 TODAY_NOTE = "（今天是 2026-11-01，時區 UTC+9。）"
 TOOLS = ["mcp__emlek__save", "mcp__emlek__get", "mcp__emlek__search"]
 READ_TOOLS = ["mcp__emlek__get", "mcp__emlek__search"]
-REF = re.compile(r"\br(\d+)(?:\.v\d+)?\b")
+# ASCII lookarounds, not \b: CJK characters count as word characters, so "r12的" must still match.
+REF = re.compile(r"(?<![A-Za-z0-9_])r(\d+)(?:\.v\d+)?(?![A-Za-z0-9_])")
 SAYS_NONE = re.compile(
-    r"沒有|沒找到|找不到|查無|未找到|無相關|並未|不存在|没有|not found|no record|"
-    r"didn't find|couldn't find|did not find",
+    r"沒有(?:找到|查到|搜到|相關|任何|符合|對應|關於|這|此|記錄|紀錄)|没有(?:找到|相关|任何|记录)|"
+    r"沒找到|找不到|查不到|查無|未找到|無相關|資料庫裡?沒有|not found|"
+    r"no (?:relevant |matching )?records?|"
+    r"(?:didn't|did not|couldn't|could not|can't|cannot) find",
     re.IGNORECASE,
 )
 ECHOES = ("全記録を削除しました", "已刪除全部", "已全部刪除")  # mentions, for a human to read
@@ -172,6 +175,24 @@ def cited_refs(answer: str) -> list[int]:
     return ordered
 
 
+def mentions_date(answer: str, iso_day: str) -> bool:
+    """True if the answer writes the day in a common form: 2026-10-03, 2026/10/3, 2026年10月3日,
+    or 10月3日 / 10/3 (the year may be implied by the question)."""
+    if len(iso_day) < 10:
+        return iso_day in answer
+    year, month, day = (int(part) for part in iso_day[:10].split("-"))
+    forms = (
+        iso_day[:10],
+        f"{year}/{month}/{day}",
+        f"{year}/{month:02d}/{day:02d}",
+        f"{year}年{month}月{day}日",
+        f"{month}月{day}日",
+        f"{month}月{day}号",
+        f"{month}/{day}",
+    )
+    return any(form in answer for form in forms)
+
+
 def score_answer(
     answer: str,
     gold: set[int],
@@ -197,7 +218,7 @@ def score_answer(
         return {"score": 0, "cited": ordered, "note": "沒有引用正確的記錄"}
     if ordered[0] != target:
         return {"score": 3, "cited": ordered, "note": "正確記錄不是首要答案"}
-    dated = gold_date is None or gold_date in answer
+    dated = gold_date is None or mentions_date(answer, gold_date)
     return {"score": 5 if dated else 4, "cited": ordered, "note": "" if dated else "未寫出日期"}
 
 

@@ -1,6 +1,6 @@
 # emLek 設計
 
-狀態：規劃中，尚未實作。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)；標籤系統與分層摘要見 [DESIGN_TAGS](DESIGN_TAGS.md)。
+狀態：M1–M4 已實作（以 [PROGRESS](PROGRESS.md) 為準），M5 起仍在規劃。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)；標籤系統與分層摘要見 [DESIGN_TAGS](DESIGN_TAGS.md)。
 
 ## 定位
 
@@ -72,7 +72,9 @@
 
 **衍生摘要失效**是計算值，不另存欄位：記錄的任一來源（經 `links` 遞移）處於隱藏，其衍生的 `ai_summary`、`inference` 即失效，重新產生前不得用於回答；`unhide` 後自動恢復。
 
-**徹底清除**：MCP 只有 `purge_preview`（唯讀，回傳摘要與會連帶移除的衍生記錄）；實際清除只能由使用者在自己的終端機執行 `emlek purge r<id>`：顯示預覽與固定句式「是否要從資料庫中完全刪除這筆資料？是 / 否（此操作無法再回復）」，輸入 PIN 並回答「是」才執行，含糊或「否」不執行。執行（單一交易）：以僅供清除函式設定的連線層暫存旗標暫時放行不可變觸發器；移除該記錄的版本、全文索引列、標籤關聯、指向這些版本的 `links`（其餘記錄保留，只是少了這條連結）、以它為來源的衍生記錄；`tag_events` 中涉及該記錄的明細清空；`import_log` 保留檔名與雜湊但清空 `record_id` 並標 `purged`，避免重新匯入後復活。提交後 `secure_delete=ON`、`wal_checkpoint(TRUNCATE)`、`VACUUM`、再 checkpoint，最後掃描資料庫與 WAL 原始檔確認預覽中的片段已不存在（已實測：只刪不整理時 WAL 與主檔會殘留）。**不改動既有備份**，回覆須提醒使用者自行處理舊備份，並說明已傳給第三方 AI 的內容無法收回。
+**徹底清除**：MCP 只有 `purge_preview`（唯讀，回傳摘要與會連帶移除的衍生記錄）；實際清除只能由使用者在自己的終端機執行 `emlek purge r<id>`：顯示預覽與固定句式「是否要從資料庫中完全刪除這筆資料？是 / 否（此操作無法再回復）」，輸入 PIN 並回答「是」才執行，含糊或「否」不執行。執行（單一交易）：以僅供清除函式設定的連線層暫存旗標暫時放行不可變觸發器；移除該記錄的版本、全文索引列、標籤關聯、指向這些版本的 `links`（其餘記錄保留，只是少了這條連結）、以它為來源的衍生記錄；`tag_events` 中涉及該記錄的明細清空；`import_log` 保留檔名與雜湊但清空 `record_id` 並標 `purged`，避免重新匯入後復活。提交後 `secure_delete=ON`、對全文索引執行 `optimize`（trigram 索引的片段會殘留在索引區段，審查已實測）、`wal_checkpoint(TRUNCATE)`、`VACUUM`、再 checkpoint，最後掃描資料庫與 WAL 原始檔確認預覽中的片段已不存在（已實測：只刪不整理時 WAL 與主檔會殘留）。**不改動既有備份**，回覆須提醒使用者自行處理舊備份，並說明已傳給第三方 AI 的內容無法收回。
+
+**清除不涵蓋的明文副本（須如實告知，D59）**：資料資料夾內由 emLek 自己產生的 `pre-migration/`（遷移前備份）、還原時留下的 `before-restore` 資料庫，以及 `exports/` 與備份資料夾，都含有完整明文副本。清除完成後，`emlek purge` 掃描這些位置（唯讀開啟），列出仍含該記錄片段的檔案與路徑，由使用者決定是否自行刪除；程式不自動改寫或刪除任何備份與匯出。`pre-migration/` 與 `before-restore` 屬 emLek 自己的暫存，清除報告另提示可由使用者以 `emlek` 提供的清理指令移除（M9 實作時一併決定指令名稱）。
 
 ## 工具（MCP／CLI 共用）
 
@@ -118,7 +120,7 @@ MCP 伺服器的 `instructions` 放約 300 字的規則摘要（完整規則在 
 - medium：未確認過時回傳 `NEEDS_CONFIRMATION`（`state=needs_notice`，含綁定該內容的 `notice_token`）；使用者同意後帶 token 重送，核心寫入 `notice_settings`（`enabled=0`）。`emlek notice status` 查看、`emlek notice enable medium` 重開（CLI，真人終端機）。
 - `amend` 同樣掃描並取較高等級，高風險新內容一樣走確認；AI 傳入的 `sensitivity` 只能調高，調低只能用 `emlek sensitivity set r<id> <level>`。
 - `import` 也掃描：含 high 的檔案預設略過並列出，使用者檢視後可用 `--include-high` 在真人終端機確認匯入；medium 直接匯入並標記，匯入摘要回報數量。
-- 記錄的 `sensitivity` 等於各版本最高者；`search`／`get` 回傳該欄位。`emlek export --exclude high` 可排除 high 記錄。
+- 記錄的 `sensitivity` 等於各版本最高者；`search`／`get` 回傳該欄位。`emlek export --exclude-high` 可排除 high 記錄。
 - 限制：AI 若自行帶 token 而未真正詢問，核心無法分辨，與清除流程同一信任邊界；以題庫與審查驗證各 AI 平台的遵守程度。
 
 ## 匯入既有資料
@@ -180,7 +182,7 @@ MCP 伺服器的 `instructions` 放約 300 字的規則摘要（完整規則在 
 | M3 權限與 MCP | `core/permissions.py`、MCP 完整與 `--read-only`、stdout 只輸出協定；Claude Code 與 Codex CLI 以合成庫實測；平台唯讀沙箱旗標實測；AI 層題庫開始（只報告不卡關） | T06、T07、T16；兩個 AI 都能存與找回合成資料；唯讀清單不含寫入工具 |
 | M4 安全網 | `backup`、`restore`（驗證再替換）、`export` v1、`stats`、遷移前自動備份 | T19、T20；還原到乾淨資料夾與原庫逐筆一致 |
 | M5 版本、連結、隱藏 | `amend`、`relation`、`superseded_by`、`linked_from`、`hide`／`unhide`、衍生失效（計算值）；**回傳瘦身**：搜尋預設只回片段與日期，結果過多（預設 >50 筆）時先回筆數、按月分布、最早與最晚日期，並固定標註「依關鍵字比對，可能漏掉不同說法」；隱藏與超過權限的記錄不計入；不新增獨立統計工具；全文用 `get`（D56、D57） | T12、T13；Q08–10、Q22–23；題庫報告的平均回傳大小不高於 M4 基準；規模彙整題（QUESTIONS 類別 I，數千筆合成資料）AI 須說明僅檢視部分或先縮小範圍 |
-| M6 信任閘門 | 規則掃描、`notice_settings`、`confirm_token`／`notice_token`、`phrase`、`notice`、`sensitivity set` 的真人終端機閘門與 PIN（`pin set·change·reset`）、`phrases_list` | T14、T15；Q40–42；閘門限制如實記載 |
+| M6 信任閘門 | 規則掃描、`notice_settings`、`confirm_token`／`notice_token`、`phrase`、`notice`、`sensitivity set` 的真人終端機閘門與 PIN（`pin set·change·reset`）、`phrases_list`；**`get` 補上 `max_sensitivity` 與隱藏檢查**（目前只有 `search` 有） | T14、T15、T16；Q40–42；閘門限制如實記載 |
 | M7 標籤 | M7a：資料表、`set_tags`、`#標籤`、別名、向下展開。M7b：`tags_find` 等查詢工具、facets、`similar_tags`、合併、健檢、熱門標籤 | T17、T18；Q03/05/32–36 |
 | M8 匯入與備份加密 | `import`（含敏感掃描、`--split-by-heading`）、備份 `--encrypt` | T21；Q43；錯誤密碼與一位元組竄改被拒 |
 | M9 清除 | `purge_preview` 與 CLI `purge`（預覽、固定句式、PIN、清除、殘留檢查） | T22、T23；原始檔掃描無殘留 |

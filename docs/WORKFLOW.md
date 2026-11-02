@@ -22,7 +22,7 @@
 ## 技術決定（D40）
 
 - **目錄**：`pyproject.toml`、`uv.lock`；`src/emlek/`：`cli/`（`parser.py`、`commands/*.py`、`output.py`）、`mcp_server/`（唯一匯入 `mcp` 的地方）、`core/`（`service.py` 每個操作一個函式、`permissions.py`、`errors.py`、`schemas.py`、`db.py`、`vault.py`、`doctor.py`、`timeutil.py`、`migrations/0001_*.sql…`、`search.py`、`sensitivity.py`、`tags.py`、`backup.py`、`export.py`、`purge.py`）、`config.py`、`log.py`；`tests/`：`unit/`、`invariants/`（`test_t01_*.py`…）、`benchmark/`（`synth.py` 合成資料、`test_system_layer.py` 題庫系統層、`test_scale.py` 規模測試；AI 層於 M3 加入）。
-- **權限在核心**：`core/permissions.py` 一張「操作×入口（cli、mcp、mcp-readonly）」的表；每個 `service` 函式收 `ctx: Caller(channel, interactive, readonly)`。外殼只做輸入輸出轉換；MCP 依該表註冊工具，唯讀是工具清單的性質，不是每個工具裡的旗標檢查。
+- **權限在核心**：`core/permissions.py` 一張「操作×入口（cli、mcp、mcp-readonly）」的表；每個 `service` 函式收 `Caller(channel, interactive)`（唯讀是 `MCP_READONLY` 通道）。外殼只做輸入輸出轉換；MCP 依該表註冊工具，唯讀是工具清單的性質，不是每個工具裡的旗標檢查。
 - **封裝**：`[project.scripts] emlek = "emlek.cli:main"`；建置後端用 uv 預設的 `uv_build`。MCP 註冊用安裝後的絕對路徑 `.venv\Scripts\emlek.exe`，不用 `uv run`（啟動慢且受工作目錄影響）；`mcp` 延遲匯入，純 CLI 呼叫保持快速。
 - **CLI**：`argparse`（無依賴、約 30 個子命令足夠，自訂結束碼 0–5 本來就要手動對應）。內文輸入支援 `--body-file` 與標準輸入，明確以 UTF-8 解碼（中文 Windows 終端機可能預設 cp950）。
 - **MCP**：官方 `mcp` 套件包一層約百行的轉接層，版本 `>=2.3,<3`；不自己寫 JSON-RPC。伺服器行程絕不 `print()`，標準輸出只有協定；日誌走檔案或標準錯誤。
@@ -39,7 +39,7 @@
 - 型別：`uv run mypy src`　格式與檢查：`uv run ruff format --check .`、`uv run ruff check .`　測試：快速＝`uv run pytest -m "not slow and not scale"`，完整＝`uv run pytest`。
 - AI 層基準（手動，用訂閱額度，不在預設測試內）：在 `tests/benchmark` 執行 `ai_runner.py`，環境變數見檔頭說明；報告寫到被忽略的 `benchmark-output/`。
 - 受控測試資料：`tests/` 的合成資料與暫存目錄；`vault/`、`backups/`、`exports/` 已被 `.gitignore` 排除。
-- 版本號有程式後才開始；建立 `CHANGELOG.md`（Unreleased 區），不逐批升版。
+- 版本號待首次發布才開始（目前 0.0.0）；`CHANGELOG.md` 只有 Unreleased 區，不逐批升版。
 
 ## 發布前關卡（使用者說要發布時才做）
 

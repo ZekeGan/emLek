@@ -54,6 +54,8 @@ def test_the_stream_parser_keeps_every_tool_call_and_its_result_size() -> None:
         {
             "type": "assistant",
             "message": {
+                "id": "m1",
+                "usage": {"input_tokens": 1},
                 "content": [
                     {
                         "type": "tool_use",
@@ -61,13 +63,20 @@ def test_the_stream_parser_keeps_every_tool_call_and_its_result_size() -> None:
                         "name": "mcp__emlek__search",
                         "input": {"query": "醫院 OR 診所"},
                     }
-                ]
+                ],
             },
         },
         {
             "type": "user",
             "message": {
-                "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "x" * 40}]
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "t1",
+                        "content": "x" * 40,
+                        "is_error": True,
+                    }
+                ]
             },
         },
         {"type": "result", "result": "done", "num_turns": 2, "usage": {}},
@@ -76,7 +85,10 @@ def test_the_stream_parser_keeps_every_tool_call_and_its_result_size() -> None:
     assert parsed is not None
     final, calls = parsed
     assert final["result"] == "done"
-    assert calls == [{"name": "search", "input": {"query": "醫院 OR 診所"}, "result_chars": 40}]
+    assert final["api_requests"] == 1
+    assert calls == [
+        {"name": "search", "input": {"query": "醫院 OR 診所"}, "result_chars": 40, "is_error": True}
+    ]
     assert ai_runner.parse_stream("not json at all") is None
 
 

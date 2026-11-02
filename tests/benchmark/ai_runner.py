@@ -146,6 +146,7 @@ def ask(
         "wall_seconds": round(wall, 1),
         "models": list((data.get("modelUsage") or {}).keys()),
         "tool_calls": tool_calls,
+        "api_requests": data.get("api_requests"),
     }
 
 
@@ -164,8 +165,12 @@ def parse_stream(text: str) -> tuple[dict[str, Any], list[dict[str, Any]]] | Non
     if final is None:
         return None
     calls: dict[str, dict[str, Any]] = {}
+    request_ids: set[str] = set()
     for event in events:
-        content = (event.get("message") or {}).get("content")
+        message = event.get("message") or {}
+        if event.get("type") == "assistant" and message.get("id") and message.get("usage"):
+            request_ids.add(str(message["id"]))  # one API request can be streamed in pieces
+        content = message.get("content")
         if not isinstance(content, list):
             continue
         for block in content:
@@ -177,6 +182,7 @@ def parse_stream(text: str) -> tuple[dict[str, Any], list[dict[str, Any]]] | Non
                     "name": name,
                     "input": block.get("input"),
                     "result_chars": None,
+                    "is_error": False,
                 }
             elif block.get("type") == "tool_result" and block.get("tool_use_id") in calls:
                 body = block.get("content")
@@ -186,7 +192,8 @@ def parse_stream(text: str) -> tuple[dict[str, Any], list[dict[str, Any]]] | Non
                     else len(json.dumps(body, ensure_ascii=False))
                 )
                 calls[block["tool_use_id"]]["result_chars"] = size
-    return final, list(calls.values())
+                calls[block["tool_use_id"]]["is_error"] = bool(block.get("is_error"))
+    return {**final, "api_requests": len(request_ids)}, list(calls.values())
 
 
 def cost_flag(usd: float | None) -> str:

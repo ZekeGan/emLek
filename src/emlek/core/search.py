@@ -456,6 +456,7 @@ def search(
     facets: bool = False,
     untagged: bool = False,
     max_response_chars: int | None = None,
+    compact: bool = False,
 ) -> dict[str, Any]:
     require(caller, "search")
     alternatives = parse_alternatives(query)
@@ -605,6 +606,8 @@ def search(
     used = 0
     for row in page:
         item = _describe(db, row, terms, status_map)
+        if compact:
+            item = _compact(item)
         size = len(json.dumps(item, ensure_ascii=False))
         if max_response_chars and results and used + size > max_response_chars:
             break
@@ -657,6 +660,10 @@ def search(
         extra["tag_coverage"] = (
             tagmod.tagged_share(db.conn, base_ids) if len(base_ids) <= MAX_COVERAGE_SET else None
         )
+    if terms and not tags:
+        named = tagmod.matching(db.conn, terms, max_sensitivity)
+        if named:
+            extra["matching_tags"] = named
     if facets:
         extra["facets"] = tagmod.facets(db.conn, [row["record_id"] for row in ordered])
     if not ordered and (terms or tags):
@@ -788,6 +795,26 @@ def _describe(
         **versions.describe(db.conn, record_id, status_map),
         **_tags_field(db, record_id),
     }
+
+
+_DEFAULTS = {
+    "hidden": False,
+    "sensitivity": "none",
+    "source": None,
+    "invalidated": False,
+    "status": "current",
+}
+
+
+def _compact(item: dict[str, Any]) -> dict[str, Any]:
+    """Leave out fields that carry their default value; the rules say what a missing one means."""
+    slim = {k: v for k, v in item.items() if k not in _DEFAULTS or v != _DEFAULTS[k]}
+    if slim.get("latest_version") == slim.get("matched_version"):
+        slim.pop("latest_version", None)
+    if slim.get("event_time") is None:
+        slim.pop("event_time", None)
+        slim.pop("event_time_precision", None)
+    return slim
 
 
 def _tags_field(db: Database, record_id: int) -> dict[str, Any]:

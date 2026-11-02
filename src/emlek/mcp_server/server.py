@@ -241,6 +241,7 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
                 facets=facets,
                 untagged=untagged,
                 max_response_chars=MAX_SEARCH_CHARS,
+                compact=True,
                 max_sensitivity=max_sensitivity or default_cap,
                 timezone=config.timezone,
             ),

@@ -160,4 +160,4 @@ def test_the_list_is_capped(db: Database, data_dir: Path) -> None:
         )
     text = _instructions(db, data_dir, "high")
     payload = _listed(text)
-    assert len(payload) == tagmod.LIST_LIMIT
+    assert len(payload) == tagmod.INSTRUCTION_LIMIT

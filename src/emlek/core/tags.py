@@ -32,6 +32,7 @@ MAX_TAGS_TOTAL = 5000
 MAX_EXPANSION = 200
 MAX_DEPTH = 3
 LIST_LIMIT = 200
+INSTRUCTION_LIMIT = 50  # how many names the opening instructions carry
 INSTRUCTION_NAME = re.compile(r"^[\w-]{1,24}$")
 _HASHTAG = re.compile(
     r"(?:(?<=^)|(?<=[\s　，。、；：！？（）()\[\]「」『』【】,.;:!?]))#([\w-]{1,64})"
@@ -339,12 +340,37 @@ def _visible_counts(conn: sqlite3.Connection, cap: str) -> dict[int, tuple[int, 
     return {int(t): (int(v or 0), int(a)) for t, v, a in rows}
 
 
+def matching(
+    conn: sqlite3.Connection, terms: list[str], cap: str, limit: int = 5
+) -> list[dict[str, Any]]:
+    """Tags whose name or alias is exactly one of the query words (visible records only), so a
+    search answer can say "there is a tag for this" without a second call."""
+    keys = {normalize(t) for t in terms} - {""}
+    if not keys:
+        return []
+    counts = _visible_counts(conn, cap)
+    found: dict[int, str] = {}
+    for tag_id, name, name_key in conn.execute("SELECT id, name, name_key FROM tags"):
+        if name_key in keys:
+            found.setdefault(int(tag_id), name)
+    for tag_id, alias_key in conn.execute("SELECT tag_id, alias_key FROM tag_aliases"):
+        if alias_key in keys and int(tag_id) not in found:
+            row = conn.execute("SELECT name FROM tags WHERE id = ?", (tag_id,)).fetchone()
+            if row:
+                found[int(tag_id)] = row[0]
+    return [
+        {"name": name, "records": counts.get(i, (0, 0))[0]}
+        for i, name in found.items()
+        if _listable(counts, i) and counts.get(i, (0, 0))[0] > 0
+    ][:limit]
+
+
 def _listable(counts: dict[int, tuple[int, int]], tag_id: int) -> bool:
     visible, total = counts.get(tag_id, (0, 0))
     return total == 0 or visible > 0  # a tag known only from hidden or capped records stays hidden
 
 
-def popular_names(conn: sqlite3.Connection, cap: str, limit: int = LIST_LIMIT) -> list[str]:
+def popular_names(conn: sqlite3.Connection, cap: str, limit: int = INSTRUCTION_LIMIT) -> list[str]:
     """Names for the AI's opening instructions: safe characters only, most used first.
 
     Only tags a person made or has used count (created by the user, or put on a record by the

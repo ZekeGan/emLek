@@ -59,7 +59,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     restore = sub.add_parser("restore", help="以備份取代目前資料庫（必須在你自己的終端機執行）")
     restore.add_argument("file", help="備份檔路徑")
-    restore.add_argument("--yes", action="store_true", help="略過確認提問")
 
     export = sub.add_parser("export", help="匯出完整 JSONL 與可閱讀的 Markdown")
     export.add_argument("--out", help="輸出資料夾（預設為資料夾內的 exports）")

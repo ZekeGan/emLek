@@ -12,8 +12,29 @@ from emlek.core.permissions import Caller, Channel
 from emlek.log import setup_logging
 
 
+def is_real_terminal(stream: object) -> bool:
+    """True only for a console/tty. On Windows `isatty()` is also true for the NUL device, so
+    an agent could redirect all three streams to NUL and pass; GetConsoleMode tells them apart."""
+    if stream is None or not getattr(stream, "isatty", lambda: False)():
+        return False
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+
+        handle = msvcrt.get_osfhandle(stream.fileno())  # type: ignore[attr-defined]
+        mode = wintypes.DWORD()
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetConsoleMode.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        return bool(kernel32.GetConsoleMode(handle, ctypes.byref(mode)))
+    except OSError, ValueError, AttributeError:
+        return False  # cannot prove it is a console: fail closed
+
+
 def cli_caller() -> Caller:
-    interactive = all(s is not None and s.isatty() for s in (sys.stdin, sys.stdout, sys.stderr))
+    interactive = all(is_real_terminal(s) for s in (sys.stdin, sys.stdout, sys.stderr))
     return Caller(Channel.CLI, interactive=interactive)
 
 

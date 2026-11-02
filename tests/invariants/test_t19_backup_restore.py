@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import subprocess
 import sys
@@ -131,13 +132,29 @@ def test_restore_needs_a_person_at_a_terminal(
             str(data_dir),
             "restore",
             str(backup),
-            "--yes",
         ],
         capture_output=True,
         stdin=subprocess.DEVNULL,
         check=False,
     )
     assert run.returncode == 3  # refused before touching anything
+    # All three streams on the null device look like a tty on Windows; they must still be refused.
+    nul = subprocess.run(
+        [sys.executable, "-m", "emlek", "--data-dir", str(data_dir), "restore", str(backup)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    assert nul.returncode == 3
+
+
+def test_a_null_device_is_not_a_terminal() -> None:
+    from emlek.cli.commands.common import is_real_terminal
+
+    with open(os.devnull, "w", encoding="utf-8") as null:
+        assert not is_real_terminal(null)
+    assert not is_real_terminal(None)
 
 
 def test_old_schema_backups_are_upgraded_on_restore(tmp_path: Path) -> None:

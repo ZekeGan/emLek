@@ -45,14 +45,13 @@ def run_restore(args: argparse.Namespace) -> Output:
     data_dir = data_dir_of(args)
     source = Path(args.file)
     info = core_backup.inspect_database(source)
-    if not args.yes:
-        sys.stderr.write(
-            f"將以備份取代目前的資料庫：{info['records']} 筆記錄、{info['revisions']} 個版本。\n"
-            "目前的資料庫會改名保留。輸入「是」繼續：\n"
-        )
-        sys.stderr.flush()
-        if sys.stdin.readline().strip() != "是":
-            raise EmlekError(ErrorCode.NEEDS_CONFIRMATION, "已取消，沒有做任何變更")
+    sys.stderr.write(  # no bypass flag: this command is for a person at a terminal
+        f"將以備份取代目前的資料庫：{info['records']} 筆記錄、{info['revisions']} 個版本。\n"
+        "目前的資料庫會改名保留。輸入「是」繼續：\n"
+    )
+    sys.stderr.flush()
+    if sys.stdin.readline().strip() != "是":
+        raise EmlekError(ErrorCode.NEEDS_CONFIRMATION, "已取消，沒有做任何變更")
     result = core_backup.restore_backup(caller, data_dir, source)
     kept = result["previous_database_kept_as"]
     lines = [f"已還原：{result['records']} 筆記錄、{result['revisions']} 個版本"]

@@ -42,3 +42,4 @@ htmlcov/
 logs/
 pre-migration/
 benchmark-output/
+private/

@@ -179,12 +179,12 @@ MCP 伺服器的 `instructions` 放約 300 字的規則摘要（完整規則在 
 | M2 搜尋與時間 | FTS5＋LIKE 逐詞路由、NFKC、日期範圍、`order`、`kinds`、分頁與總筆數；題庫系統層骨架與合成資料產生器 | T04、T08–T10；Q01/02/06/07/13/15/20 系統層通過；3.6 萬筆（含真實長度）規模測試有記錄 |
 | M3 權限與 MCP | `core/permissions.py`、MCP 完整與 `--read-only`、stdout 只輸出協定；Claude Code 與 Codex CLI 以合成庫實測；平台唯讀沙箱旗標實測；AI 層題庫開始（只報告不卡關） | T06、T07、T16；兩個 AI 都能存與找回合成資料；唯讀清單不含寫入工具 |
 | M4 安全網 | `backup`、`restore`（驗證再替換）、`export` v1、`stats`、遷移前自動備份 | T19、T20；還原到乾淨資料夾與原庫逐筆一致 |
-| M5 版本、連結、隱藏 | `amend`、`relation`、`superseded_by`、`linked_from`、`hide`／`unhide`、衍生失效（計算值） | T12、T13；Q08–10、Q22–23 |
+| M5 版本、連結、隱藏 | `amend`、`relation`、`superseded_by`、`linked_from`、`hide`／`unhide`、衍生失效（計算值）；**回傳瘦身**：搜尋預設只回片段與日期，結果過多時先回筆數與時間分布，全文用 `get`（D56） | T12、T13；Q08–10、Q22–23；題庫報告的平均回傳大小不高於 M4 基準 |
 | M6 信任閘門 | 規則掃描、`notice_settings`、`confirm_token`／`notice_token`、`phrase`、`notice`、`sensitivity set` 的真人終端機閘門與 PIN（`pin set·change·reset`）、`phrases_list` | T14、T15；Q40–42；閘門限制如實記載 |
 | M7 標籤 | M7a：資料表、`set_tags`、`#標籤`、別名、向下展開。M7b：`tags_find` 等查詢工具、facets、`similar_tags`、合併、健檢、熱門標籤 | T17、T18；Q03/05/32–36 |
 | M8 匯入與備份加密 | `import`（含敏感掃描、`--split-by-heading`）、備份 `--encrypt` | T21；Q43；錯誤密碼與一位元組竄改被拒 |
 | M9 清除 | `purge_preview` 與 CLI `purge`（預覽、固定句式、PIN、清除、殘留檢查） | T22、T23；原始檔掃描無殘留 |
-| M10 | 依實際痛點決定（回頭補標籤、分層／主題摘要、觀察清單項目） | — |
+| M10 | 依實際痛點決定（回頭補標籤、分層／主題摘要、觀察清單項目；**M7 後依題庫的花費數據決定**：查無時工具端回「資料裡出現過的相近詞」以減少輪數、規則檔分短版與按需長版；不自建向量資料庫，見 D56） | — |
 
 題庫分系統層（不用 AI、做為卡關依據）與 AI 層（報告用，不卡關），見 BENCHMARK。
 

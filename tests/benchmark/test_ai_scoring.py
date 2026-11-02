@@ -78,3 +78,58 @@ def test_the_stream_parser_keeps_every_tool_call_and_its_result_size() -> None:
     assert final["result"] == "done"
     assert calls == [{"name": "search", "input": {"query": "醫院 OR 診所"}, "result_chars": 40}]
     assert ai_runner.parse_stream("not json at all") is None
+
+
+def test_records_mentioned_only_as_excluded_do_not_lower_the_adjusted_score() -> None:
+    import bank
+    import scoring
+    import synth
+
+    corpus = synth.build_corpus()
+    spec = bank.SPECS["Q66"]  # "last month, did I go to Kyoto?" -> exactly one record
+    gold = next(iter(spec.gold(corpus)))
+    other = next(i for i in range(1, 50) if i != gold)
+    answer = (
+        f"有的，上個月去過：r{gold}（京都で抹茶）。\n\n"
+        "**其他京都紀錄（不在 10 月）**\n"
+        f"- r{other}：另一次\n"
+        f"- r{other + 1}：再一次\n\n"
+        "以上是全部。"
+    )
+    result = scoring.score_spec(spec, corpus, answer)
+    assert result["score"] < 5 and result["adjusted_score"] == 5
+
+
+def test_a_wrong_main_answer_is_not_rescued_by_the_adjustment() -> None:
+    import bank
+    import scoring
+    import synth
+
+    corpus = synth.build_corpus()
+    spec = bank.SPECS["Q66"]
+    gold = next(iter(spec.gold(corpus)))
+    wrong = [i for i in range(1, 60) if i != gold][:3]
+    answer = "有的：" + "、".join(f"r{i}" for i in wrong) + "。"
+    result = scoring.score_spec(spec, corpus, answer)
+    assert result["adjusted_score"] == result["score"] == 0
+
+
+def test_the_adjusted_score_is_never_below_the_raw_score() -> None:
+    import bank
+    import scoring
+    import synth
+
+    corpus = synth.build_corpus()
+    spec = bank.SPECS["Q66"]
+    gold = next(iter(spec.gold(corpus)))
+    # the right record sits on a line that happens to contain a marker word
+    answer = f"r{gold} 是這筆，其他細節見原文。"
+    result = scoring.score_spec(spec, corpus, answer)
+    assert result["adjusted_score"] >= result["score"]
+
+
+def test_without_extras_drops_lines_and_the_block_under_a_marked_heading() -> None:
+    import scoring
+
+    text = "答案 r1\n已排除：r2\n\n**其他相關紀錄**\n- r3\n- r4\n\n結尾 r5"
+    assert scoring.without_extras(text) == "答案 r1\n\n\n結尾 r5"

@@ -371,6 +371,7 @@ def search(
     expand: bool = True,
     facets: bool = False,
     untagged: bool = False,
+    max_response_chars: int | None = None,
 ) -> dict[str, Any]:
     require(caller, "search")
     alternatives = parse_alternatives(query)
@@ -516,8 +517,26 @@ def search(
     more = start_at + limit < len(ordered)
     next_cursor = _encode_cursor(applied, direction, page[-1]["key"]) if page and more else None
 
-    results = [_describe(db, row, terms, status_map) for row in page]
+    results: list[dict[str, Any]] = []
+    used = 0
+    for row in page:
+        item = _describe(db, row, terms, status_map)
+        size = len(json.dumps(item, ensure_ascii=False))
+        if max_response_chars and results and used + size > max_response_chars:
+            break
+        results.append(item)
+        used += size
+    trimmed = len(page) - len(results)
+    if trimmed:  # the answer would be too big to read: hand back fewer, and the way to the rest
+        page = page[: len(results)]
+        next_cursor = _encode_cursor(applied, direction, page[-1]["key"])
     hints = _zero_result_hints(db) if terms and not ordered and not warnings else []
+    if trimmed:
+        hints = [
+            *hints,
+            f"回應太長，只回了前 {len(results)} 筆（共 {len(ordered)} 筆）；"
+            "縮小日期或詞，或用下一頁游標接著看。",
+        ]
     term_hits: dict[str, int] | None = None
     if not ordered and len(terms) >= 2 and not tags:
         term_hits = _term_hits(db, terms[:MAX_TERM_HITS], include_hidden, max_sensitivity)
@@ -567,6 +586,7 @@ def search(
         "hints": hints,
         **({"summary": summary} if summary else {}),
         **({"term_hits": term_hits} if term_hits is not None else {}),
+        **({"results_trimmed": trimmed} if trimmed else {}),
         **extra,
     }
 

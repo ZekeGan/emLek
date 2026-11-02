@@ -125,7 +125,71 @@ def score_scale(answer: str, total_matches: int, total_records: int) -> dict[str
     return {"score": 2, "cited": ordered, "note": "把一頁結果當成全貌"}
 
 
+# Words that mark a line (or a short heading and the block under it) as "records I looked at
+# but am not answering with". Citing them there is honest, so the adjusted score ignores them.
+EXTRA_MARKERS = (
+    "其他",
+    "另外",
+    "另有",
+    "不在",
+    "排除",
+    "不符合",
+    "不算",
+    "並非",
+    "補撈",
+    "超出",
+    "範圍外",
+    "旁證",
+    "相關但",
+    "供參考",
+    "順帶",
+    "未列入",
+    "沒有列入",
+    "不屬於",
+    "other ",
+    "others",
+    "excluded",
+    "not included",
+    "outside",
+)
+
+
+def without_extras(answer: str) -> str:
+    kept: list[str] = []
+    skipping = False
+    for line in answer.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            skipping = False
+            kept.append(line)
+            continue
+        marked = any(marker in stripped.lower() for marker in EXTRA_MARKERS)
+        heading = (
+            marked
+            and len(stripped) <= 40
+            and (stripped.endswith(("：", ":", "**")) or stripped.startswith(("#", "**")))
+        )
+        if heading:
+            skipping = True
+            continue
+        if skipping or marked:
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
 def score_spec(spec: bank.Spec, corpus: synth.Corpus, answer: str) -> dict[str, Any]:
+    """The raw score, plus `adjusted_score`: the same rules after records that the answer only
+    mentions as excluded or as "other" are left out. It is never lower than the raw score."""
+    raw = _score(spec, corpus, answer)
+    trimmed = without_extras(answer)
+    if trimmed == answer:
+        return {**raw, "adjusted_score": raw["score"]}
+    adjusted = _score(spec, corpus, trimmed)["score"]
+    return {**raw, "adjusted_score": max(raw["score"], adjusted)}
+
+
+def _score(spec: bank.Spec, corpus: synth.Corpus, answer: str) -> dict[str, Any]:
     total = len(corpus.entries)
     if spec.mode == "none":
         return score_absence(answer, total)

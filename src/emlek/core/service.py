@@ -97,6 +97,17 @@ def _insert_revision(
     return cursor.lastrowid
 
 
+ASK_HIGH = (
+    "這段內容含有密碼或金鑰等**最高風險**資訊，會以明文存在本機，並可能進入備份與匯出。"
+    "建議改存密碼管理器。是否仍要存入？**是 / 否**"
+)
+ASK_MEDIUM = (
+    "這段內容含個人資料，會以明文存在本機，也會進入備份與匯出。"
+    "同意後之後遇到個人資料不再詢問，可用 `emlek notice enable medium` 重新開啟提醒。"
+    "是否存入？**是 / 否**"
+)
+
+
 class _Gate:
     """What a sensitive write has to pass: the level, and the token to spend (if any)."""
 
@@ -156,6 +167,7 @@ def _sensitivity_gate(
                 "confirm_token" if high else "notice_token": fresh,
                 "categories": categories,
                 "sensitivity": level,
+                "ask_user": ASK_HIGH if high else ASK_MEDIUM,
                 "expires_in": tokens.TTL_SECONDS,
             },
         )

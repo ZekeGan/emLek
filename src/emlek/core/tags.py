@@ -345,13 +345,24 @@ def _listable(counts: dict[int, tuple[int, int]], tag_id: int) -> bool:
 
 
 def popular_names(conn: sqlite3.Connection, cap: str, limit: int = LIST_LIMIT) -> list[str]:
-    """Names for the AI's opening instructions: safe characters only, most used first."""
+    """Names for the AI's opening instructions: safe characters only, most used first.
+
+    Only tags a person made or has used count (created by the user, or put on a record by the
+    user): a tag an AI invented could carry a sentence of instructions into the prompt, so those
+    stay reachable through `tags_list` but never in the opening text."""
     counts = _visible_counts(conn, cap)
+    trusted = {
+        int(r[0])
+        for r in conn.execute(
+            "SELECT id FROM tags WHERE created_by IN ('user', 'system')"
+            " UNION SELECT tag_id FROM record_tags WHERE added_by = 'user'"
+        )
+    }
     ranked = sorted(
         (
             (counts.get(i, (0, 0))[0], name)
             for i, name in conn.execute("SELECT id, name FROM tags")
-            if counts.get(i, (0, 0))[0] > 0 and INSTRUCTION_NAME.match(name)
+            if i in trusted and counts.get(i, (0, 0))[0] > 0 and INSTRUCTION_NAME.match(name)
         ),
         key=lambda pair: (-pair[0], pair[1]),
     )

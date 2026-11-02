@@ -117,6 +117,7 @@ MCP 伺服器的 `instructions` 放精簡的規則摘要（目前約 600 字元�
 **唯讀模式**：`emlek mcp --read-only` 的工具清單只含 `search`、`get`、`phrases_list`、`stats`、`tags_find`、`tags_list`（寫入工具根本不存在，不是被拒絕），供無人看管的排程使用；`max_sensitivity` 預設為 medium。每日簡報見 [DAILY_BRIEFING](DAILY_BRIEFING.md)。
 
 **搜尋規則**：
+- **回應大小上限（D77）**：MCP 的 `search` 單次回應最多約 12000 字元（只回得下的筆數，至少 1 筆）；被截掉時回 `results_trimmed`、一句提示，`next_cursor` 指向最後一筆回傳的記錄，翻頁不漏不重。命令列與核心預設不設上限。三萬筆實測單次回傳最大約 1.8 萬字元，是 token 成長的主因。
 - **關鍵字語法（2026-11-02 起）**：空白分隔的詞在同一組內必須**全部**出現；裸的大寫 `OR` 把查詢分成幾組，**任一組成立**即命中（最多 8 組、全部詞合計 ≤ 20）。小寫的 or、加引號的 "OR" 只是普通的字。回應多個詞但**零結果**時多一個 `term_hits`（每個詞單獨命中幾筆，只算可見記錄）與一句提示，讓 AI 知道哪個詞有資料、該用 OR 或分開搜尋（D75）。`untagged=true` 只看還沒有任何標籤的記錄。
 - 命中單位是**記錄**；預設比對各記錄的最新版本並標示命中的版本，`all_versions=true` 才比對舊版。總筆數的單位也是記錄。
 - 過濾：`kinds`、`tags`、`tag_types`、日期範圍（`date_field=event_time|created_at`，前者看最新版本，後者是記錄首次存入時間；事件時間未知的記錄不排除，另列 `undated` 數量）、`include_hidden`（預設否）、`current_only`（排除已被推翻者，預設只標示）、`max_sensitivity`（超過上限的記錄不回內文，只計入 `withheld`）。
@@ -194,7 +195,7 @@ MCP 伺服器的 `instructions` 放精簡的規則摘要（目前約 600 字元�
 
 `confirm_tokens(token_hash, kind, content_hash, created_at, expires_at, used_at)`。確認碼為 128 位元隨機值，只存 SHA-256；`content_hash`＝SHA-256(操作名稱＋記錄編號（`save` 為空）＋內文)；10 分鐘過期；每次簽發時順手清掉一天前的舊列。
 
-1. 有效等級 high：`save`／`amend` 不帶碼 → `NEEDS_CONFIRMATION`，`error.data` 含 `state=needs_confirmation`、`confirm_token`、`categories`、`expires_in`。帶碼重送：驗證通過（存在、種類相符、未用過、未過期、內容雜湊相符）才寫入，且「標記已用」與寫入在**同一交易**（寫入失敗則碼不被消耗）。每次都要問，不可關閉。
+1. 有效等級 high：`save`／`amend` 不帶碼 → `NEEDS_CONFIRMATION`，`error.data` 含 `state=needs_confirmation`、`confirm_token`、`categories`、`ask_user`（要原樣問使用者的固定句式，與 AGENT_RULES §1 同一份文字，測試會比對）、`expires_in`。帶碼重送：驗證通過（存在、種類相符、未用過、未過期、內容雜湊相符）才寫入，且「標記已用」與寫入在**同一交易**（寫入失敗則碼不被消耗）。每次都要問，不可關閉。
 2. 有效等級 medium 且 `notice_settings.enabled=1`：同上，`state=needs_notice`、`notice_token`；通過後寫入並把 `enabled` 設為 0、記 `acknowledged_at`。**等級層級共用**：同意一次，所有 medium 類別都不再問（Q41 的「同類」指同一等級）。`notice enable medium`（需 PIN）重新開啟。
 3. 同時命中 high 與 medium 時只走 high。任何驗證失敗一律回 `TOKEN_INVALID`，訊息相同，不透露是哪一項不符。碼不寫入日誌。
 

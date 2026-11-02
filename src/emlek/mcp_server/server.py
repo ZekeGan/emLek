@@ -43,10 +43,11 @@ INSTRUCTIONS = (
     "答「現在的想法」用 status 為 current／reaffirmed 者，並交代被推翻的過程。\n"
     "8. 回傳含 summary 表示超過 50 筆、你只拿到一頁：轉述時帶出 summary.note，"
     "並說明實際讀了幾筆。\n"
-    "9. 回 NEEDS_CONFIRMATION：照 AGENT_RULES 的固定句式問使用者，答「是」才帶 error.data "
-    "裡的 token 重送；不可自行帶碼，也不可替使用者回答。\n"
+    "9. 回 NEEDS_CONFIRMATION：把 error.data.ask_user 的句子原樣問使用者，答「是」才帶 "
+    "error.data 裡的 token 重送；不可自行帶碼，也不可替使用者回答。\n"
     "10. 存入時順手加標籤，優先用下列既有標籤；回 tags_pending 就改用既有的。情緒標籤是推測。"
 )
+MAX_SEARCH_CHARS = 12000  # one search answer is trimmed to about this many characters
 MAX_GET_CHARS = 8000  # longer bodies are cut; the rest is read with `offset`
 
 API_VERSION = 1
@@ -238,6 +239,7 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
                 expand=expand,
                 facets=facets,
                 untagged=untagged,
+                max_response_chars=MAX_SEARCH_CHARS,
                 max_sensitivity=max_sensitivity or default_cap,
                 timezone=config.timezone,
             ),

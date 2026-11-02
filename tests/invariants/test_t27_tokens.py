@@ -231,3 +231,14 @@ def test_reads_respect_the_sensitivity_cap_everywhere(db: Database, caller: Call
     assert reply in [i["ref"] for i in service.get(db, caller, ref=quiet)["linked_from"]]
     found = search.search(db, caller, query="共通語", max_sensitivity="medium")
     assert found["withheld"] == 2 and loud not in {r["ref"] for r in found["results"]}
+
+
+def test_the_refusal_carries_the_exact_question_to_ask(db: Database, caller: Caller) -> None:
+    from pathlib import Path
+
+    high = _asked(db, caller, SECRET)
+    medium = _asked(db, caller, PHONE)
+    assert high["ask_user"] == service.ASK_HIGH and medium["ask_user"] == service.ASK_MEDIUM
+    rules = (Path(__file__).resolve().parents[2] / "docs" / "AGENT_RULES.md").read_text("utf-8")
+    assert service.ASK_HIGH in rules and service.ASK_MEDIUM in rules  # one wording, two places
+    assert "abc12345" not in json.dumps(high) and "0912" not in json.dumps(medium)

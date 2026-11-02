@@ -4,89 +4,52 @@
 
 ## 現況
 
-- 模式：**MODE B；M1–M5 已完成並經使用者驗收（M5 於 2026-11-02 通過）**。**M6 已實作並經使用者驗收（2026-11-02 通過），程式版本升為 0.1.0**；**M7 已實作（2026-11-02 使用者下令開始），待使用者驗收**；M8 須等使用者下一道明確指示。
-- 已有 `src/emlek`（init、doctor、save、amend、hide、unhide、get、search、reindex、mcp、backup、restore、export、stats、遷移 0001–0005；pin、phrase、notice、sensitivity、tag、tags）與 502 項測試（快速）加 1 項 36000 筆規模測試；只有合成測試資料。版本號 0.0.0，尚未發布。
-- Git：`main`，遠端 `origin` = https://github.com/ZekeGan/emLek.git（公開）；是否同步以 `git status` 為準。敏感詞檢查掛在本機 pre-commit 與 pre-push，標記清單目前是空的。
+- 模式：**MODE B；M1–M6 已完成並經使用者驗收，程式版本 0.1.0（尚未對外發布、未打標籤）**。**M7 標籤已實作，待使用者驗收**。M8 須等使用者下一道明確指示。
+- 已有 `src/emlek`：`init`、`doctor`、`save`、`amend`、`hide`／`unhide`、`get`、`search`、`reindex`、`mcp`、`backup`、`restore`、`export`、`stats`、`pin`、`phrase`、`notice`、`sensitivity`、`tag`、`tags`；結構遷移 0001–0005；502 項測試（快速）加 1 項 36000 筆規模測試；只有合成測試資料。
+- Git：`main`，遠端 `origin`（公開的 GitHub 倉庫）；是否同步以 `git status` 為準。敏感詞檢查掛在本機 pre-commit 與 pre-push，清單內容只存在本機、不寫進文件。
 - 環境（已驗證）：Python 3.14.10（uv 0.13.6）、SQLite 3.53.1；套件由 `uv.lock` 鎖定；Claude Code 2.1.316；Codex CLI 0.166.0 已安裝並登入，但使用者的 ChatGPT 用量已用完，**2026-11-04 22:58 後才能測**。
 - 未驗證：Codex 端的 MCP 連線與沙箱；真實資料效能。
-- 已知限制：備份與匯出目前是明文（加密於 M8）；`restore` 只檢查終端機，PIN 於 M6；**真實資料（含舊日記）要等 M6 完成**，且只用使用者貼出的路徑。
+- 已知限制：備份與匯出目前是明文（加密於 M8）；資料庫本體明文（Windows 家用版無 BitLocker，D44）；**真實資料（含舊日記）的條件已滿足（M4、M6 完成），仍只用使用者貼出的路徑**。
 
 ## 使用者已決定
 
-PIN 強化採用（M6）；清除最終確認只在使用者自己的終端機（M9，MCP 只有預覽）；備份放不同磁碟（預設 `D:\emlek-backups`）；Windows 家用版沒有 BitLocker，資料庫本體明文（D44，`doctor` 會提示）；手機與遠端使用等 AGENT 技術成熟後再評估，目前一律本機；題庫第一輪擴充（A、B、C、F、G 類）立即做，其餘類別對應功能完成時補（D55）；降低提問額度消耗列入計畫（D56）。
+清除最終確認只在使用者自己的終端機（M9，MCP 只有預覽）；備份放不同磁碟（預設 `D:\emlek-backups`）；手機與遠端使用等 AGENT 技術成熟後再評估，目前一律本機；題庫其餘類別對應功能完成時補（D55）；降低提問額度消耗列入計畫（D56）；熱門標籤名稱放進 AI 開場說明（D71）；M5 回傳量標準 ≤ M4 的 105%（D65）；規則：新需求或新功能改動檔案後同批優化文件，不必先問（D60）。
 
 ## 題庫現況
 
-42 題 AI 層（另有語氣集 48 題、規模題 Q75）加 10 個寫入探針（清單見 [QUESTIONS](QUESTIONS.md)），系統層 33 題全 5 分。AI 層基準與花費預算見 [BENCHMARK](BENCHMARK.md)、D55：haiku 每次約 $0.002；寫入探針 10/10；惡意內容未被帶著寫入；遠義詞（Q48、Q49）仍弱，等 M7。已知評分限制：集合題把「列為不符合」的記錄也算引用，會低估答對的答案（Q66、Q70）。
+AI 層核心與擴充 51 題（含 M7 新增 9 題標籤題）、語氣集 48 題、規模題 Q75、同意對話 5 段、寫入探針 10 個（清單見 [QUESTIONS](QUESTIONS.md)）；系統層 42 題全 5 分。haiku 每題約 $0.002。已知評分限制：集合題把「列為不符合」的記錄也算引用，會低估答對的答案（Q36、Q66、Q70、Q78）。結果與歷次比較見 [BENCHMARK](BENCHMARK.md)，各里程碑驗收紀錄見 [HISTORY](HISTORY.md)。
+
+## M7 待驗收
+
+**做了什麼**：標籤（階層、別名、`#標籤`、向下展開、`match`、facets、覆蓋率 `tag_coverage`、近似名稱不新建而回 `tags_pending`）、`tags_find`／`tags_list`／`set_tags`／`tag_link`／`tag_alias`、命令列 `tag`／`tags`、匯出含標籤、`doctor` 顯示標籤狀態、熱門標籤名稱進 AI 開場說明。規格見 [DESIGN_TAGS](DESIGN_TAGS.md)。
+
+**實測**：502 項測試全過；36000 筆規模下標籤搜尋 0.65–0.87 秒；AI 層共同 42 題每題輸入量為 M6 的 **108.4%**（標準 ≤110%，達標）；新標籤題 9 題中 6 題 5 分，Q36、Q78、Q80 答案經人工閱讀正確，但被集合評分扣到 1–2 分；寫入探針 10/10、同意對話 5/5；AI 工具執行 `tag merge`／`remove` 被拒。過程中修掉兩個自己造成的缺陷：測試工具清單漏了新工具（第一次結果作廢）、帶不存在的標籤名會讓文字搜尋歸零。
+
+**待查的退步**：共同題平均分 4.60→4.29。Q46（看醫生）在 M5、M6 都是 5 分，M7 的 6 次測量全部偏低（2、0、0、0、0、0），**疑似 M7 造成，原因未證實**（曾追蹤到一次 AI 用「醫院 OR 診所」寫法，emLek 視為全部詞都要出現；但這不能解釋 M6 為何沒有）。Q47、Q48、Q56、Q67 在重複測量中上下跳動。需要做 A/B（關掉標籤工具與開場清單）查證。
+
+**驗收清單**（用拋棄式資料夾 `C:\temp\emlek-m7`；`$e = ".\.venv\Scripts\emlek.exe"; $d = "C:\temp\emlek-m7"`）：
+1. `& $e --data-dir $d init`（輸入兩次 PIN）；`& $e --data-dir $d save --text "今天在京都喝抹茶 #旅行" --tag 京都 --tag 抹茶` → 顯示「標籤：旅行、京都、抹茶」。
+2. `save --text "日本のメモ" --tag 日本`；`tag link 日本 京都`；`search --tag 日本` → 找到 2 筆，並顯示「標籤展開：日本、京都」與「標籤覆蓋」。
+3. `tag alias kyoto 京都`；`search --tag kyoto` → 找到「京都」那筆。
+4. `save --text "大阪の話" --tag 京都市` → 顯示「未新增標籤「京都市」：與既有標籤相近（京都）」；加 `--allow-new 京都市` 才會新增。
+5. `search 京都 --tag 沒有這個標籤` → 仍找到京都的記錄，並提示找不到該標籤。
+6. `tags find 抹`、`tags list`、`tags audit`、`doctor`（看到 `tags` 一行）。
+7. `tag merge 京都市 京都`（要先有「京都市」標籤）→ 要輸入 PIN 再回答「是」；之後 `search --tag 京都市` 仍找得到（舊名成為別名）。
+8. 在 Claude Code 請我執行 `emlek tag merge 京都 抹茶`，會被拒。
+9. 清理：`Remove-Item -Recurse -Force $d`。
 
 ## 下一步
 
-1. ~~M5 版本、連結、隱藏~~ **已完成並通過驗收**（結果見下「M5 驗收紀錄」）。原規劃：`amend`、`relation`、`superseded_by`、`linked_from`、`hide`／`unhide`、衍生摘要失效；**加上回傳瘦身**（搜尋預設片段、過多先回筆數與分布，D56）。完成標準：T12、T13、T26、Q08–Q10、Q22–Q23，且題庫平均回傳大小不高於 M4 基準，另加規模彙整題（數千筆合成資料、命中上千筆，AI 不可把前幾十筆當全貌；QUESTIONS 類別 I）。M5 完成時補 E／H（含糊、多輪）與版本題。
-2. ~~M6 信任閘門~~ **已完成並通過驗收，版本 0.1.0**（見下「M6 驗收紀錄」）→ ~~M7 標籤~~ **已實作，待你驗收**（見下「M7 待驗收」）→ M8 匯入與備份加密 → M9 清除 → M10 依數據決定 → M11 發布準備（見 DESIGN）。
-
-## M7 待驗收（2026-11-02）
-
-**做了什麼**：標籤（資料表、`save`／`amend`／`set_tags` 的 `tags`、`#標籤` 解析、別名、上下層、向下展開、`match=any|all`、`tag_types`、`facets`、覆蓋率 `tag_coverage`、近似名稱不新建而回 `tags_pending`）、查詢工具 `tags_find`／`tags_list`（含階層目錄與共現）、`tag_link`／`tag_alias`、命令列 `tag add／rm／link／alias／merge／remove`、`tags find／list／audit`、匯出含標籤、`doctor` 顯示標籤狀態、熱門標籤名稱放進 AI 開場說明（只含名稱，D71）。**修正一個我自己做出的缺陷**：搜尋時若帶了不存在的標籤名，原本會讓有效的文字搜尋也變成 0 筆（AI 因此誤報「查無」）；現在不存在的標籤會被忽略並以 `unknown_tags_ignored` 警告。
-
-**實測**：快速測試 502 項全過；ruff、mypy 乾淨。36000 筆、每筆約 3 個標籤的規模測試：標籤搜尋 0.65–0.87 秒（含展開 20 個子標籤、兩標籤交集、facets），標籤加關鍵字 0.03 秒。AI 層（haiku，單次，$0.123）：共同的 42 題每題平均輸入量為 M6 基準的 **108.4%**（標準 ≤110%，**達標**）；新的標籤題 Q03、Q33、Q34、Q35、Q76、Q77 全 5 分，Q36、Q78、Q80 的**答案經人工閱讀是正確的**（找對記錄、如實說明標籤覆蓋率很低），但因同時提到被排除的記錄被集合評分扣到 1–2 分（已知評分限制）；寫入探針 10/10，同意對話 5/5。AI 的工具呼叫被拒的次數：第一次跑有 19 題（測試工具清單漏了新工具，已修並重跑）。
-**退步與誤差**：共同題平均分 4.60→4.29，主要是 Q46（看醫生）、Q48（運動）、Q67（去年夏天）在單次測量中上下跳動；逐步追蹤 Q46 發現 AI 有時用「醫院 OR 診所」這種寫法，而 emLek 把它當成「全部詞都要出現」所以 0 筆——**這是既有弱點，不是 M7 造成**，列入觀察清單（見 BENCHMARK）。Q20 維持 5。
-**尚未做**：用你的凍結題第 17（映画）、22（乒乓）、28（煤爐）觀察別名與音譯的實際效果，需要先為這幾題建合成資料（你尚未要求）；補標籤工具維持暫不開發，真實資料匯入（M8）後依覆蓋率決定。
-
-**驗收清單**（在自己的 PowerShell，用拋棄式資料夾 `C:\temp\emlek-m7`；`$e` 與前面相同；PIN 步驟需要已 `init` 設過 PIN）：
-1. `& $e --data-dir $d init`（輸入兩次 PIN）；`& $e --data-dir $d save --text "今天在京都喝抹茶 #旅行" --tag 京都 --tag 抹茶` → 顯示「標籤：旅行、京都、抹茶」（`#旅行` 是你打的字，算 user；另兩個是 `--tag` 加的）。
-2. `& $e --data-dir $d save --text "日本のメモ" --tag 日本`；`& $e --data-dir $d tag link 日本 京都`；`& $e --data-dir $d search --tag 日本` → 找到 2 筆，並顯示「標籤展開：日本、京都」與「標籤覆蓋」。
-3. `& $e --data-dir $d tag alias kyoto 京都`；`& $e --data-dir $d search --tag kyoto` → 找到「京都」那筆（別名生效）。
-4. 近似名稱：`& $e --data-dir $d save --text "大阪の話" --tag 京都市` → 顯示「未新增標籤「京都市」：與既有標籤相近（京都）」；加上 `--allow-new 京都市` 才會新增。
-5. 不存在的標籤不會吃掉文字搜尋：`& $e --data-dir $d search 京都 --tag 沒有這個標籤` → 仍找到京都的記錄，並提示找不到該標籤。
-6. `& $e --data-dir $d tags find 抹`、`tags list`、`tags audit`、`doctor`（看到 `tags` 一行）。
-7. 合併：`& $e --data-dir $d tag merge 京都市 京都`（先要先有「京都市」標籤，可在第 4 步用 `--allow-new` 建立）→ 要輸入 PIN 再回答「是」；之後 `search --tag 京都市`（舊名稱成為別名，仍找得到）。
-8. 在 Claude Code 請我執行 `emlek tag merge 京都 抹茶`，會被拒（我已試過：結束碼 3）。
-9. 清理：`Remove-Item -Recurse -Force $d`。
-
-## M6 驗收紀錄（2026-11-02 通過）
-
-**做了什麼**：PIN（存在資料夾內的 `security.json`，不在資料庫；`pin set／change／reset`，復原碼）、危險命令閘門（真人終端機加 PIN：`restore`、`phrase add／set／remove`、`notice enable`、`sensitivity set`）、觸發語句（`phrase list` 不需 PIN；MCP `phrases_list`）、敏感掃描（high／medium）與確認碼（`save`／`amend` 的 `confirm_token`、`notice_token`）、`get` 的敏感度上限、`doctor` 顯示 PIN 狀態與失敗次數、`restore` 保留目前的 PIN 設定。
-
-**實測**：快速測試 413 項全過（新增 T14、T15、T27、T28 共約 130 項）；ruff、mypy 乾淨。掃描效能：1 MiB 文字 0.5 秒內（初版有二次方時間的問題，已修並有測試）。AI 層（haiku）：五段同意對話（C01–C05，對應 Q40–Q42）**5/5**——AI 對密碼用固定句式詢問、答「否」不存、答「是」存成 high；電話第一次詢問並存成 medium、第二次不再問；重新開啟提醒後又問。Claude Code 的 PowerShell 工具執行 `phrase add`、`pin set`、`restore` 皆被拒（結束碼 3）。
-**沒有驗證的**：在真正的終端機輸入 PIN（`getpass`）——自動化測試用替身取代，必須由你驗收。
-
-**驗收清單**（已由使用者完成；在自己的 PowerShell，用拋棄式資料夾 `C:\temp\emlek-m6`；順序重要，第 6 步最後做）：
-1. `cd <專案資料夾>`；`$e = ".\.venv\Scripts\emlek.exe"; $d = "C:\temp\emlek-m6"`；`& $e --data-dir $d init` → 輸入兩次 PIN（至少 6 字元）；畫面顯示**復原碼**，抄下來。
-2. `& $e --data-dir $d doctor` → `pin` 一行為「已設定」。
-3. `& $e --data-dir $d phrase list` → 看到 6 條預設語句（save 四條、purge 一條、exclude 一條）。
-4. `& $e --data-dir $d phrase add save "幫我存一下"` → 要求輸入 PIN，成功後顯示已新增；再 `phrase list` 看得到。
-5. 敏感內容：`& $e --data-dir $d save --text "網站密碼：abc12345"` → 被拒，畫面給 `confirm_token`；用 `--confirm-token <那串>` 重送 → 存入；同一個碼再送一次 → `TOKEN_INVALID`。電話同理：`save --text "小明 0912-345-678"` → 要 `--notice-token`；同意後再存另一支電話不再詢問；`notice enable medium`（輸入 PIN）後又會詢問。
-6. 鎖定：`phrase remove 1` 並**故意連輸 5 次錯誤 PIN** → 第 5 次顯示已鎖定 5 分鐘；之後輸入正確 PIN 也被拒；`doctor` 的 `pin` 變成注意並顯示錯誤次數。
-7. （5 分鐘後或另開資料夾）`backup` 之後 `restore <備份檔>` → 要輸入 PIN 再回答「是」。
-8. 在 Claude Code 這個視窗請我執行 `emlek phrase add save 全部都存`，我會示範被拒（我已經試過一次：結束碼 3）。
-9. 通過後清理：`Remove-Item -Recurse -Force $d`。
-
-## M5 驗收紀錄（2026-11-02 通過）
-
-**做了什麼**：`amend`（新增版本，防互相覆蓋）、`hide`／`unhide`、連結（推翻、支持等，由新指向舊）、記錄狀態（現行／被推翻／重新確認）、`current_only`、結果超過 50 筆附摘要、長內容分段讀取、匯出含連結、MCP 回應加 `api_version`；命令列與 MCP 都有。
-
-**實測**：快速測試 280 項全過（含補上的 T02 與 T08 隱藏／修改情境）；ruff、mypy（含 tests）乾淨。AI 層（haiku，單次，共 $0.104）：Q08、Q09、Q10（留學看法變化）全部 5 分；寫入探針 10/10；規模題 Q75（3000 筆、617 筆符合）5 分，AI 說明「只讀了 100 筆、不是全貌」並給出真實總數。與 M4 基準比較（兩邊共同的 39 題）：平均分 4.33→4.59；每題平均輸入量（含快取）32,482→33,410 token，**高了約 2.9%**。依你 2026-11-02 的決定，標準放寬為「不高於 M4 的 105%」，**達標**。原因是多了 3 個工具與規則摘要變長；M5 本身沒有減少單題讀取量，真正的瘦身留待 M10 依數據決定。
-**仍弱**：Q47、Q48、Q49（遠義詞，等 M7）、Q56（「兩週前」存入日與事件日的換算）、Q67（「去年」被當成今年，仍是時間推理失誤）。
-
-**30 秒驗收**（在自己的 PowerShell，沿用先前的 `$e` 與測試資料夾）：
-1. `& $e --data-dir C:\temp\emlek-try save --text "我決定去留學"` → 記下編號 rN。
-2. `& $e --data-dir C:\temp\emlek-try save --text "我改變主意，不去了" --link rN:supersedes` → 再 `get rN`，應看到「被…推翻」。
-3. `& $e --data-dir C:\temp\emlek-try hide rN` 後 `search 留學` 應找不到；`unhide rN` 後應找回。
-4. `& $e --data-dir C:\temp\emlek-try amend rN --text "我決定去日本留學"` → `get rN --version 1` 應仍是舊文字。
-
-## 計畫審查發現（2026-11-02，1 個 agent 唯讀審查；使用者同意後已處理，見下）
-
-已實測：① ~~終端機閘門在 Windows 可被繞過~~ **已修並驗收（2026-11-02）**：三條串流導向 NUL 時 `isatty()` 仍為真；現改用 Windows 主控台 API（`GetConsoleMode`）判斷，無法證明是主控台就拒絕，並移除 `restore --yes`。測試涵蓋 NUL 導向與管線；**使用者已於 2026-11-02 在自己的 PowerShell 驗收通過**（init、save、backup、restore 正常）。② ~~清除規格缺口~~ **已補規格（D59，2026-11-02）**：FTS `optimize`、清除後掃描並列出資料夾內的明文副本；T22 已更新，實作在 M9。③ ~~題庫評分過寬~~ **已修（D59）**：引用解析、「查無」判定、日期寫法；Q20 移出快速集。分數與舊報告不可直接比較。
-文件問題：已清理（DESIGN／README 狀態、AGENTS 推送條款、匯出旗標、WORKFLOW 簽章、CHANGELOG、`get` 納入 M6）。**M5 前優化已完成（D61）**：連結語意與結果摘要格式已寫進 DESIGN（「版本與連結語意（M5）」），T12／T13／T26 與 AGENT_RULES 的 `summary`、`status` 規則已補，DESIGN 的未來需求移到 ROADMAP、題庫待補類別移到 QUESTIONS_BACKLOG，評分程式拆成 `scoring.py`。**仍待補**：備份加密格式（分塊 AES-GCM、scrypt `maxmem`、暫存檔）未定，M8 前補。題庫另有「只靠 MCP `instructions` 測試」與系統層「原始問法」測試尚未做。
-建議順序：~~修閘門 → 補清除規格與 T22 → 修題庫 → 清理過時敘述~~（皆完成）→ M5 開始前補連結語意規格。
+1. **使用者驗收 M7**，通過後推送（目前本機領先遠端多個 commit，使用者已要求先整理文件再推送）。
+2. 查 Q46 退步（A/B）；用 Opus 審查文件與策略，依回覆調整（進行中）。
+3. M8 匯入與備份加密（開始前先審規格，備份加密格式未定）→ M9 清除 → M10 依數據決定 → M11 發布準備（見 DESIGN）。
 
 ## 待使用者
 
-- **敏感詞清單**（M6 前、真實資料前）：推送前檢查目前清單是空的，等於沒檢查。請告訴我哪些詞屬敏感（電話、住址、真實路徑、帳號、人名等），我會記進本機清單，不寫進文件。
-
-- 凍結驗收集：已收到 30 句真實問法（達目標上限；使用者仍可補），存在 `private/frozen-questions.md`（**被 .gitignore 排除，不進公開倉庫**，內容涉及個人生活與觀點）。另有已完成的「多樣語氣集」（`tests/benchmark/personas.py`，六種人物 × 8 題 = 48 題，合成、可用來調校，與凍結集分開計分；執行用 `EMLEK_AI_SET=persona`）。凍結集只用來驗收，不用來調規則。
-- 已採用 AI 層「不理想」門檻（使用者 2026-11-02 同意）：任一非模糊題單次 0 分，或同一里程碑 AI 層平均低於 4 分，就提醒使用者評估觀察清單；單題牌價超過 $0.15 也提醒。
+- **敏感詞清單**：請把具體的電話、住址、人名、帳號等寫進本機 `.git\sensitive-terms.txt`（一行一個），目前推送前檢查等於沒有擋這些；填好後告訴我，我可以掃描整個倉庫與歷史。
+- 凍結驗收集：已收到 30 句真實問法，存在 `private/frozen-questions.md`（**被 .gitignore 排除，不進公開倉庫**）。第 17（映画）、22（乒乓）、28（煤爐）要先建合成資料才能觀察別名效果，你尚未要求。凍結集只用來驗收，不用來調規則。語氣集（`tests/benchmark/personas.py`，六種人物 × 8 題）是合成的、可調校，與凍結集分開計分。
+- AI 層「不理想」門檻（使用者同意）：任一非模糊題單次 0 分，或同一里程碑 AI 層平均低於 4 分，就提醒使用者評估觀察清單；單題牌價超過 $0.15 也提醒。
 
 ## 觀察清單（到時要主動提醒使用者）
 
-低於門檻時評估：語意搜尋、近期加權排序、主題摘要（見 BENCHMARK）；以及降低額度消耗的後續項目（D56）。其他已記錄的缺口見 [ROADMAP](ROADMAP.md) 第 6 項。
+低於門檻時評估：語意搜尋、近期加權排序、主題摘要（見 BENCHMARK）；降低額度消耗的後續項目（D56）；**拼字容錯**（凍結集第 18、25 句）；**「A OR B」寫法**（AI 常用，emLek 視為全部詞都要出現）。其他已記錄的缺口見 [ROADMAP](ROADMAP.md) 第 6 項。

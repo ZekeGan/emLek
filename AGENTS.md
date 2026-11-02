@@ -14,7 +14,7 @@ emLek 是本機、單一使用者的個人長期文字記憶庫。AI 可存入�
 ## 讀取順序（省 token）
 
 - 每次：本檔＋[PROGRESS](docs/PROGRESS.md)。
-- 依任務再讀（按標題搜尋相關章節，不整份讀）：規格→[DESIGN](docs/DESIGN.md)；標籤與查詢定位→[DESIGN_TAGS](docs/DESIGN_TAGS.md)；AI 行為與工具語意→[AGENT_RULES](docs/AGENT_RULES.md)；寫程式、測試、驗證、發布→[WORKFLOW](docs/WORKFLOW.md)；每日簡報→[DAILY_BRIEFING](docs/DAILY_BRIEFING.md)；測試題庫清單→[QUESTIONS](docs/QUESTIONS.md)（待補類別與凍結集規則→[QUESTIONS_BACKLOG](docs/QUESTIONS_BACKLOG.md)）；暫不開發的未來需求→[ROADMAP](docs/ROADMAP.md)；評分、成本與結果→[BENCHMARK](docs/BENCHMARK.md)；基本正確性測試→[TEST_PLAN](docs/TEST_PLAN.md)；追溯「為何這樣決定」→[DECISIONS](docs/DECISIONS.md)。
+- 依任務再讀（按標題搜尋相關章節，不整份讀）：規格→[DESIGN](docs/DESIGN.md)；標籤與查詢定位→[DESIGN_TAGS](docs/DESIGN_TAGS.md)；AI 行為與工具語意→[AGENT_RULES](docs/AGENT_RULES.md)；寫程式、測試、驗證、發布→[WORKFLOW](docs/WORKFLOW.md)；每日簡報→[DAILY_BRIEFING](docs/DAILY_BRIEFING.md)；測試題庫清單→[QUESTIONS](docs/QUESTIONS.md)（待補類別與凍結集規則→[QUESTIONS_BACKLOG](docs/QUESTIONS_BACKLOG.md)）；暫不開發的未來需求→[ROADMAP](docs/ROADMAP.md)；評分、成本與結果→[BENCHMARK](docs/BENCHMARK.md)；基本正確性測試→[TEST_PLAN](docs/TEST_PLAN.md)；追溯「為何這樣決定」→[DECISIONS](docs/DECISIONS.md)；各里程碑的驗收紀錄→[HISTORY](docs/HISTORY.md)。
 - [docs/archive](docs/archive/) 是舊完整版藍圖，**非現行規格**；僅在使用者要求或 DESIGN 指名時才讀。
 - 搜尋時排除 `docs/archive`、`.venv`。已讀且未變的內容不重讀。
 

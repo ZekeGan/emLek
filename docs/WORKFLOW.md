@@ -36,7 +36,7 @@
 ## 專案設定
 
 - 環境：Python 3.14（uv 管理，`.python-version` 已固定）。依賴由 `uv.lock` 鎖定。
-- 型別：`uv run mypy src`　格式與檢查：`uv run ruff format --check .`、`uv run ruff check .`　測試：快速＝`uv run pytest -m "not slow and not scale"`，完整＝`uv run pytest`。
+- 型別：`uv run mypy（設定已含 src 與 tests）`　格式與檢查：`uv run ruff format --check .`、`uv run ruff check .`　測試：快速＝`uv run pytest -m "not slow and not scale"`，完整＝`uv run pytest`。
 - AI 層基準（手動，用訂閱額度，不在預設測試內）：在 `tests/benchmark` 執行 `ai_runner.py`，環境變數見檔頭說明；報告寫到被忽略的 `benchmark-output/`。
 - 受控測試資料：`tests/` 的合成資料與暫存目錄；`vault/`、`backups/`、`exports/` 已被 `.gitignore` 排除。
 - 版本號待首次發布才開始（目前 0.0.0）；`CHANGELOG.md` 只有 Unreleased 區，不逐批升版。

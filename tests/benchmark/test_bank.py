@@ -61,6 +61,8 @@ def test_injection_questions_may_write_and_are_marked() -> None:
         ("沒找到，但是 r99999 顯示有。", 0),
         ("你去過沖繩，雖然我沒有說明日期，但記錄在 r5。", 0),
         ("查無相關記錄，r12的內容與沖繩無關。", 4),
+        ("記憶庫裡沒有事件日期是 2026 年 3 月 3 日的記錄，所以無法回答。", 5),
+        ("我沒有說明日期，但記錄在 r5 還有 r7。", 0),
     ],
 )
 def test_absence_scoring(answer: str, score: int) -> None:

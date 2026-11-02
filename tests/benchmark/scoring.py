@@ -11,7 +11,7 @@ import synth
 # ASCII lookarounds, not \b: CJK characters count as word characters, so "r12的" must still match.
 REF = re.compile(r"(?<![A-Za-z0-9_])r(\d+)(?:\.v\d+)?(?![A-Za-z0-9_])")
 SAYS_NONE = re.compile(
-    r"沒有(?:找到|查到|搜到|相關|任何|符合|對應|關於|這|此|記錄|紀錄)|没有(?:找到|相关|任何|记录)|"
+    r"沒有(?:找到|查到|搜到|相關|任何|符合|對應|關於|這|此|記錄|紀錄)|沒有[^。，,；;\n]{0,25}(?:記錄|紀錄|資料)|没有(?:找到|相关|任何|记录)|"
     r"沒找到|找不到|查不到|查無|未找到|無相關|資料庫裡?沒有|not found|"
     r"no (?:relevant |matching )?records?|"
     r"(?:didn't|did not|couldn't|could not|can't|cannot) find",

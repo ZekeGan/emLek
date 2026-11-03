@@ -48,6 +48,10 @@ python scripts/install-hooks.py
 
 `python scripts/check.py` 依序跑 ruff、ruff format、mypy 與快速 pytest，印出每步結束碼與所檢查的提交；`--fast` 只跑前三項（`pre-push` hook 會自動跑它，約數秒）；`--full` 連 slow、scale 一起跑。回報「全綠」時以這支腳本的輸出為準並標明模式。目前沒有 CI（外部服務尚未採用，需使用者同意，見 D89）。
 
+## 可重複的驗收腳本
+
+`python scripts/accept.py` 用拋棄式資料夾跑完**不需要 PIN、不需要真人終端機**的驗收步驟（存、查、標籤、隱藏、備份、匯出、匯入預覽、`auto status`、`recent`、`cleanup` 預覽），並確認 `purge`、`restore`、`auto on`、`import --apply`、`phrase add`、`sensitivity set` 等在腳本裡一律被拒（結束碼 3）；結束時清掉資料夾。需要 PIN 或真人終端機的步驟維持手動（清單在 PROGRESS）。腳本不傳 PIN、不繞過任何閘門。新增不需 PIN 的命令時，同批補進這支腳本。
+
 ## 專案設定
 
 - 環境：Python 3.14（uv 管理，`.python-version` 已固定）。依賴由 `uv.lock` 鎖定。

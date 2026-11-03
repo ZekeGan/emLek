@@ -44,6 +44,10 @@ python scripts/install-hooks.py
 
 它把 `pre-commit`、`pre-push`、`sensitive_check.py` 複製進 `.git/hooks`，並在 `.git/sensitive-terms.txt` 不存在時建一個空檔。**敏感詞清單永遠只存在 `.git` 內**，腳本與文件都不含任何詞；要擋的詞自己寫進該檔（一行一項）。改 hook 時改 `scripts/hooks/` 的版本再重跑安裝，不要只改 `.git/hooks`。
 
+## 機械式檢查（不靠自我回報）
+
+`python scripts/check.py` 依序跑 ruff、ruff format、mypy 與快速 pytest，印出每步結束碼與所檢查的提交；`--fast` 只跑前三項（`pre-push` hook 會自動跑它，約數秒）；`--full` 連 slow、scale 一起跑。回報「全綠」時以這支腳本的輸出為準並標明模式。目前沒有 CI（外部服務尚未採用，需使用者同意，見 D89）。
+
 ## 專案設定
 
 - 環境：Python 3.14（uv 管理，`.python-version` 已固定）。依賴由 `uv.lock` 鎖定。

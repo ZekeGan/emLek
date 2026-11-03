@@ -18,8 +18,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def _project_python() -> str:
+    """The project's own interpreter: the `python` on PATH may be another install without ruff,
+    mypy or emlek."""
+    venv = ROOT / ".venv" / "Scripts" / "python.exe"
+    return str(venv) if venv.exists() else sys.executable
+
+
 def _steps(mode: str) -> list[tuple[str, list[str]]]:
-    py = sys.executable
+    py = _project_python()
     steps = [
         ("ruff check", [py, "-m", "ruff", "check", "src", "tests"]),
         ("ruff format", [py, "-m", "ruff", "format", "--check", "src", "tests"]),
@@ -45,6 +52,7 @@ def main() -> int:
     dirty = subprocess.run(
         ["git", "status", "--porcelain"], capture_output=True, text=True, cwd=ROOT
     ).stdout.strip()
+    print(f"python: {_project_python()}")
     print(f"checking {head}{' (+ uncommitted changes)' if dirty else ''}, mode={mode}")
     for label, command in _steps(mode):
         started = time.monotonic()

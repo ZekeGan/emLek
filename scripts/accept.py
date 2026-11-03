@@ -31,10 +31,16 @@ class Check:
     absent: tuple[str, ...] = ()
 
 
+def _project_python() -> str:
+    """The project's own interpreter: the `python` on PATH may be another install without emlek."""
+    venv = Path(__file__).resolve().parent.parent / ".venv" / "Scripts" / "python.exe"
+    return str(venv) if venv.exists() else sys.executable
+
+
 def _run(data_dir: Path, args: list[str]) -> tuple[int, str]:
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
     done = subprocess.run(
-        [sys.executable, "-X", "utf8", "-m", "emlek", "--data-dir", str(data_dir), *args],
+        [_project_python(), "-X", "utf8", "-m", "emlek", "--data-dir", str(data_dir), *args],
         stdin=subprocess.DEVNULL,
         capture_output=True,
         encoding="utf-8",

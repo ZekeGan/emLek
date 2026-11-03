@@ -59,6 +59,15 @@ def _error_result(error: EmlekError) -> ToolError:
     return ToolError(json.dumps({"ok": False, "error": error.to_dict()}, ensure_ascii=False))
 
 
+def _lower_cap(asked: str | None, ceiling: str) -> str:
+    """The AI may ask for a stricter sensitivity cap, never a looser one. An unknown level is
+    passed through so the search itself rejects it."""
+    levels = core_search.SENSITIVITY_LEVELS
+    if asked is None or asked not in levels:
+        return asked or ceiling
+    return min(asked, ceiling, key=levels.index)
+
+
 def _instructions(db_path: Path, cap: str) -> str:
     """The opening rules plus the most used tag names. Names only, and only safe ones: this text
     sits in the AI's system-level prompt, so nothing from the memory may reach it as a sentence."""
@@ -242,7 +251,7 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
                 untagged=untagged,
                 max_response_chars=MAX_SEARCH_CHARS,
                 compact=True,
-                max_sensitivity=max_sensitivity or default_cap,
+                max_sensitivity=_lower_cap(max_sensitivity, default_cap),
                 timezone=config.timezone,
             ),
         )

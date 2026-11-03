@@ -523,7 +523,9 @@ def search(
                 {
                     s
                     for name in unknown
-                    for s in tagmod.similar_names(db.conn, tagmod.normalize(name))
+                    for s in tagmod.similar_names(
+                        db.conn, tagmod.normalize(name), cap=max_sensitivity
+                    )
                 }
             )[:5],
         }
@@ -542,6 +544,7 @@ def search(
         "direction": direction,
     }
     warnings: list[str] = []
+    caps = {level: i for i, level in enumerate(SENSITIVITY_LEVELS)}
     rows = _gather(db, alternatives, stale=False, notes=warnings, only_undated=False, **shared)
     if not rows and has_index_terms:
         # an empty index answer is not proof of absence: look again without the index
@@ -552,9 +555,8 @@ def search(
     undated = 0
     if date_field == "event_time" and (date_from or date_to):
         undated_rows = _gather(db, alternatives, stale=bool(warnings), only_undated=True, **shared)
-        undated = len({r[1] for r in undated_rows})
+        undated = len({r[1] for r in undated_rows if caps[r[6]] <= caps[max_sensitivity]})
 
-    caps = {level: i for i, level in enumerate(SENSITIVITY_LEVELS)}
     ordered: list[dict[str, Any]] = []
     seen: set[int] = set()
     withheld = 0
@@ -656,7 +658,7 @@ def search(
             only_undated=False,
             **plain,
         )
-        base_ids = sorted({int(r[1]) for r in base_rows})
+        base_ids = sorted({int(r[1]) for r in base_rows if caps[r[6]] <= caps[max_sensitivity]})
         extra["tag_coverage"] = (
             tagmod.tagged_share(db.conn, base_ids) if len(base_ids) <= MAX_COVERAGE_SET else None
         )
@@ -668,9 +670,10 @@ def search(
         extra["facets"] = tagmod.facets(db.conn, [row["record_id"] for row in ordered])
     if not ordered and (terms or tags):
         near = [
-            s for name in unknown for s in tagmod.similar_names(db.conn, tagmod.normalize(name))
+            s
+            for name in [*unknown, *terms]
+            for s in tagmod.similar_names(db.conn, tagmod.normalize(name), cap=max_sensitivity)
         ]
-        near += [s for term in terms for s in tagmod.similar_names(db.conn, tagmod.normalize(term))]
         if near:
             extra["similar_tags"] = list(dict.fromkeys(near))[:5]
     return {

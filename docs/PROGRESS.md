@@ -5,7 +5,7 @@
 ## 現況
 
 - 模式：**MODE B；M1–M9 已完成並經使用者驗收，程式版本 0.1.0（尚未對外發布、未打標籤）**。M7 標籤、M8 匯入與備份加密（D80、D81）、M9 徹底清除（D82、D83）已於 2026-11-03 驗收通過（驗收時發現 stats 文字版缺清除次數，已補）。
-- 已有 `src/emlek`：`init`、`doctor`、`save`、`amend`、`hide`／`unhide`、`get`、`search`、`reindex`、`mcp`、`backup`、`restore`、`export`、`stats`、`pin`、`phrase`、`notice`、`sensitivity`、`tag`、`tags`、`import`、`purge`、`cleanup`；結構遷移 0001–0008；683 項測試（快速）加 1 項 36000 筆規模測試；只有合成測試資料。
+- 已有 `src/emlek`：`init`、`doctor`、`save`、`amend`、`hide`／`unhide`、`get`、`search`、`reindex`、`mcp`、`backup`、`restore`、`export`、`stats`、`pin`、`phrase`、`notice`、`sensitivity`、`tag`、`tags`、`import`、`purge`、`cleanup`；結構遷移 0001–0008；691 項測試（快速）加 1 項 36000 筆規模測試；只有合成測試資料。
 - Git：`main`，遠端 `origin`（公開的 GitHub 倉庫）；是否同步以 `git status` 為準。敏感詞檢查掛在本機 pre-commit 與 pre-push，清單內容只存在本機、不寫進文件。
 - 環境（已驗證）：Python 3.14.10（uv 0.13.6）、SQLite 3.53.1；套件由 `uv.lock` 鎖定；Claude Code 2.1.316；Codex CLI 0.166.0 已安裝並登入，但使用者的 ChatGPT 用量已用完，**2026-11-04 22:58 後才能測**。
 - 未驗證：Codex 端的 MCP 連線與沙箱；真實資料效能。
@@ -82,6 +82,7 @@ AI 層核心與擴充 51 題（含 M7 新增 9 題標籤題）、語氣集 48 �
    - **已證實**：多詞查詢是 Q46–Q49 失分的主因（見 BENCHMARK）。
    - 產品行為待決事項已於 2026-11-02 全部決定（D77）。
    - 搜尋效率與 token 再瘦身：**使用者已決定請 Opus 做第二輪限定範圍的審查**（2026-11-03；範圍：搜尋回傳格式、工具描述、開場說明與規則；附最耗 token 題的呼叫紀錄；只審查、不改產品），建議再以實測驗證後才採用。
+     - **第二輪結果（2026-11-03，逐項待決）**：①安全：三個外洩已修（D84、T38）；`include_hidden` 讓 AI 取回隱藏記錄片段是原設計，**待使用者決定是否保留**。②效率：每次請求約 11.6k 固定前綴占輸入量 7 成以上，平均每題請求 2.61（最少 2），輪數已近底；建議依序：固定前綴瘦身（工具定義去 `title`／`anyOf`、規則刪過時句與重複的 OR 說明，預期輸入量約 −8%）、OR 上限 20→30、`MAX_TERM_HITS` 12→30、規則要求首次搜尋就中日英一起 OR；不做：英文詞形、類別別名表、再縮回傳、翻頁。③量測改報 `api_requests` 與牌價；D79 單次測試 C02 失敗未記。驗證設計：前綴用 5 次無工具請求量差、其餘用重放；AI 層約 150 次、逐題配對。
    - 待做（不需決定）：補一組「只有開場說明、沒有完整規則」的 AI 情境、每題 3 次的正式驗收統計、T29 補無標點的命令句、M8 設計要點已寫進 DESIGN。
 3. M10 依數據決定 → M11 發布準備（見 DESIGN）。
 

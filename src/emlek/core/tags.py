@@ -137,7 +137,10 @@ def _is_near(key: str, other: str) -> bool:
     return len(shorter) >= 2 and shorter in longer and len(shorter) / len(longer) >= 0.6
 
 
-def similar_names(conn: sqlite3.Connection, key: str, limit: int = 5) -> list[str]:
+def similar_names(
+    conn: sqlite3.Connection, key: str, limit: int = 5, cap: str | None = None
+) -> list[str]:
+    """Near-duplicate names. With a cap, only tags a reader at that cap could already see."""
     found: dict[int, str] = {}
     for tag_id, name, name_key in conn.execute("SELECT id, name, name_key FROM tags"):
         if _is_near(key, name_key):
@@ -145,6 +148,9 @@ def similar_names(conn: sqlite3.Connection, key: str, limit: int = 5) -> list[st
     for tag_id, alias_key in conn.execute("SELECT tag_id, alias_key FROM tag_aliases"):
         if tag_id not in found and _is_near(key, alias_key):
             found[tag_id] = tag_name(conn, tag_id)
+    if cap is not None:
+        counts = _visible_counts(conn, cap)
+        found = {i: n for i, n in found.items() if _listable(counts, i)}
     return list(found.values())[:limit]
 
 

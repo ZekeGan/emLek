@@ -69,7 +69,7 @@ def run(args: argparse.Namespace) -> Output:
             return Output({"batches": []}, "還沒有匯入過。")
         lines = [
             f"批次 {b['batch']}　{b['created_at']}　{b['files']} 個檔案，可見 {b['visible']} 筆"
-            + ("　（已整批隱藏）" if b["undone_at"] else "")
+            + ("　（曾整批隱藏）" if b["undone_at"] else "")
             for b in batches
         ]
         return Output({"batches": batches}, "\n".join(lines))

@@ -1,6 +1,6 @@
 # emLek 設計
 
-狀態：M1–M8 已實作（以 [PROGRESS](PROGRESS.md) 為準；M8 待使用者驗收），M9 起仍在規劃。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)；標籤系統與分層摘要見 [DESIGN_TAGS](DESIGN_TAGS.md)。
+狀態：M1–M8 已實作（以 [PROGRESS](PROGRESS.md) 為準；M8 已驗收），M9 起仍在規劃。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)；標籤系統與分層摘要見 [DESIGN_TAGS](DESIGN_TAGS.md)。
 
 ## 定位
 

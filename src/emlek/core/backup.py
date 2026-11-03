@@ -232,7 +232,8 @@ def restore_backup(
     except PermissionError as exc:
         for original, destination in reversed(moved):
             os.replace(destination, original)
-        staged.unlink(missing_ok=True)
+        for leftover in (staged, *_sidecars(staged)):
+            leftover.unlink(missing_ok=True)
         raise EmlekError(
             ErrorCode.BUSY,
             "資料庫正被其他程式使用（例如 MCP 伺服器），請先關閉再還原",

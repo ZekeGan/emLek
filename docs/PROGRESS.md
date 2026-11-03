@@ -20,6 +20,23 @@
 
 AI 層核心與擴充 51 題（含 M7 新增 9 題標籤題）、語氣集 48 題、規模題 Q75、同意對話 5 段、寫入探針 10 個（清單見 [QUESTIONS](QUESTIONS.md)）；系統層 42 題全 5 分。haiku 每題約 $0.002。評分另報「調整分」（忽略答案中標示為排除或其他的記錄，不低於原始分，D77）；舊結果檔尚未補算。結果與歷次比較見 [BENCHMARK](BENCHMARK.md)，各里程碑驗收紀錄見 [HISTORY](HISTORY.md)。
 
+## 流程改進待驗收（2026-11-03；不改產品行為）
+
+**做了什麼**：①`scripts/check.py`（ruff、format、mypy、快速 pytest；`--fast` 由 pre-push hook 自動跑）取代「自我回報全綠」，沒有新增 CI（D89）；②`pyproject.toml` 設 `mypy platform = "win32"`，外部審查在 Linux 看到的 `common.py:34` 多餘 ignore 只在其他平台出現，ignore 保留（D88）；③M7–M9 的已驗收段落移到 HISTORY，WORKFLOW 迴圈加上這一步；④hook 內容放進 `scripts/hooks/`，`python scripts/install-hooks.py` 重建，敏感詞清單仍只在 `.git`；⑤`scripts/accept.py`：不需 PIN 的驗收步驟自動跑 27 項，並確認各閘門在腳本裡被拒；⑥舊基準結果補算調整分（複本放 `benchmark-output/rescored/`，原檔不動）與人工抽樣複核做法（D90）；⑦完整歷史＋目前檔案的憑證格式掃描：**沒有發現真實憑證**，命中的都是文件範例、測試假資料（`...EXAMPLE` 金鑰、`example.com` 信箱、假的私鑰標頭）、程式碼中的變數名稱與雜湊值；掃描腳本是一次性的，沒有放進倉庫。
+
+**未做**：第 4 項（完成標準由使用者確認）只給草案，見下；第 5 項（交叉審查）等 Codex 額度（2026-11-04 22:58 後）；CI 不採用。
+
+**第 4 項草案（待你同意才寫進 WORKFLOW，不改 AGENTS.md）**：「里程碑開工前，Agent 把逐條、可驗證的完成標準寫進 PROGRESS 並經使用者確認。開工後要增刪或放寬，須先經使用者同意，並在 DECISIONS 記一行。DESIGN 仍描述產品，但不得在同批用來降低已確認的完成標準。」與現行 AGENTS「文件同步」的差別：同批改 DESIGN 時，完成標準那一部分不能再單方面改。
+
+**第 5 項待辦**：高風險審查清單補上 M7 標籤（`tags.py` 約 950 行，只審過規格）與 M10 自動記錄的核心把關（`core/auto.py`、`service.save` 的檢查）；用 Codex 或另一個模型家族只給差異與風險點做交叉審查，重點三類：繞過可見性或敏感度上限、提示注入進系統提示、權限表漏洞，每項要附證據與重現方式。
+
+**30 秒驗收**（PowerShell，在專案資料夾）：
+1. `python scripts/check.py --fast` → 最後一行 `all checks passed`。
+2. `python scripts/accept.py` → 最後一行 `27/27 passed`。
+3. `git log --oneline -8` → 看到這批的提交（hook、check、accept、mypy、HISTORY、基準各一批）。
+4. `python scripts/install-hooks.py` → 顯示 `kept the existing .git/sensitive-terms.txt`（你的清單沒被動到）。
+5. 看 `docs/PROGRESS.md` 的長度明顯變短，M7–M9 的清單在 `docs/HISTORY.md`。
+
 ## M10 待驗收
 
 **做了什麼（D85、D87）**：自動記錄。使用者用 `emlek auto` 登記哪些類別 AI 可以不經詢問直接存；總開關預設關、五個類別預設全是「先問」。AI 存的時候帶 `source="auto:<類別>"`，核心檢查總開關、類別、敏感掃描（任何命中都拒絕、不發確認碼）、`kind`（不存推論）與 24 小時上限（預設 30），成功回現成的提醒字串（`◆ emLek｜生活點滴 ✓ r231`）。`emlek recent --auto` 看最近自動存了什麼，`emlek auto hide --since 日期` 整批隱藏（可恢復，不是清除）。同時做了 Opus 第二輪的低風險效率項目（見 DECISIONS D87）。

@@ -101,6 +101,7 @@ def test_tool_lists_follow_the_permission_table(data_dir: Path) -> None:
         "tag_link",
         "tag_alias",
         "purge_preview",
+        "auto_policy",
     }
     assert set(_tool_names(data_dir, read_only=True)) == {
         "get",

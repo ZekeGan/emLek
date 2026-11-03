@@ -7,6 +7,7 @@ import sys
 from collections.abc import Callable, Sequence
 
 from emlek.cli.commands import (
+    autocmd,
     doctor,
     get,
     importcmd,
@@ -48,6 +49,8 @@ _HANDLERS: dict[str, Callable[..., Output | None]] = {
         "reset": trust.run_pin_reset,
     }[a.pin_command](a),
     "phrase": trust.run_phrase,
+    "auto": autocmd.run_auto,
+    "recent": autocmd.run_recent,
     "tag": tagcmd.run_tag,
     "tags": tagcmd.run_tags,
     "notice": trust.run_notice,

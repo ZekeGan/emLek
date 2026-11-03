@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- M10 自動記錄（D85、D87）：`emlek auto on|off|set|add|remove|limit|exclude|status|hide`（改動需真人終端機與 PIN）、`emlek recent [--auto]`；MCP `auto_policy`；`save` 帶 `source="auto:<類別>"` 時由核心檢查總開關、類別、敏感掃描與 24 小時上限，回傳現成的 `marker`；遷移 0009。
+- 效率：MCP 工具定義去掉多餘的 `title` 與 `anyOf null`（約 −32%）、詞命中數上限 12→30、開場說明與規則改為首次搜尋就中日英一起 OR。
 - 安全修補（D84）：唯讀 MCP 不能再用 `max_sensitivity` 要求比入口上限更寬；零結果的 `similar_tags` 不再回傳只用在隱藏或高敏感記錄上的標籤名稱；`undated`、`tag_coverage` 不計超過上限的記錄。
 - `stats` 文字版顯示徹底清除次數與最近一次時間；清除報告的副本檢查訊息列出實際檢查的資料夾。
 - M9：`emlek purge r<id>…`（真人終端機＋PIN＋固定問句，連帶移除 AI 摘要與只因它而存在的標籤，指紋複核，邏輯刪除後檢查點＋VACUUM＋原始位元組比對，`--finish` 補做擦除）、`emlek cleanup`（清理暫存副本，先驗證有較新的可用備份）；MCP `purge_preview` 只回中繼資料；記錄編號不再重用；匯入不會讓已清除的內容復活；`restore` 對早於清除的備份警告；遷移 0008（`purge_log`）；`doctor` 與 `stats` 顯示清除狀態（D82、D83）。

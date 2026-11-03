@@ -54,6 +54,8 @@ def run(args: argparse.Namespace) -> Output:
     finally:
         db.close()
     lines = [f"已存入 {result['revision_ref']}"]
+    if result.get("marker"):
+        lines.append(result["marker"])
     if result.get("tags"):
         lines.append("標籤：" + "、".join(result["tags"]))
     for item in result.get("tags_pending", []):

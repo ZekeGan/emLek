@@ -4,8 +4,8 @@
 
 ## 現況
 
-- 模式：**MODE B；M1–M9 已完成並經使用者驗收，程式版本 0.1.0（尚未對外發布、未打標籤）**。M7 標籤、M8 匯入與備份加密（D80、D81）、M9 徹底清除（D82、D83）已於 2026-11-03 驗收通過（驗收時發現 stats 文字版缺清除次數，已補）。
-- 已有 `src/emlek`：`init`、`doctor`、`save`、`amend`、`hide`／`unhide`、`get`、`search`、`reindex`、`mcp`、`backup`、`restore`、`export`、`stats`、`pin`、`phrase`、`notice`、`sensitivity`、`tag`、`tags`、`import`、`purge`、`cleanup`；結構遷移 0001–0008；691 項測試（快速）加 1 項 36000 筆規模測試；只有合成測試資料。
+- 模式：**MODE B；M1–M9 已完成並經使用者驗收，**M10 自動記錄已實作待驗收**，程式版本 0.1.0（尚未對外發布、未打標籤）**。M7 標籤、M8 匯入與備份加密（D80、D81）、M9 徹底清除（D82、D83）已於 2026-11-03 驗收通過（驗收時發現 stats 文字版缺清除次數，已補）。
+- 已有 `src/emlek`：`init`、`doctor`、`save`、`amend`、`hide`／`unhide`、`get`、`search`、`reindex`、`mcp`、`backup`、`restore`、`export`、`stats`、`pin`、`phrase`、`notice`、`sensitivity`、`tag`、`tags`、`import`、`purge`、`cleanup`、`auto`、`recent`；結構遷移 0001–0009；717 項測試（快速）加 1 項 36000 筆規模測試；只有合成測試資料。
 - Git：`main`，遠端 `origin`（公開的 GitHub 倉庫）；是否同步以 `git status` 為準。敏感詞檢查掛在本機 pre-commit 與 pre-push，清單內容只存在本機、不寫進文件。
 - 環境（已驗證）：Python 3.14.10（uv 0.13.6）、SQLite 3.53.1；套件由 `uv.lock` 鎖定；Claude Code 2.1.316；Codex CLI 0.166.0 已安裝並登入，但使用者的 ChatGPT 用量已用完，**2026-11-04 22:58 後才能測**。
 - 未驗證：Codex 端的 MCP 連線與沙箱；真實資料效能。
@@ -74,6 +74,22 @@ AI 層核心與擴充 51 題（含 M7 新增 9 題標籤題）、語氣集 48 �
 8. AI 不能代跑：在 Claude Code 請我執行 `emlek purge r2`，會被拒（要在真人終端機）。
 9. 清理：`Remove-Item -Recurse -Force $d, C:\temp\emlek-m9-bk`。
 
+## M10 待驗收
+
+**做了什麼（D85、D87）**：自動記錄。使用者用 `emlek auto` 登記哪些類別 AI 可以不經詢問直接存；總開關預設關、五個類別預設全是「先問」。AI 存的時候帶 `source="auto:<類別>"`，核心檢查總開關、類別、敏感掃描（任何命中都拒絕、不發確認碼）、`kind`（不存推論）與 24 小時上限（預設 30），成功回現成的提醒字串（`◆ emLek｜生活點滴 ✓ r231`）。`emlek recent --auto` 看最近自動存了什麼，`emlek auto hide --since 日期` 整批隱藏（可恢復，不是清除）。同時做了 Opus 第二輪的低風險效率項目（見 DECISIONS D87）。
+
+**實測**：新增 T39（14 項）；全部測試 717 項通過（含 slow 與 scale，2026-11-03），ruff、mypy 乾淨。**尚未做**：AI 層測題（該自動存的、不該存的、提醒格式）——Claude Code 可測但會花 API 費用，Codex 要等 2026-11-04 22:58 之後；真實 AI 守不守規則還沒有數據，所以建議你先只開一兩個類別試用。
+
+**驗收清單**（拋棄式資料夾；`$e = ".\.venv\Scripts\emlek.exe"; $d = "C:	emp\emlek-m10"`）：
+1. `& $e --data-dir $d init`（設 PIN）；`& $e --data-dir $d auto status` → 顯示「自動記錄：關閉」與五個類別都是「先問」。
+2. 沒開之前：`& $e --data-dir $d save --text "測試" --source "auto:生活點滴"` → 被拒（要先開啟）。
+3. 開啟：`auto on`（PIN）；`auto set 生活點滴 auto`（PIN）；`auto status` → 顯示開啟、生活點滴「直接存」。
+4. `save --text "今天中午在京都吃了拉麵" --source "auto:生活點滴"` → 顯示已存入，並在 `--json` 輸出裡有 `marker`：`◆ emLek｜生活點滴 ✓ r1`。
+5. 該被拒的：`save --text "密碼：abc12345" --source "auto:生活點滴"`、`save --text "x" --kind inference --source "auto:生活點滴"`、`save --text "x" --source "auto:思考"`（思考還是先問）→ 三個都被拒。
+6. `& $e --data-dir $d recent --auto` → 只列出 r1 並標 `[生活點滴]`；`auto hide --since 2000-01-01` → 隱藏 1 筆；`recent --auto` 顯示「（已隱藏）」；`unhide r1` 後 `search 拉麵` 找得到。
+7. 接上 AI 的實測（Claude Code）：把 MCP 接到 `$d`、規則檔放進該專案，說「今天中午吃了拉麵」→ 應該自動存並在最後一行附提醒；說「幫我看這段程式」→ 不存；貼一段含密碼的話 → 不存。記下哪些情況判斷錯。
+8. 清理：`auto off`（PIN）；`Remove-Item -Recurse -Force $d`。
+
 ## 下一步
 
 1. **使用者驗收 M7**（上方 9 步清單；2026-11-02 之後的搜尋與標籤清單改動 D75–D77 在本機，是否已推送以 `git status` 為準）。
@@ -84,7 +100,7 @@ AI 層核心與擴充 51 題（含 M7 新增 9 題標籤題）、語氣集 48 �
    - 搜尋效率與 token 再瘦身：**使用者已決定請 Opus 做第二輪限定範圍的審查**（2026-11-03；範圍：搜尋回傳格式、工具描述、開場說明與規則；附最耗 token 題的呼叫紀錄；只審查、不改產品），建議再以實測驗證後才採用。
      - **第二輪結果（2026-11-03，逐項待決）**：①安全：三個外洩已修（D84、T38）；`include_hidden` 讓 AI 取回隱藏記錄片段是原設計，**待使用者決定是否保留**。②效率：每次請求約 11.6k 固定前綴占輸入量 7 成以上，平均每題請求 2.61（最少 2），輪數已近底；建議依序：固定前綴瘦身（工具定義去 `title`／`anyOf`、規則刪過時句與重複的 OR 說明，預期輸入量約 −8%）、OR 上限 20→30、`MAX_TERM_HITS` 12→30、規則要求首次搜尋就中日英一起 OR；不做：英文詞形、類別別名表、再縮回傳、翻頁。③量測改報 `api_requests` 與牌價；D79 單次測試 C02 失敗未記。驗證設計：前綴用 5 次無工具請求量差、其餘用重放；AI 層約 150 次、逐題配對。
    - 待做（不需決定）：補一組「只有開場說明、沒有完整規則」的 AI 情境、每題 3 次的正式驗收統計、T29 補無標點的命令句、M8 設計要點已寫進 DESIGN。
-3. **M10 自動記錄草案已寫入 DESIGN（D85），使用者已確認沒問題（D86），等使用者說「開始」再實作**；搜尋效率與 token 的第二輪建議（見上）另行決定 → M11 發布準備（見 DESIGN）。
+3. **使用者驗收 M10**（清單見上）；搜尋效率第二輪的低風險項目已併入（D87），OR 上限與規則再瘦身等 M10 的 AI 層數據 → **M11 發布準備**：安裝說明（`docs/INSTALL.md`）已備妥、隱私掃描（以標記詞與常見路徑）乾淨；CI 方案另案決定（見流程改進），尚待：打標籤與發布（須使用者明確授權）、依賴安全檢查（建議你自己跑 `uvx pip-audit`）、用真實備份的還原演練。
 
 ## 近期決定與提醒
 

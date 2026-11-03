@@ -27,7 +27,7 @@ from emlek.core.service import KINDS, normalize_for_search
 MAX_QUERY_CHARS = 512
 MAX_TERMS = 30
 MAX_ALTERNATIVES = 20
-MAX_TERM_HITS = 12  # how many words get a hit count when a query finds nothing
+MAX_TERM_HITS = 30  # how many words get a hit count when a query finds nothing
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
 ORDERS = ("relevance", "event_time", "created_at")

@@ -2,7 +2,7 @@
 
 本機、單一使用者的文字記憶庫。你要求時，你的 AI（Claude、Codex 或其他支援 MCP／命令列的平台）把內容存起來，之後能找回並附上來源。
 
-**狀態：開發中（M1–M6 完成並驗收：存、查、備份還原、匯出、版本與連結、隱藏、PIN 與敏感內容閘門；M7 標籤已驗收；M8 匯入與備份加密已驗收；M9 徹底清除已驗收；版本 0.1.0，尚未發布）。尚未發布；以下含尚未實作的預期用法，進度見 [PROGRESS](docs/PROGRESS.md)。**
+**狀態：開發中（M1–M6 完成並驗收：存、查、備份還原、匯出、版本與連結、隱藏、PIN 與敏感內容閘門；M7 標籤已驗收；M8 匯入與備份加密已驗收；M9 徹底清除已驗收；M10 自動記錄（你登記的類別 AI 可直接存、附一行提醒、可審可撤，預設關閉）已實作、待驗收；版本 0.1.0，尚未發布）。尚未發布；以下含尚未實作的預期用法，進度見 [PROGRESS](docs/PROGRESS.md)。**
 
 ## 特色
 
@@ -19,7 +19,7 @@
 
 ## 文件
 
-[設計](docs/DESIGN.md)・[標籤系統](docs/DESIGN_TAGS.md)・[AI 使用規則](docs/AGENT_RULES.md)・[每日簡報](docs/DAILY_BRIEFING.md)・[題庫](docs/QUESTIONS.md)・[基準測試](docs/BENCHMARK.md)・[測試計畫](docs/TEST_PLAN.md)・[進度](docs/PROGRESS.md)・[決策紀錄](docs/DECISIONS.md)・[開發 Agent 指引](AGENTS.md)・[舊藍圖](docs/archive/)（非現行）
+[安裝與接上 AI](docs/INSTALL.md)・[設計](docs/DESIGN.md)・[標籤系統](docs/DESIGN_TAGS.md)・[AI 使用規則](docs/AGENT_RULES.md)・[每日簡報](docs/DAILY_BRIEFING.md)・[題庫](docs/QUESTIONS.md)・[基準測試](docs/BENCHMARK.md)・[測試計畫](docs/TEST_PLAN.md)・[進度](docs/PROGRESS.md)・[決策紀錄](docs/DECISIONS.md)・[開發 Agent 指引](AGENTS.md)・[舊藍圖](docs/archive/)（非現行）
 
 ## 怎麼執行（開發版）
 

@@ -8,7 +8,7 @@ import unicodedata
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-from emlek.core import notice, tokens, versions
+from emlek.core import auto, notice, tokens, versions
 from emlek.core import sensitivity as scanner
 from emlek.core import tags as tagmod
 from emlek.core.db import Database
@@ -240,6 +240,7 @@ def save(
     require(caller, "save")
     _check_body(body)
     event_time, precision = _check_meta(kind, source, event_time, event_time_precision)
+    category = auto.guard(db, source=source, kind=kind, body=body, declared=sensitivity)
     gate = _sensitivity_gate(
         db,
         operation="save",
@@ -277,6 +278,7 @@ def save(
         "links_added": added,
         "sensitivity": gate.level,
         "sensitivity_hint": gate.hint(),
+        **({"marker": auto.marker(category, f"r{record_id}")} if category else {}),
         **tag_result,
     }
 
@@ -303,6 +305,8 @@ def amend(
     require(caller, "amend")
     record_id, _ = parse_ref(ref)
     _check_body(body)
+    if source is not None and source.startswith(auto.PREFIX):
+        raise EmlekError(ErrorCode.NOT_PERMITTED, "自動記錄的來源只能在新增記錄時設定")
     to_clear = set(clear)
     if to_clear - set(CLEARABLE):
         raise EmlekError(ErrorCode.INVALID_INPUT, f"clear 只能包含 {', '.join(CLEARABLE)}")

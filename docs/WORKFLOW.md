@@ -34,6 +34,16 @@
 - **搜尋**：`revisions.body_norm` 為 NFKC＋casefold 副本，FTS5 外部內容表與 LIKE 都用它；結果以記錄為單位。
 - **測試**：pytest＋Hypothesis；標記 `slow`（故障注入、行程終止）、`scale`（3.6 萬筆）；合成資料產生器固定種子。
 
+## 本機 hook（不隨 clone 走）
+
+`.git/hooks` 不會被 clone，所以 hook 的內容放在 `scripts/hooks/`，新 clone 或重灌後執行一次：
+
+```powershell
+python scripts/install-hooks.py
+```
+
+它把 `pre-commit`、`pre-push`、`sensitive_check.py` 複製進 `.git/hooks`，並在 `.git/sensitive-terms.txt` 不存在時建一個空檔。**敏感詞清單永遠只存在 `.git` 內**，腳本與文件都不含任何詞；要擋的詞自己寫進該檔（一行一項）。改 hook 時改 `scripts/hooks/` 的版本再重跑安裝，不要只改 `.git/hooks`。
+
 ## 專案設定
 
 - 環境：Python 3.14（uv 管理，`.python-version` 已固定）。依賴由 `uv.lock` 鎖定。

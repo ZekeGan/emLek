@@ -115,15 +115,23 @@ def ask(
     model = model or os.environ.get("EMLEK_AI_MODEL")
     if model:
         command += ["--model", model]
-    started = time.perf_counter()
-    done = subprocess.run(
-        command,
-        capture_output=True,
-        stdin=subprocess.DEVNULL,
-        cwd=cwd,
-        timeout=timeout,
-        check=False,
-    )
+    done = None
+    for _attempt in range(2):  # one hung call must not end a run that already took an hour
+        started = time.perf_counter()
+        try:
+            done = subprocess.run(
+                command,
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                cwd=cwd,
+                timeout=timeout,
+                check=False,
+            )
+            break
+        except subprocess.TimeoutExpired:
+            continue
+    if done is None:
+        return {"error": f"timed out twice after {timeout}s"}
     wall = time.perf_counter() - started
     text = done.stdout.decode("utf-8", errors="replace").strip()
     parsed = parse_stream(text)

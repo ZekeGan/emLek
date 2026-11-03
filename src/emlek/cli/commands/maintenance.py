@@ -131,6 +131,8 @@ def run_stats(args: argparse.Namespace) -> Output:
         f"事件日期範圍：{event['first'] or '（無）'} 到 {event['last'] or '（無）'}",
         f"存入時間範圍：{saved['first'] or '（無）'} 到 {saved['last'] or '（無）'}",
         f"上次備份：{result['last_backup_at'] or '尚無備份'}",
+        f"徹底清除：{result['purges']['count']} 次"
+        + (f"，最近一次 {result['purges']['last_at']}" if result["purges"]["count"] else ""),
         f"資料庫 {result['database_bytes']:,} 位元組，結構版本 {result['schema_version']}，"
         f"搜尋索引{'正常' if result['search_index_ok'] else '不一致（請執行 emlek reindex）'}",
     ]

@@ -108,7 +108,10 @@ def _report(result: dict[str, Any]) -> str:
             lines.append("以下副本仍含被清除的內容，請自行決定是否刪除：")
             lines += [f"  {p}" for p in residue["files"]]
         else:
-            lines.append(f"已檢查 {residue['scanned']} 個副本檔，沒有發現殘留。")
+            lines.append(
+                f"已檢查 {residue['scanned']} 個副本檔（pre-migration、exports、tmp、logs、"
+                "資料庫旁的附屬檔、備份資料夾），沒有發現殘留。"
+            )
         if residue["sealed"]:
             lines.append(f"另有 {len(residue['sealed'])} 份加密備份無法檢查，請自行處理舊備份。")
     else:

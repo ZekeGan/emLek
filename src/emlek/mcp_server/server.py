@@ -19,7 +19,7 @@ from pydantic import Field
 
 from emlek import __version__
 from emlek.config import load_config
-from emlek.core import phrases, service, versions
+from emlek.core import phrases, purge, service, versions
 from emlek.core import search as core_search
 from emlek.core import stats as core_stats
 from emlek.core import tags as tagmod
@@ -297,6 +297,9 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
             lambda db: phrases.list_phrases(db, caller, enabled_only=True),
         )
 
+    def purge_preview(refs: list[str]) -> dict[str, Any]:
+        return run("purge_preview", lambda db: purge.preview(db, caller, refs))
+
     def stats() -> dict[str, Any]:
         return run("stats", lambda db: core_stats.stats(db, caller))
 
@@ -334,6 +337,12 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
         ),
         "tag_link": (tag_link, "宣告 parent 標籤包含 child。", write),
         "tag_alias": (tag_alias, "替標籤加別名（同義詞、外語寫法）。", write),
+        "purge_preview": (
+            purge_preview,
+            "預覽徹底清除的範圍（只回筆數與編號，不回內容）。你沒有清除工具；實際清除只能由使用者在"
+            "自己的終端機執行 emlek purge。",
+            read,
+        ),
         "phrases_list": (
             phrases_list,
             "使用者登記的觸發語句，只供判斷。",

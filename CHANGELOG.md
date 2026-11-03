@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- M9：`emlek purge r<id>…`（真人終端機＋PIN＋固定問句，連帶移除 AI 摘要與只因它而存在的標籤，指紋複核，邏輯刪除後檢查點＋VACUUM＋原始位元組比對，`--finish` 補做擦除）、`emlek cleanup`（清理暫存副本，先驗證有較新的可用備份）；MCP `purge_preview` 只回中繼資料；記錄編號不再重用；匯入不會讓已清除的內容復活；`restore` 對早於清除的備份警告；遷移 0008（`purge_log`）；`doctor` 與 `stats` 顯示清除狀態（D82、D83）。
 - M8：`backup --encrypt`（分段 AES-256-GCM、scrypt，往返驗證、不留明文）與 `restore` 讀加密備份；`emlek import`（.txt／.md，預設只預覽，`--apply` 須在真人終端機，整批單一交易，批次編號、`--undo`／`--list`，重複與變更偵測，high 預設略過）；遷移 0007；匯出含 `import_batch`／`import_log`（D81）。
 - MCP 搜尋：結果精簡格式（省預設值）、`matching_tags`、開場說明標籤名稱上限 50；測試工具記錄工具錯誤與 API 請求數（D79）。
 - 搜尋：OR 上限 20 組／30 詞、單詞組併成一次查詢、含 OR 的查詢附 `term_hits`、提示修正、MCP 單頁上限 30（D78）。

@@ -126,6 +126,13 @@ def build_parser() -> argparse.ArgumentParser:
     imp.add_argument("--list", action="store_true", help="列出匯入過的批次")
     imp.add_argument("--undo", type=int, metavar="批次編號", help="把某個批次整批隱藏")
 
+    purge = sub.add_parser("purge", help="徹底刪除記錄（無法恢復；必須在你自己的終端機並輸入 PIN）")
+    purge.add_argument("refs", nargs="*", help="記錄編號，例如 r12（一次最多 20 筆）")
+    purge.add_argument("--finish", action="store_true", help="補做未完成的實體擦除")
+
+    cleanup = sub.add_parser("cleanup", help="清理 emLek 自己的暫存副本（預設只預覽）")
+    cleanup.add_argument("--apply", action="store_true", help="真的刪除（需真人終端機與 PIN）")
+
     export = sub.add_parser("export", help="匯出完整 JSONL 與可閱讀的 Markdown")
     export.add_argument("--out", help="輸出資料夾（預設為資料夾內的 exports）")
     export.add_argument("--exclude-high", action="store_true", help="排除最高敏感度的記錄")

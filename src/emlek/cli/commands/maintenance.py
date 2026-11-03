@@ -69,6 +69,15 @@ def run_restore(args: argparse.Namespace) -> Output:
     plain, staged = core_backup.open_backup(source, data_dir, password)
     try:
         info = core_backup.inspect_database(plain)
+        missing = core_backup.purges_missing_from(load_config(data_dir).db_path, plain)
+        if missing:
+            sys.stderr.write(
+                f"警告：目前的資料庫在這份備份之後做過 {missing} 次徹底清除；還原會讓已清除的"
+                "資料回來。\n確定仍要還原，輸入「是」：\n"
+            )
+            sys.stderr.flush()
+            if sys.stdin.readline().strip() != "是":
+                raise EmlekError(ErrorCode.NEEDS_CONFIRMATION, "已取消，沒有做任何變更")
         sys.stderr.write(  # no bypass flag: this command is for a person at a terminal
             f"將以備份取代目前的資料庫：{info['records']} 筆記錄、{info['revisions']} 個版本。\n"
             "目前的資料庫會改名保留。輸入「是」繼續：\n"

@@ -23,6 +23,7 @@ def stats(db: Database, caller: Caller) -> dict[str, Any]:
         "SELECT min(created_at), max(created_at) FROM records"
     ).fetchone()
     meta = dict(conn.execute("SELECT key, value FROM meta").fetchall())
+    purges, last_purge = conn.execute("SELECT count(*), max(at) FROM purge_log").fetchone()
     index = index_status(db)
     return {
         "records": visible,
@@ -33,6 +34,7 @@ def stats(db: Database, caller: Caller) -> dict[str, Any]:
         "saved_between": {"first": saved_first, "last": saved_last},
         "last_backup_at": meta.get("last_backup_at"),
         "last_backup_file": meta.get("last_backup_file"),
+        "purges": {"count": purges, "last_at": last_purge},
         "schema_version": db.user_version,
         "database_bytes": db.path.stat().st_size,
         "search_index_ok": index["ok"],

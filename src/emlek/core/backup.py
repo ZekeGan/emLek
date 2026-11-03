@@ -179,6 +179,61 @@ def _carry_over_security(live: Path, staged: Path) -> None:
         conn.close()
 
 
+def _purge_rows(path: Path) -> list[tuple[Any, ...]]:
+    conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        return conn.execute(
+            "SELECT at, record_ids, revision_count, derived_count, scrub_status FROM purge_log"
+        ).fetchall()
+    except sqlite3.Error:
+        return []  # a schema without purge_log: no purge is recorded there
+    finally:
+        conn.close()
+
+
+def purges_missing_from(live: Path, backup: Path) -> int:
+    """How many purges the live database knows about that this backup does not: restoring it
+    would bring that purged text back."""
+    if not live.exists():
+        return 0
+    known = {row[0] for row in _purge_rows(backup)}
+    return sum(1 for row in _purge_rows(live) if row[0] not in known)
+
+
+def _carry_over_purge_state(live: Path, staged: Path) -> None:
+    """Keep the purge audit and never let a record id be handed out twice after a restore."""
+    floor = 0
+    rows: list[tuple[Any, ...]] = []
+    if live.exists():
+        rows = _purge_rows(live)
+        conn = sqlite3.connect(f"{live.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            row = conn.execute("SELECT value FROM meta WHERE key = 'record_id_floor'").fetchone()
+            floor = int(row[0]) if row else 0
+        except sqlite3.Error:
+            floor = 0
+        finally:
+            conn.close()
+    conn = sqlite3.connect(staged)
+    try:
+        row = conn.execute("SELECT value FROM meta WHERE key = 'record_id_floor'").fetchone()
+        floor = max(floor, int(row[0]) if row else 0)
+        if floor:
+            conn.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('record_id_floor', ?)",
+                (str(floor),),
+            )
+        have = {r[0] for r in conn.execute("SELECT at FROM purge_log")}
+        conn.executemany(
+            "INSERT INTO purge_log (at, record_ids, revision_count, derived_count, scrub_status)"
+            " VALUES (?, ?, ?, ?, ?)",
+            [r for r in rows if r[0] not in have],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def restore_backup(
     caller: Caller,
     data_dir: Path,
@@ -212,6 +267,7 @@ def restore_backup(
         finally:
             upgrade.close()
         _carry_over_security(target, staged)
+        _carry_over_purge_state(target, staged)
         verified = inspect_database(staged)
         if (verified["records"], verified["revisions"]) != (info["records"], info["revisions"]):
             raise EmlekError(ErrorCode.INTERNAL, "還原前的檢查發現筆數不一致，未做任何替換")

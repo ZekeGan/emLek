@@ -4,8 +4,8 @@
 
 ## 現況
 
-- 模式：**MODE B；M1–M8 已完成並經使用者驗收，程式版本 0.1.0（尚未對外發布、未打標籤）**。M7 標籤、M8 匯入與備份加密（D80、D81）已於 2026-11-03 驗收通過。下一步等使用者指示（M9 清除尚未開始）。
-- 已有 `src/emlek`：`init`、`doctor`、`save`、`amend`、`hide`／`unhide`、`get`、`search`、`reindex`、`mcp`、`backup`、`restore`、`export`、`stats`、`pin`、`phrase`、`notice`、`sensitivity`、`tag`、`tags`、`import`；結構遷移 0001–0007；634 項測試（快速）加 1 項 36000 筆規模測試；只有合成測試資料。
+- 模式：**MODE B；M1–M8 已完成並經使用者驗收，程式版本 0.1.0（尚未對外發布、未打標籤）**。M7 標籤、M8 匯入與備份加密（D80、D81）已於 2026-11-03 驗收通過。**M9 徹底清除已依經 Opus 審查的規格實作（D82、D83），待使用者驗收**（清單見「M9 待驗收」）。
+- 已有 `src/emlek`：`init`、`doctor`、`save`、`amend`、`hide`／`unhide`、`get`、`search`、`reindex`、`mcp`、`backup`、`restore`、`export`、`stats`、`pin`、`phrase`、`notice`、`sensitivity`、`tag`、`tags`、`import`、`purge`、`cleanup`；結構遷移 0001–0008；683 項測試（快速）加 1 項 36000 筆規模測試；只有合成測試資料。
 - Git：`main`，遠端 `origin`（公開的 GitHub 倉庫）；是否同步以 `git status` 為準。敏感詞檢查掛在本機 pre-commit 與 pre-push，清單內容只存在本機、不寫進文件。
 - 環境（已驗證）：Python 3.14.10（uv 0.13.6）、SQLite 3.53.1；套件由 `uv.lock` 鎖定；Claude Code 2.1.316；Codex CLI 0.166.0 已安裝並登入，但使用者的 ChatGPT 用量已用完，**2026-11-04 22:58 後才能測**。
 - 未驗證：Codex 端的 MCP 連線與沙箱；真實資料效能。
@@ -57,6 +57,23 @@ AI 層核心與擴充 51 題（含 M7 新增 9 題標籤題）、語氣集 48 �
 9. AI 不能代跑：在 Claude Code 請我執行 `emlek import C:\temp\emlek-m8-notes --apply`，會被拒（要在真人終端機）。
 10. 清理：`Remove-Item -Recurse -Force $d, C:\temp\emlek-m8-notes, C:\temp\emlek-m8-bk`。
 
+## M9 待驗收
+
+**做了什麼**：`emlek purge r<編號>…`（一次最多 20 筆；真人終端機、PIN、預覽與固定問句、答「是」才執行；連帶移除 AI 摘要與只因它而存在的標籤；預覽後內容有變動就中止）；刪除後做檢查點、VACUUM 與原始位元組比對，沒擦乾淨會標示未完成，`emlek purge --finish` 補做，`doctor` 會警告；記錄編號不再重用；匯入不會讓已清除的內容復活；`restore` 遇到早於清除的備份會警告；`emlek cleanup` 清理暫存副本；MCP `purge_preview` 只回編號與筆數。
+
+**實測**：全部 683 項測試通過（新增 T22、T23 共 49 項，含原始位元組比對、有讀取者時的未完成與補做、當機後補做、預覽後被改、匯入防復活、掃描不洩漏文字）；命令列煙霧測試確認非終端機一律被拒。尚未在真實終端機走過互動流程（請你驗收）；沒有用任何真實檔案。已知限制：全文索引（trigram）的殘留無法用位元組比對驗證，靠整理資料庫清除；`--finish` 無法再比對只能標為「未驗證」。
+
+**驗收清單**（用拋棄式資料夾；PowerShell；`$e = ".\.venv\Scripts\emlek.exe"; $d = "C:\temp\emlek-m9"`；先確認背景沒有殘留的 emlek 行程）：
+1. 建資料庫與樣本：`& $e --data-dir $d init`（設 PIN）；`& $e --data-dir $d save "清除測試 PURGE-ALPHA 京都抹茶"`、`& $e --data-dir $d save "另一筆保留 KEEP-BRAVO"`。
+2. 預覽不刪：`& $e --data-dir $d purge r1`，輸入 PIN → 看到內容摘錄與問句；輸入「否」→ 顯示「已取消」；`search ALPHA` 仍找得到。
+3. 真的清除：再執行一次，PIN、輸入「是」→ 顯示「已從資料庫中完全刪除 1 筆記錄」「用原始位元組比對，找不到被清除的內容」與「到不了的地方」清單；`search ALPHA` 找不到；`search KEEP` 仍在。
+4. 編號不重用：`& $e --data-dir $d save "新的一筆"` → 編號是 r3，不是 r1。
+5. 備份後再清除，檢查還原警告與殘留報告：`backup --to C:\temp\emlek-m9-bk`；再存一筆並清除它；`restore` 那份備份 → 顯示「做過 1 次徹底清除，還原會讓已清除的資料回來」，先輸入「否」取消。
+6. `doctor` 的 purge 那行顯示「已清除 N 次，沒有未完成的擦除」；`stats` 顯示清除次數。
+7. 清理暫存：`& $e --data-dir $d cleanup` 預覽；`cleanup --apply`（PIN）→ 若無較新備份會拒絕，先 `backup` 再重做。
+8. AI 不能代跑：在 Claude Code 請我執行 `emlek purge r2`，會被拒（要在真人終端機）。
+9. 清理：`Remove-Item -Recurse -Force $d, C:\temp\emlek-m9-bk`。
+
 ## 下一步
 
 1. **使用者驗收 M7**（上方 9 步清單；2026-11-02 之後的搜尋與標籤清單改動 D75–D77 在本機，是否已推送以 `git status` 為準）。
@@ -66,7 +83,7 @@ AI 層核心與擴充 51 題（含 M7 新增 9 題標籤題）、語氣集 48 �
    - 產品行為待決事項已於 2026-11-02 全部決定（D77）。
    - 搜尋效率與 token 再瘦身：等使用者決定是否請 Opus 做一輪限定範圍的審查（搜尋回傳格式、工具描述、規則；附最耗 token 題的呼叫紀錄），再以實測驗證。
    - 待做（不需決定）：補一組「只有開場說明、沒有完整規則」的 AI 情境、每題 3 次的正式驗收統計、T29 補無標點的命令句、M8 設計要點已寫進 DESIGN。
-3. M9 清除（規格已經 Opus 審查修正，D82；實作等使用者明確指示） → M10 依數據決定 → M11 發布準備（見 DESIGN）。
+3. **使用者驗收 M9** → M10 依數據決定 → M11 發布準備（見 DESIGN）。
 
 ## 近期決定與提醒
 

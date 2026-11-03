@@ -60,6 +60,15 @@ def _check_meta(
 
 
 def _insert_record(conn: sqlite3.Connection, now: str, level: str = "none") -> int:
+    floor = conn.execute("SELECT value FROM meta WHERE key = 'record_id_floor'").fetchone()
+    if floor is not None:  # a purge happened: ids of removed records are never handed out again
+        top = conn.execute("SELECT ifnull(max(id), 0) FROM records").fetchone()[0]
+        new_id = max(int(floor[0]), int(top)) + 1
+        conn.execute(
+            "INSERT INTO records (id, created_at, sensitivity) VALUES (?, ?, ?)",
+            (new_id, now, level),
+        )
+        return new_id
     cursor = conn.execute(
         "INSERT INTO records (created_at, sensitivity) VALUES (?, ?)", (now, level)
     )

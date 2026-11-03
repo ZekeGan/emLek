@@ -256,6 +256,13 @@ def _classify(
         else:
             item.status = "already"
         return
+    if conn.execute(
+        "SELECT 1 FROM import_log WHERE purged = 1 AND content_hash = ? LIMIT 1",
+        (item.content_hash,),
+    ).fetchone():  # purged on purpose: never brought back, whatever the file is called
+        item.status = "duplicate"
+        item.reason = "這個內容曾被徹底清除，不會再匯入"
+        return
     elsewhere = conn.execute(
         "SELECT file_name FROM import_log WHERE content_hash = ? LIMIT 1", (item.content_hash,)
     ).fetchone()

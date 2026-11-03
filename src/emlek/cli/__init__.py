@@ -12,6 +12,7 @@ from emlek.cli.commands import (
     importcmd,
     init,
     maintenance,
+    purgecmd,
     save,
     search,
     tagcmd,
@@ -38,6 +39,8 @@ _HANDLERS: dict[str, Callable[..., Output | None]] = {
     "restore": maintenance.run_restore,
     "export": maintenance.run_export,
     "import": importcmd.run,
+    "purge": purgecmd.run,
+    "cleanup": purgecmd.run_cleanup,
     "stats": maintenance.run_stats,
     "pin": lambda a: {
         "set": trust.run_pin_set,

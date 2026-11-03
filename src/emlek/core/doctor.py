@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from emlek.config import Config, load_config
-from emlek.core import security
+from emlek.core import purge, security
 from emlek.core.db import Database, load_migrations, wal_safe
 from emlek.core.errors import EmlekError
 from emlek.core.permissions import Caller, require
@@ -153,9 +153,22 @@ def _check_database(data_dir: Path) -> list[Check]:
             checks.append(_check_backup(db, config))
             checks.append(_check_security(db, data_dir))
             checks.append(_check_tags(db))
+            checks.append(_check_purge(db))
     finally:
         db.close()
     return checks
+
+
+def _check_purge(db: Database) -> Check:
+    waiting = purge.pending(db.conn)
+    if waiting:
+        return Check(
+            "purge",
+            "warn",
+            f"{waiting} 次清除的實體擦除還沒完成；請關閉 AI 應用程式後執行 emlek purge --finish",
+        )
+    total = db.conn.execute("SELECT count(*) FROM purge_log").fetchone()[0]
+    return Check("purge", "ok", f"已清除 {total} 次，沒有未完成的擦除")
 
 
 def _check_tags(db: Database) -> Check:

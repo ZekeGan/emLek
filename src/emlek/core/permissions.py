@@ -71,6 +71,11 @@ PERMISSIONS: dict[str, frozenset[Channel]] = {
     "import_apply_high": _CLI,
     "import_undo": _CLI,
     "import_list": _CLI,
+    "purge_preview": _WRITERS,
+    "purge": _CLI,
+    "purge_finish": _CLI,
+    "cleanup_preview": _CLI,
+    "cleanup_apply": _CLI,
 }
 
 # Operations that only a person at a real terminal may run (stdin, stdout and stderr are all
@@ -93,6 +98,9 @@ INTERACTIVE_ONLY = frozenset(
         "import_apply",
         "import_apply_high",
         "import_undo",
+        "purge",
+        "purge_finish",
+        "cleanup_apply",
     }
 )
 # Of those, the ones that also need the PIN. `pin_set` has no PIN yet and `pin_reset` proves
@@ -108,6 +116,8 @@ PIN_REQUIRED = frozenset(
         "tag_merge",
         "tag_remove",
         "import_apply_high",
+        "purge",
+        "cleanup_apply",
     }
 )
 

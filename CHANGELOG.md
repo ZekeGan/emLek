@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 自動記錄放行個人資料（D92）：電話、住址、姓名等第一次問、同意後不再問；密碼、金鑰、卡號仍不自動存。
 - 安靜的記錄與回答（D91）：MCP `save`／`amend` 只回非預設欄位（約 −60%）、`amend` 回目前標籤；`event_time` 工具描述補格式與時區；規則改為「過去的經歷也算要存」、自動存入只放 marker 一行、回答像一般聊天不講資料庫（找不到、截斷、矛盾時仍補一句限制）。
 - M10 自動記錄（D85、D87）：`emlek auto on|off|set|add|remove|limit|exclude|status|hide`（改動需真人終端機與 PIN）、`emlek recent [--auto]`；MCP `auto_policy`；`save` 帶 `source="auto:<類別>"` 時由核心檢查總開關、類別、敏感掃描與 24 小時上限，回傳現成的 `marker`；遷移 0009。
 - 效率：MCP 工具定義去掉多餘的 `title` 與 `anyOf null`（約 −32%）、詞命中數上限 12→30、開場說明與規則改為首次搜尋就中日英一起 OR。

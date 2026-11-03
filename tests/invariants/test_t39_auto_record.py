@@ -85,15 +85,38 @@ def test_an_automatic_save_is_marked_and_the_marker_is_ready_to_paste(on: Databa
     assert "marker" not in service.save(on, AI, body="手動存的")
 
 
-def test_inferences_and_sensitive_text_are_never_saved_automatically(on: Database) -> None:
+def test_inferences_and_highest_risk_text_are_never_saved_automatically(on: Database) -> None:
     _refused(on, kind="inference")
-    for body in ("密碼：abc12345", "我的信箱 someone@example.com"):
-        assert scanner.assess(body, "none")[0] != "none"  # the premise: the scan reacts
+    for body in ("密碼：abc12345", "卡號 4111 1111 1111 1111"):
+        assert scanner.assess(body, "none")[0] == "high"  # the premise: the scan reacts
         _refused(on, body)
-    _refused(on, sensitivity="medium")  # the AI declaring it is enough to stop an auto save
+    _refused(on, sensitivity="high")  # the AI declaring it is enough to stop an auto save
     assert on.conn.execute("SELECT count(*) FROM records").fetchone()[0] == 0
     assert on.conn.execute("SELECT count(*) FROM confirm_tokens").fetchone()[0] == 0
     assert _save(on, kind="ai_summary", body="整理：今天吃了拉麵")["ref"] == "r1"
+
+
+def test_personal_data_is_asked_once_and_then_flows(on: Database) -> None:
+    from emlek.core import notice
+
+    phone = "朋友小明的電話 0912-345-678"
+    assert scanner.assess(phone, "none")[0] == "medium"
+    with pytest.raises(EmlekError) as asked:  # the first time: the one-time notice
+        _save(on, phone)
+    assert asked.value.code is ErrorCode.NEEDS_CONFIRMATION
+    assert on.conn.execute("SELECT count(*) FROM records").fetchone()[0] == 0
+    token = asked.value.data["notice_token"]
+    first = service.save(on, AI, body=phone, source=SOURCE, notice_token=token)
+    assert first["marker"] == "◆ emLek｜生活點滴 ✓ r1" and first["sensitivity"] == "medium"
+    assert notice.is_enabled(on.conn) is False
+    # afterwards personal data is saved without asking, whether the scan or the AI marked it
+    assert _save(on, "同事王小華 0987-654-321")["ref"] == "r2"
+    assert _save(on, "我的朋友阿明住在大阪", sensitivity="medium")["ref"] == "r3"
+    # taking the permission back needs a person with the PIN, and asks again
+    notice.enable_medium(on, PERSON)
+    with pytest.raises(EmlekError) as again:
+        _save(on, "另一個電話 0911-222-333")
+    assert again.value.code is ErrorCode.NEEDS_CONFIRMATION
 
 
 def test_the_daily_limit_stops_a_runaway_loop(on: Database) -> None:

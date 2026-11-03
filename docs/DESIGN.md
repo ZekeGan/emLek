@@ -1,6 +1,6 @@
 # emLek 設計
 
-狀態：M1–M8 已實作（以 [PROGRESS](PROGRESS.md) 為準；M8 已驗收），M9 起仍在規劃。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)；標籤系統與分層摘要見 [DESIGN_TAGS](DESIGN_TAGS.md)。
+狀態：M1–M8 已實作（以 [PROGRESS](PROGRESS.md) 為準；M8 已驗收），M9 規格已經 Opus 審查修正、尚未實作。取代 [archive](archive/) 的完整版藍圖（非現行規格）。決策原因見 [DECISIONS](DECISIONS.md)；標籤系統與分層摘要見 [DESIGN_TAGS](DESIGN_TAGS.md)。
 
 ## 定位
 
@@ -90,9 +90,21 @@
 
 **衍生摘要失效**是計算值，不另存欄位：記錄的任一來源（經 `links` 遞移）處於隱藏，其衍生的 `ai_summary`、`inference` 即失效，重新產生前不得用於回答；`unhide` 後自動恢復。
 
-**徹底清除**：MCP 只有 `purge_preview`（唯讀，回傳摘要與會連帶移除的衍生記錄）；實際清除只能由使用者在自己的終端機執行 `emlek purge r<id>`：顯示預覽與固定句式「是否要從資料庫中完全刪除這筆資料？是 / 否（此操作無法再回復）」，輸入 PIN 並回答「是」才執行，含糊或「否」不執行。執行（單一交易）：以僅供清除函式設定的連線層暫存旗標暫時放行不可變觸發器；移除該記錄的版本、全文索引列、標籤關聯、指向這些版本的 `links`（其餘記錄保留，只是少了這條連結）、以它為來源的衍生記錄；`tag_events` 中涉及該記錄的明細清空；`import_log` 保留檔名與雜湊但清空 `record_id` 並標 `purged`，避免重新匯入後復活。提交後 `secure_delete=ON`、對全文索引執行 `optimize`（trigram 索引的片段會殘留在索引區段，審查已實測）、`wal_checkpoint(TRUNCATE)`、`VACUUM`、再 checkpoint，最後掃描資料庫與 WAL 原始檔確認預覽中的片段已不存在（已實測：只刪不整理時 WAL 與主檔會殘留）。**不改動既有備份**，回覆須提醒使用者自行處理舊備份，並說明已傳給第三方 AI 的內容無法收回。
+**徹底清除（M9 規格，已經 Opus 審查修正，D82）**：
 
-**清除不涵蓋的明文副本（須如實告知，D59）**：資料資料夾內由 emLek 自己產生的 `pre-migration/`（遷移前備份）、還原時留下的 `before-restore` 資料庫，以及 `exports/` 與備份資料夾，都含有完整明文副本。清除完成後，`emlek purge` 掃描這些位置（唯讀開啟），列出仍含該記錄片段的檔案與路徑，由使用者決定是否自行刪除；程式不自動改寫或刪除任何備份與匯出。`pre-migration/` 與 `before-restore` 屬 emLek 自己的暫存，清除報告另提示可由使用者以 `emlek` 提供的清理指令移除（M9 實作時一併決定指令名稱）。
+- **入口**：MCP 只有 `purge_preview`（唯讀、**只回中繼資料**：記錄編號、版本數、日期、是否隱藏、會連帶移除的衍生記錄編號與類型、會移除的標籤、`purge_enabled`；**不回內容**，否則等於把想刪的文字再傳給雲端 AI；內容摘錄只出現在 CLI 預覽）。實際清除只有 `emlek purge r<id> [r<id> …]`（一次最多 20 個明確編號，沒有標籤、日期、批次選擇器），走 `INTERACTIVE_ONLY` ＋ `PIN_REQUIRED` 新操作 `purge`；沒有任何啟用中的 `purge` 語句時一律拒絕（fail closed）。
+- **流程**：真人終端機 → PIN → 預覽（含內容摘錄、連帶移除的衍生記錄、**保留但可能提到此內容的 `original` 記錄清單**、會移除的標籤）→ 固定句式「是否要從資料庫中完全刪除這筆資料？是 / 否（此操作無法再回復）」→ 答「是」→ 在交易內重算**指紋**（記錄、版本、連結、標籤編號）並與預覽比對，不同就中止並要求重跑（防止預覽後 AI 修改、補連結）；含糊或「否」不執行。第一個不可逆動作在「是」之後。
+- **連帶範圍**：被清除版本的衍生記錄＝所有 `kind` 為 `ai_summary` 或 `inference`、與被清除版本有**任何** relation（含空 relation、`supports`、`supplements`）連結者，遞移追蹤。`original` 記錄**永不連帶刪除**，只在預覽列出。
+- **單一交易（`secure_delete=ON` 先設定，`BEGIN IMMEDIATE`）**，僅供 `purge.py` 設定的連線層旗標暫時放行不可變觸發器；刪除順序：兩個方向的 `links` → `record_tags` → 該記錄建立且清除後使用次數為 0 的標籤（含 `tag_aliases`、`tag_links`、`tags_fts` 列，以及所有提到它們的 `tag_events`；其他變成未使用的標籤只列出）→ 涉及該記錄的 `tag_events` → `import_log`（`file_name` 改成 `purged:<log id>`、`record_id` 清空、`purged=1`，**保留 `content_hash` 當防復活守衛**）→ 符合的與已用／過期的 `confirm_tokens` → `revisions` → `records`；對 `revisions_fts` 與 `tags_fts` 執行 `optimize`（FTS 完整性檢查失敗則改 `rebuild`）；斷言刪除筆數等於預覽；寫 `purge_log`；設 `meta.purge_scrub_pending=1`；提交。
+- **提交後擦除**：`wal_checkpoint(TRUNCATE)`（**檢查回傳值**，有其他連線的讀取交易時會回忙碌）→ `VACUUM`（需約兩倍資料庫大小的空間，`temp_store=MEMORY`）→ 再 checkpoint → 對資料庫、WAL、SHM 做**原始位元組**掃描 → 全部乾淨才清除 `purge_scrub_pending`。任何一步沒完成就回報「邏輯上已刪除，實體擦除未完成，請關閉 AI 應用程式後執行 `emlek purge --finish`」，`doctor` 顯示警告；擦除可重複執行。原子的是邏輯刪除，不是擦除。
+- **ID 不重用**：`meta.record_id_floor` 記錄曾用過的最大編號，新增記錄以明確編號插入；`restore` 保留較大的值。
+- **匯入防復活**：`importer` 先查已清除的 `content_hash`，相同內容即使改檔名或加 `--allow-duplicates` 也一律擋下。`import --undo` 對已清除的紀錄本來就略過。雜湊未加鹽，只能讓持有同一檔案的人確認，屬可接受並記載。
+- **稽核**：`purge_log(at, record_ids, revision_count, derived_count, scrub_status)`，不存文字也不存雜湊；`stats` 只露出次數與時間。`restore` 若備份早於最後一次清除，警告並多要一次「是」：還原會讓已清除的資料回來。
+- **MCP 旗標安全**：觸發器放行旗標屬單一 `Database` 實例，MCP 每次呼叫各開實例所以不會外溢；測試要求只有 `purge.py` 呼叫 `purge_mode()`；任何能 import emLek 的程式都能自己設旗標，列入已知限制。
+
+**清除報告與殘留掃描（D59、D82）**：資料資料夾內由 emLek 產生的 `pre-migration/`、`emlek.db.before-restore-*`（連同 `-wal`、`-shm`）、`*.failed`、`emlek.db.decrypted`、`emlek.db.restoring*`、`tmp/*`、備份資料夾的 `*.partial` 與 `logs/`，以及 `exports/` 與備份，都可能含明文副本。掃描**只讀原始位元組，絕不用 SQLite 開啟**（唯讀開啟也可能重播或建立 WAL／SHM）。備份依時間列出（記錄建立後到清除前的備份「很可能含有」）；加密備份回報「無法檢查」。掃描用的片段：取自 `body` 與 `body_norm`、至少 8 字元、不含換行引號反斜線；丟掉也出現在其他現存內容或標籤的片段；沒有足夠獨特的片段就回報「太短，無法驗證」；片段只在記憶體，**輸出與日誌只印路徑與數量**。
+**`emlek cleanup`**（預覽為預設，`--apply` 需真人終端機與 PIN）：只處理資料資料夾內 emLek 自己的暫存（遷移前副本、before-restore 與其附屬檔、`.failed`、`.decrypted`、`.restoring`、`tmp`）；執行前要求現行資料庫通過 `integrity_check`，且有一份比最新副本更新的備份通過 `inspect_database`；永不碰現行資料庫、`backup_dir`、`exports/`。程式不自動改寫或刪除備份與匯出。
+**如實告知（M1）**：清除只是從 emLek 的資料庫檔案移除。到不了的地方：SSD／檔案系統殘留、Windows 還原點與陰影複本、防毒隔離區、本機 AI 對話記錄（Claude Code 的 `~/.claude/projects`、Codex 的 session）、PowerShell 歷史（用過 `save --text` 時）、終端機捲動緩衝、既有備份，以及已傳給第三方 AI 的內容。清除報告必須列出這些。
 
 ## 工具（MCP／CLI 共用）
 
@@ -105,7 +117,7 @@
 | `search` | 見下方「搜尋規則」 |
 | `get` | 讀取指定記錄與版本；回傳 `status`、`invalidated`、`superseded_by`、`linked_from`、`links_out`；隱藏的記錄預設回 `NOT_FOUND`（`include_hidden=true` 可讀）；長內容分段（`offset`）；`max_sensitivity` 於 M6 |
 | `hide`／`unhide` | 隱藏與恢復（冪等；回傳被連帶失效的衍生記錄） |
-| `purge_preview` | 唯讀預覽徹底清除的範圍（實際清除只有 CLI `emlek purge`） |
+| `purge_preview` | 唯讀預覽徹底清除的範圍，只回中繼資料不回內容（實際清除只有 CLI `emlek purge`） |
 | `phrases_list` | 唯讀取得啟用語句（依 `kind` 分組） |
 | `stats` | 唯讀：記錄數（不含隱藏）、隱藏數、版本數、最早與最晚日期、上次備份時間 |
 | 標籤工具 | `set_tags`、`tags_find`、`tags_list`（含階層目錄與共現）、`tag_link`、`tag_alias`，見 [DESIGN_TAGS](DESIGN_TAGS.md)「M7 規格」 |
@@ -304,7 +316,7 @@ T14、T15、T16，以及新增的 T27（確認碼）、T28（PIN 儲存與狀態
 | M6 信任閘門 | 規則掃描、`notice_settings`、`confirm_token`／`notice_token`、`phrase`、`notice`、`sensitivity set` 的真人終端機閘門與 PIN（`pin set·change·reset`）、`phrases_list`；**`get` 補上 `max_sensitivity`**（隱藏檢查已於 M5 完成，目前只有 `search` 有敏感度上限） | T14、T15、T16；Q40–42；閘門限制如實記載 |
 | M7 標籤 | M7a：資料表、`set_tags`、`#標籤`、別名、向下展開。M7b：`tags_find` 等查詢工具、facets、`similar_tags`、合併、健檢、熱門標籤 | T17、T18、T29–T31；Q03、Q33–Q36、Q76–Q78、Q80（Q05、Q32 由別題取代，Q79、Q81 延後）；每題平均輸入量 ≤ M6 基準的 110%（規格見 DESIGN_TAGS「M7 規格」） |
 | M8 匯入與備份加密 | `import` 精簡版（敏感掃描、批次與還原隱藏；日期標題切段等延後）、備份 `--encrypt` | T21；Q43；錯誤密碼與一位元組竄改被拒 |
-| M9 清除 | `purge_preview` 與 CLI `purge`（預覽、固定句式、PIN、清除、殘留檢查） | T22、T23；原始檔掃描無殘留 |
+| M9 清除 | `purge_preview`（只回中繼資料）、CLI `purge`（預覽、固定句式、PIN、指紋複核、清除、擦除與殘留掃描、`--finish`）、`cleanup`、ID 不重用、匯入防復活、`purge_log` | T22、T23；原始位元組掃描無殘留 |
 | M11 發布準備 | 首次發布前的檢查清單，見「發布準備（M11）」 | 清單逐項勾完；版本號進入 0.x 以上的規則生效 |
 | M10 | 依實際痛點決定（回頭補標籤、分層／主題摘要、觀察清單項目；**M7 後依題庫的花費數據決定**：查無時工具端回「資料裡出現過的相近詞」以減少輪數、規則檔分短版與按需長版；不自建向量資料庫，見 D56） | — |
 

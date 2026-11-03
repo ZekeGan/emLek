@@ -38,6 +38,9 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.mypy]
 python_version = "3.14"
+# The code is Windows-only (console detection in cli/commands/common.py); without this, mypy on
+# another OS skips that branch and reports its `type: ignore` as unused.
+platform = "win32"
 strict = true
 mypy_path = "src"
 files = ["src", "tests"]

@@ -88,8 +88,8 @@ def _checks(work: Path) -> list[Check]:
         Check(
             "automatic save is refused before personal consent",
             ["save", "--text", "x", "--source", "auto:生活點滴"],
-            code=3,
-            contains=("所有個人資訊",),
+            code=NOT_PERMITTED,
+            contains=("尚未啟用",),
         ),
         Check("purge is refused", ["purge", "r1"], code=NOT_PERMITTED),
         Check("purge --finish is refused", ["purge", "--finish"], code=NOT_PERMITTED),

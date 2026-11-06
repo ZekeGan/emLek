@@ -120,7 +120,9 @@ def run_notice(args: argparse.Namespace) -> Output:
             result = notice.status(db, cli_caller())
         finally:
             db.close()
-        state = "尚未同意（首次自動儲存時詢問）" if result["personal_notice_enabled"] else "已同意"
+        state = (
+            "尚未啟用（對話輸入 emlek start）" if result["personal_notice_enabled"] else "已啟用"
+        )
         return Output(result, f"所有個人資訊自動儲存：{state}")
     caller = authorize(args, "notice_enable")
     db = open_vault(args)
@@ -128,7 +130,7 @@ def run_notice(args: argparse.Namespace) -> Output:
         result = notice.enable_medium(db, caller)
     finally:
         db.close()
-    return Output(result, "已重新開啟所有個人資訊的儲存同意提醒。")
+    return Output(result, "已重設啟用同意；下次在對話輸入 emlek start 才顯示條款。")
 
 
 def run_sensitivity(args: argparse.Namespace) -> Output:

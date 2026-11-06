@@ -15,8 +15,8 @@ import unicodedata
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from emlek.core import notice, versions
 from emlek.core import sensitivity as scanner
-from emlek.core import versions
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
 from emlek.core.permissions import Caller, require
@@ -102,6 +102,7 @@ def policy(db: Database, caller: Caller) -> dict[str, Any]:
     rows = conn.execute("SELECT name, description, mode FROM auto_categories ORDER BY id")
     return {
         "enabled": enabled(conn),
+        "started": not notice.is_enabled(conn),
         "daily_limit": int(_meta(conn, "auto_daily_limit", "30")),
         "used_24h": _used(conn),
         "categories": [{"name": n, "description": d, "mode": m} for n, d, m in rows],

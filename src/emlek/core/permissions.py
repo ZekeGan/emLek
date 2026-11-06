@@ -52,6 +52,7 @@ PERMISSIONS: dict[str, frozenset[Channel]] = {
     "phrase_remove": _CLI,
     "notice_status": _CLI,
     "notice_enable": _CLI,
+    "start": _WRITERS,
     "sensitivity_set": _CLI,
     "pin_set": _CLI,
     "pin_change": _CLI,

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from emlek.core import service
+from emlek.core import notice, service
 from emlek.core import tags as tagmod
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError
@@ -82,9 +82,10 @@ def test_amend_reads_hashtags_in_the_new_version(db: Database, caller: Caller) -
 def test_a_bad_hashtag_never_blocks_saving_the_text(db: Database, caller: Caller) -> None:
     body = "番号 #a0912345678 と #ふつう"  # the number itself is personal data: the user says yes
     with pytest.raises(EmlekError) as asked:
-        service.save(db, caller, body=body)
+        notice.start(db, caller)
     token = asked.value.data["notice_token"]
-    done = service.save(db, caller, body=body, notice_token=token)
+    notice.start(db, caller, notice_token=token)
+    done = service.save(db, caller, body=body)
     assert done["tags"] == ["ふつう"] and done["hashtags_skipped"] == ["a0912345678"]
     assert service.get(db, caller, ref=done["ref"])["body"] == body
 

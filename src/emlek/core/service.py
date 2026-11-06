@@ -8,7 +8,7 @@ import unicodedata
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-from emlek.core import auto, notice, tokens, versions
+from emlek.core import auto, notice, versions
 from emlek.core import sensitivity as scanner
 from emlek.core import tags as tagmod
 from emlek.core.db import Database
@@ -110,54 +110,35 @@ def _insert_revision(
     return cursor.lastrowid
 
 
-ASK_MEDIUM = (
-    "是否同意 emLek 自動儲存你分享的所有個人資訊（生活、想法、工作摘要及個資等）？"
-    "內容會以明文存在本機，也可能進入備份與匯出；同意後不再逐筆詢問，密碼與金鑰永不儲存。"
-    "可用 `emlek notice enable personal` 重新開啟同意提醒。**是 / 否**"
-)
-
-
 class _Gate:
-    """What a sensitive write has to pass: the level, and the token to spend (if any)."""
+    """Effective sensitivity and activation state, rechecked inside the write transaction."""
 
-    def __init__(self, level: str, categories: list[str], kind: str | None, token: str | None):
+    def __init__(self, level: str, categories: list[str]):
         self.level = level
         self.categories = categories
-        self.kind = kind
-        self.token = token
-        self.chash = ""
         self.check_consent = False
 
     def hint(self) -> dict[str, Any]:
         return {"level": self.level, "categories": self.categories}
 
     def spend(self, conn: sqlite3.Connection) -> None:
-        if self.kind is None:
-            if self.check_consent and notice.is_enabled(conn):
-                raise EmlekError(
-                    ErrorCode.CONFLICT,
-                    "儲存同意已重設，本次未寫入；請重新呼叫以取得首次同意提示",
-                    retryable=True,
-                )
-            return
-        tokens.consume(conn, self.kind, self.token, self.chash)
-        if self.kind == "notice":
-            notice.acknowledge(conn)
+        if self.check_consent and notice.is_enabled(conn):
+            raise EmlekError(
+                ErrorCode.CONFLICT,
+                "emLek 尚未啟用，本次未寫入",
+                retryable=True,
+            )
 
 
 def _sensitivity_gate(
     db: Database,
     *,
-    operation: str,
-    ref: str,
     body: str,
     declared: str | None,
-    confirm_token: str | None,
     notice_token: str | None,
     automatic: bool = False,
 ) -> _Gate:
-    """Scan the text and decide whether this write needs the user's yes. Without the right token
-    the write is refused and a fresh token is issued; the token is spent inside the write."""
+    """Reject credentials and inactive writes without issuing terms or accepting start tokens."""
     declared = declared or "none"
     if declared not in scanner.LEVELS:
         raise EmlekError(ErrorCode.INVALID_INPUT, "sensitivity 必須是 none、medium 或 high")
@@ -166,29 +147,15 @@ def _sensitivity_gate(
         raise EmlekError(
             ErrorCode.NOT_PERMITTED, "密碼、金鑰等最高風險內容不予儲存，也不詢問是否存入"
         )
-    kind = (
-        "notice"
-        if notice_token is not None
-        or ((automatic or level == "medium") and notice.is_enabled(db.conn))
-        else None
-    )
-    token = notice_token
-    gate = _Gate(level, categories, kind, token)
+    if notice_token is not None:
+        raise EmlekError(ErrorCode.TOKEN_INVALID, "儲存不能接受啟用同意碼")
+    gate = _Gate(level, categories)
     gate.check_consent = automatic or level == "medium"
-    gate.chash = tokens.content_hash(operation, ref, body)
-    if kind is not None and not token:
-        fresh = tokens.issue(db, kind, gate.chash)
+    if gate.check_consent and notice.is_enabled(db.conn):
         raise EmlekError(
-            ErrorCode.NEEDS_CONFIRMATION,
-            "尚未取得涵蓋所有個人資訊的自動儲存同意",
-            data={
-                "state": "needs_notice",
-                "notice_token": fresh,
-                "categories": categories,
-                "sensitivity": level,
-                "ask_user": ASK_MEDIUM,
-                "expires_in": tokens.TTL_SECONDS,
-            },
+            ErrorCode.NOT_PERMITTED,
+            "emLek 尚未啟用，本次不儲存，也不主動詢問條款",
+            data={"state": "not_started"},
         )
     return gate
 
@@ -253,11 +220,8 @@ def save(
     category = auto.guard(db, source=source, kind=kind, body=body, declared=sensitivity)
     gate = _sensitivity_gate(
         db,
-        operation="save",
-        ref="",
         body=body,
         declared=sensitivity,
-        confirm_token=confirm_token,
         notice_token=notice_token,
         automatic=category is not None or caller.channel is Channel.MCP,
     )
@@ -325,11 +289,8 @@ def amend(
         raise EmlekError(ErrorCode.INVALID_INPUT, "只改精度請同時提供事件時間")
     gate = _sensitivity_gate(
         db,
-        operation="amend",
-        ref=f"r{record_id}",
         body=body,
         declared=sensitivity,
-        confirm_token=confirm_token,
         notice_token=notice_token,
         automatic=caller.channel is Channel.MCP,
     )

@@ -21,12 +21,13 @@ def test_first_personal_auto_save_requires_one_global_consent(db: Database) -> N
     body = "今天中午吃了拉麵"
     with pytest.raises(EmlekError) as asked:
         service.save(db, AI, body=body, source="auto:生活點滴")
-    assert asked.value.code is ErrorCode.NEEDS_CONFIRMATION
-    assert "所有個人資訊" in asked.value.data["ask_user"]
+    assert asked.value.code is ErrorCode.NOT_PERMITTED
+    assert "ask_user" not in asked.value.data
     assert db.conn.execute("SELECT count(*) FROM records").fetchone()[0] == 0
-    saved = service.save(
-        db, AI, body=body, source="auto:生活點滴", notice_token=asked.value.data["notice_token"]
-    )
+    with pytest.raises(EmlekError) as terms:
+        notice.start(db, AI)
+    notice.start(db, AI, notice_token=terms.value.data["notice_token"])
+    saved = service.save(db, AI, body=body, source="auto:生活點滴")
     assert saved["marker"] == "◆ emLek｜r1.✔️"
     assert not notice.is_enabled(db.conn)
     assert (
@@ -57,7 +58,7 @@ def test_reenabled_consent_covers_plain_personal_content_again(db: Database) -> 
     notice.enable_medium(db, PERSON)
     with pytest.raises(EmlekError) as asked:
         service.save(db, AI, body="今天去散步", source="auto:生活點滴")
-    assert asked.value.code is ErrorCode.NEEDS_CONFIRMATION
+    assert asked.value.code is ErrorCode.NOT_PERMITTED
 
 
 def test_amend_refuses_credentials_and_returns_the_note_number(db: Database) -> None:

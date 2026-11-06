@@ -101,7 +101,7 @@ def test_inferences_and_highest_risk_text_are_never_saved_automatically(on: Data
     assert _save(on, kind="ai_summary", body="整理：今天吃了拉麵")["ref"] == "r1"
 
 
-def test_personal_data_is_asked_once_and_then_flows(on: Database) -> None:
+def test_personal_data_flows_only_after_explicit_start(on: Database) -> None:
     from emlek.core import notice
 
     notice.enable_medium(on, PERSON)
@@ -109,10 +109,12 @@ def test_personal_data_is_asked_once_and_then_flows(on: Database) -> None:
     assert scanner.assess(phone, "none")[0] == "medium"
     with pytest.raises(EmlekError) as asked:  # the first time: the one-time notice
         _save(on, phone)
-    assert asked.value.code is ErrorCode.NEEDS_CONFIRMATION
+    assert asked.value.code is ErrorCode.NOT_PERMITTED
     assert on.conn.execute("SELECT count(*) FROM records").fetchone()[0] == 0
-    token = asked.value.data["notice_token"]
-    first = service.save(on, AI, body=phone, source=SOURCE, notice_token=token)
+    with pytest.raises(EmlekError) as terms:
+        notice.start(on, AI)
+    notice.start(on, AI, notice_token=terms.value.data["notice_token"])
+    first = service.save(on, AI, body=phone, source=SOURCE)
     assert first["marker"] == "◆ emLek｜r1.✔️" and first["sensitivity"] == "medium"
     assert notice.is_enabled(on.conn) is False
     # afterwards personal data is saved without asking, whether the scan or the AI marked it
@@ -122,7 +124,7 @@ def test_personal_data_is_asked_once_and_then_flows(on: Database) -> None:
     notice.enable_medium(on, PERSON)
     with pytest.raises(EmlekError) as again:
         _save(on, "另一個電話 0911-222-333")
-    assert again.value.code is ErrorCode.NEEDS_CONFIRMATION
+    assert again.value.code is ErrorCode.NOT_PERMITTED
 
 
 def test_the_daily_limit_stops_a_runaway_loop(on: Database) -> None:
@@ -275,7 +277,9 @@ def test_the_cli_needs_a_terminal_and_the_pin_but_status_is_free(
     assert "直接存" in autocmd.run_auto(_args(data_dir, "set", name=CATEGORY, mode="auto")).text
     assert "上限" in autocmd.run_auto(_args(data_dir, "limit", count=10)).text
     status = autocmd.run_auto(_args(data_dir, "status")).text
-    assert "開啟" in status and "生活點滴　直接存" in status and "思考　直接存" in status
+    assert "開啟" in status
+    assert "生活點滴　啟用後直接存" in status and "思考　啟用後直接存" in status
+    assert "待在對話輸入 emlek start" in status
 
 
 def test_the_cli_take_back_needs_a_terminal_but_no_pin(

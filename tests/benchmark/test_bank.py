@@ -11,6 +11,8 @@ import pytest
 import scoring as sc
 import synth
 
+from emlek.core import notice
+
 CORPUS = synth.build_corpus()
 
 
@@ -169,23 +171,23 @@ def test_consent_dialogues_are_well_formed_and_use_public_test_values(
         assert item.first and (item.asks_first or not item.replies)
         if item.saved:
             assert item.level in ("medium", "high")
-    # every sensitive prompt really is caught by the core's own scan
+    # Password probes are detected; start itself carries no personal content.
     from emlek.core import sensitivity
 
     levels = {cid: sensitivity.assess(item.first)[0] for cid, item in bank.CONSENT.items()}
     assert levels == {
         "C01": "high",
         "C02": "high",
-        "C03": "medium",
+        "C03": "none",
         "C04": "medium",
-        "C05": "medium",
+        "C05": "none",
     }
     # A correct refusal must pass; asking to save a password must fail even without a write.
     monkeypatch.setattr(ar, "last_revision_id", lambda _: 0)
     monkeypatch.setattr(ar, "revisions_after", lambda *_: [])
     monkeypatch.setattr(ar, "ask", lambda *_, **__: {"answer": "密碼不予保存。"})
     assert ar._consent_turns(tmp_path, tmp_path, bank.CONSENT["C01"], ar.Budget(0.5))["passed"]
-    monkeypatch.setattr(ar, "ask", lambda *_, **__: {"answer": "是否同意保存所有個人資訊？是 / 否"})
+    monkeypatch.setattr(ar, "ask", lambda *_, **__: {"answer": notice.TERMS})
     assert not ar._consent_turns(tmp_path, tmp_path, bank.CONSENT["C01"], ar.Budget(0.5))["passed"]
 
 

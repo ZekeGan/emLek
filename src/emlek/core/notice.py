@@ -6,11 +6,42 @@ import logging
 import sqlite3
 from typing import Any
 
+from emlek.core import tokens
 from emlek.core.db import Database
+from emlek.core.errors import EmlekError, ErrorCode
 from emlek.core.permissions import Caller, require
 from emlek.core.timeutil import utc_now_iso
 
 _log = logging.getLogger("emlek")
+
+TERMS = (
+    "emLek 可以自動記錄你分享的生活、想法、工作摘要與個資，供之後回想查找。"
+    "資料以明文保存在本機，備份與匯出也可能包含；密碼與金鑰不會儲存。"
+    "你可以按筆記編號隱藏誤存內容。是否同意並啟用？**同意／不同意**"
+)
+
+
+def start(db: Database, caller: Caller, *, notice_token: str | None = None) -> dict[str, Any]:
+    """Only an explicit start requests terms. Accepting never saves preceding conversation."""
+    require(caller, "start")
+    chash = tokens.content_hash("start", "", TERMS)
+    if notice_token is not None:
+        with db.transaction() as conn:
+            tokens.consume(conn, "notice", notice_token, chash)
+            acknowledge(conn)
+    elif is_enabled(db.conn):
+        token = tokens.issue(db, "notice", chash)
+        raise EmlekError(
+            ErrorCode.NEEDS_CONFIRMATION,
+            "首次啟用須同意條款",
+            data={
+                "state": "needs_notice",
+                "notice_token": token,
+                "ask_user": TERMS,
+                "expires_in": tokens.TTL_SECONDS,
+            },
+        )
+    return {"started": True, "message": "emLek 已啟用。"}
 
 
 def is_enabled(conn: sqlite3.Connection) -> bool:

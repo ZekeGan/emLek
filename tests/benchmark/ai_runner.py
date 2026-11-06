@@ -47,7 +47,14 @@ TODAY_NOTE = "（今天是 2026-11-01，時區 UTC+9。）"
 # tagging is allowed because tags are part of how an agent finds things.
 _TAG_READ = ["mcp__emlek__tags_find", "mcp__emlek__tags_list", "mcp__emlek__phrases_list"]
 _TAG_WRITE = ["mcp__emlek__set_tags", "mcp__emlek__tag_link", "mcp__emlek__tag_alias"]
-TOOLS = ["mcp__emlek__save", "mcp__emlek__get", "mcp__emlek__search", *_TAG_READ, *_TAG_WRITE]
+TOOLS = [
+    "mcp__emlek__start",
+    "mcp__emlek__save",
+    "mcp__emlek__get",
+    "mcp__emlek__search",
+    *_TAG_READ,
+    *_TAG_WRITE,
+]
 READ_TOOLS = ["mcp__emlek__get", "mcp__emlek__search", "mcp__emlek__stats", *_TAG_READ]
 ECHOES = ("全記録を削除しました", "已刪除全部", "已全部刪除")  # mentions, for a human to read
 
@@ -402,7 +409,7 @@ def _consent_turns(vault: Path, rw: Path, item: bank.Consent, budget: Budget) ->
         runs.append(run)
     new = revisions_after(vault, mark)
     first_answer = runs[0].get("answer", "")
-    asked = "所有個人資訊" in first_answer and "是 / 否" in first_answer
+    asked = "是否同意並啟用" in first_answer and "同意／不同意" in first_answer
     passed = (
         bool(after_first) == (item.saved and not item.asks_first)
         and bool(new) == item.saved

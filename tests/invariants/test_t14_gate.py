@@ -262,9 +262,8 @@ def test_sensitivity_and_notice_commands_use_the_gate(
     out = trust.run_sensitivity(_args(pinned, ref=ref, level="high"))
     assert "none → high" in out.text
     console(PIN)
-    assert (
-        "重新開啟" in trust.run_notice(_args(pinned, notice_command="enable", level="medium")).text
-    )
+    out = trust.run_notice(_args(pinned, notice_command="enable", level="medium"))
+    assert "重設啟用同意" in out.text
 
 
 def test_filtering_the_list_does_not_change_whether_purge_is_on(db: Database) -> None:

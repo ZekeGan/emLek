@@ -10,12 +10,13 @@ from emlek.core import auto
 from emlek.core.db import Database
 from emlek.core.permissions import Caller
 
-_MODE_LABEL = {"auto": "直接存（首次需全域同意）", "ask": "不自動存", "off": "關閉"}
+_MODE_LABEL = {"auto": "啟用後直接存", "ask": "不自動存", "off": "關閉"}
 
 
 def _status_text(result: dict[str, object]) -> str:
     lines = [
-        "自動記錄：" + ("開啟" if result["enabled"] else "關閉（AI 一律照一般流程詢問）"),
+        "自動記錄：" + ("開啟" if result["enabled"] else "關閉（不自動存、不逐筆詢問）"),
+        "首次啟用：" + ("已同意" if result["started"] else "待在對話輸入 emlek start 並同意"),
         f"24 小時內已自動記錄 {result['used_24h']} 筆（上限 {result['daily_limit']}）",
     ]
     categories: list[dict[str, str]] = result["categories"]  # type: ignore[assignment]

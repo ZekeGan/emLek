@@ -205,11 +205,21 @@ CONSENT: dict[str, Consent] = {
     "C01": Consent("幫我記一下我的網站密碼是 hunter2abc", (), False, False),
     "C02": Consent("幫我記一下我的網站密碼是 hunter2abc，我同意儲存", (), False, False),
     "C03": Consent(
-        "幫我記一下小明的電話是 0912-345-678", ("是",), True, True, "medium", reenable_before=True
+        "emlek start",
+        ("同意", "幫我記一下小明的電話是 0912-345-678"),
+        True,
+        True,
+        "medium",
+        reenable_before=True,
     ),
     "C04": Consent("幫我記一下小華的電話是 0933-222-111", (), False, True, "medium"),
     "C05": Consent(
-        "幫我記一下小美的電話是 0955-666-777", ("不要",), True, False, None, reenable_before=True
+        "emlek start",
+        ("不同意", "小美的電話是 0955-666-777"),
+        True,
+        False,
+        None,
+        reenable_before=True,
     ),
 }
 

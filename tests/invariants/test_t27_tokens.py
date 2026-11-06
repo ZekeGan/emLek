@@ -22,9 +22,9 @@ PHONE = "小明的電話 0912-345-678"
 PERSON = Caller(Channel.CLI, interactive=True, pin_verified=True)
 
 
-def _asked(db: Database, caller: Caller, body: str, **kwargs: Any) -> dict[str, Any]:
+def _asked(db: Database, caller: Caller) -> dict[str, Any]:
     with pytest.raises(EmlekError) as info:
-        service.save(db, caller, body=body, **kwargs)
+        notice.start(db, caller)
     assert info.value.code is ErrorCode.NEEDS_CONFIRMATION
     return info.value.data
 
@@ -45,55 +45,53 @@ def test_high_risk_text_is_always_refused_without_a_confirmation_token(
 
 
 def test_a_token_works_once(db: Database, caller: Caller) -> None:
-    data = _asked(db, caller, PHONE)
-    service.save(db, caller, body=PHONE, notice_token=data["notice_token"])
-    notice.enable_medium(db, PERSON)
+    data = _asked(db, caller)
+    notice.start(db, caller, notice_token=data["notice_token"])
     with pytest.raises(EmlekError) as info:
-        service.save(db, caller, body=PHONE, notice_token=data["notice_token"])
+        notice.start(db, caller, notice_token=data["notice_token"])
     assert info.value.code is ErrorCode.TOKEN_INVALID
-    assert _count(db) == 1
+    assert _count(db) == 0
 
 
-def test_a_token_is_bound_to_the_exact_text_and_the_operation(db: Database, caller: Caller) -> None:
-    data = _asked(db, caller, PHONE)
+def test_a_token_is_bound_to_the_exact_text_and_the_operation(
+    db: Database, caller: Caller, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wrong_operation = tokens.issue(db, "notice", tokens.content_hash("save", "", notice.TERMS))
     with pytest.raises(EmlekError) as info:
-        service.save(db, caller, body=PHONE + "。", notice_token=data["notice_token"])
+        notice.start(db, caller, notice_token=wrong_operation)
     assert info.value.code is ErrorCode.TOKEN_INVALID
-    ref = service.save(db, caller, body="普通のメモ")["ref"]
-    with pytest.raises(EmlekError) as info:  # a save token cannot authorise an amend
-        service.amend(db, caller, ref=ref, body=PHONE, notice_token=data["notice_token"])
+    data = _asked(db, caller)
+    monkeypatch.setattr(notice, "TERMS", notice.TERMS + "修訂")
+    with pytest.raises(EmlekError) as info:
+        notice.start(db, caller, notice_token=data["notice_token"])
     assert info.value.code is ErrorCode.TOKEN_INVALID
-    assert service.get(db, caller, ref=ref)["version"] == 1
+    assert notice.is_enabled(db.conn)
 
 
 def test_a_token_expires_after_ten_minutes(
     db: Database, caller: Caller, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    data = _asked(db, caller, PHONE)
+    data = _asked(db, caller)
     later = tokens._now() + timedelta(seconds=tokens.TTL_SECONDS + 1)
     monkeypatch.setattr(tokens, "_now", lambda: later)
     with pytest.raises(EmlekError) as info:
-        service.save(db, caller, body=PHONE, notice_token=data["notice_token"])
+        notice.start(db, caller, notice_token=data["notice_token"])
     assert info.value.code is ErrorCode.TOKEN_INVALID
 
 
 def test_the_kinds_are_not_interchangeable(db: Database, caller: Caller) -> None:
-    notice_data = _asked(db, caller, PHONE)
-    with pytest.raises(EmlekError) as info:  # a notice token cannot confirm a secret
-        service.save(db, caller, body=PHONE, confirm_token=notice_data["notice_token"])
-    assert info.value.code is ErrorCode.NEEDS_CONFIRMATION  # the wrong parameter counts as absent
-    confirm = tokens.issue(db, "confirm", tokens.content_hash("save", "", PHONE))
+    confirm = tokens.issue(db, "confirm", tokens.content_hash("start", "", notice.TERMS))
     with pytest.raises(EmlekError) as info:
-        service.save(db, caller, body=PHONE, notice_token=confirm)
+        notice.start(db, caller, notice_token=confirm)
     assert info.value.code is ErrorCode.TOKEN_INVALID
 
 
 def test_every_refusal_reads_the_same(db: Database, caller: Caller) -> None:
-    good = _asked(db, caller, PHONE)["notice_token"]
+    good = _asked(db, caller)["notice_token"]
     messages = set()
     for token in ("nonsense", good + "x", "y" * 22):
         with pytest.raises(EmlekError) as info:
-            service.save(db, caller, body=PHONE, notice_token=token)
+            notice.start(db, caller, notice_token=token)
         messages.add((info.value.code, info.value.message))
     assert len(messages) == 1
 
@@ -101,25 +99,27 @@ def test_every_refusal_reads_the_same(db: Database, caller: Caller) -> None:
 def test_a_failed_write_does_not_burn_the_token(
     db: Database, caller: Caller, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    data = _asked(db, caller, PHONE)
+    data = _asked(db, caller)
+    original = notice.acknowledge
 
-    def explode() -> None:
+    def explode(conn: Any) -> None:
+        original(conn)
         raise RuntimeError("disk full")
 
-    monkeypatch.setattr(service, "_before_commit", explode)
+    monkeypatch.setattr(notice, "acknowledge", explode)
     with pytest.raises(RuntimeError):
-        service.save(db, caller, body=PHONE, notice_token=data["notice_token"])
-    assert _count(db) == 0
+        notice.start(db, caller, notice_token=data["notice_token"])
+    assert notice.is_enabled(db.conn)
     monkeypatch.undo()
-    service.save(db, caller, body=PHONE, notice_token=data["notice_token"])
-    assert _count(db) == 1
+    notice.start(db, caller, notice_token=data["notice_token"])
+    assert not notice.is_enabled(db.conn) and _count(db) == 0
 
 
 def test_two_processes_racing_for_one_token_only_one_wins(data_dir: Path) -> None:
     path = load_config(data_dir).db_path
     first = Database.open(path)
     try:
-        data = _asked(first, Caller(Channel.CLI), PHONE)
+        data = _asked(first, Caller(Channel.CLI))
     finally:
         first.close()
     outcomes: list[str] = []
@@ -130,10 +130,8 @@ def test_two_processes_racing_for_one_token_only_one_wins(data_dir: Path) -> Non
         try:
             gate.wait()
             try:
-                service.save(
-                    conn, Caller(Channel.CLI), body=PHONE, notice_token=data["notice_token"]
-                )
-                outcomes.append("saved")
+                notice.start(conn, Caller(Channel.CLI), notice_token=data["notice_token"])
+                outcomes.append("started")
             except EmlekError as error:
                 outcomes.append(error.code.value)
         finally:
@@ -144,33 +142,34 @@ def test_two_processes_racing_for_one_token_only_one_wins(data_dir: Path) -> Non
         thread.start()
     for thread in threads:
         thread.join()
-    assert sorted(outcomes) == ["TOKEN_INVALID", "saved"]
+    assert sorted(outcomes) == ["TOKEN_INVALID", "started"]
 
 
 def test_tokens_are_stored_hashed_and_never_logged(
     db: Database, caller: Caller, caplog: pytest.LogCaptureFixture
 ) -> None:
     with caplog.at_level(logging.DEBUG, logger="emlek"):
-        data = _asked(db, caller, PHONE)
-        service.save(db, caller, body=PHONE, notice_token=data["notice_token"])
+        data = _asked(db, caller)
+        notice.start(db, caller, notice_token=data["notice_token"])
     token = data["notice_token"]
-    assert token not in caplog.text and "0912" not in caplog.text
+    assert token not in caplog.text
     stored = json.dumps(db.conn.execute("SELECT * FROM confirm_tokens").fetchall())
     assert token not in stored
 
 
-def test_medium_content_asks_once_then_stays_quiet_until_reenabled(
-    db: Database, caller: Caller
-) -> None:
-    data = _asked(db, caller, PHONE)
-    assert data["state"] == "needs_notice" and data["categories"] == ["phone"]
-    service.save(db, caller, body=PHONE, notice_token=data["notice_token"])
-    assert notice.status(db, Caller(Channel.CLI))["medium_notice_enabled"] is False
-
+def test_medium_content_never_shows_terms_outside_start(db: Database, caller: Caller) -> None:
+    with pytest.raises(EmlekError) as denied:
+        service.save(db, caller, body=PHONE)
+    assert denied.value.code is ErrorCode.NOT_PERMITTED
+    assert "ask_user" not in denied.value.data
+    data = _asked(db, caller)
+    notice.start(db, caller, notice_token=data["notice_token"])
+    assert service.save(db, caller, body=PHONE)["sensitivity"] == "medium"
     assert service.save(db, caller, body="別の人 0987-654-321")["sensitivity"] == "medium"
     notice.enable_medium(db, PERSON)
-    again = _asked(db, caller, "また別の人 0911-222-333")
-    assert again["state"] == "needs_notice"
+    with pytest.raises(EmlekError) as denied:
+        service.save(db, caller, body=PHONE)
+    assert denied.value.code is ErrorCode.NOT_PERMITTED
 
 
 def test_high_wins_when_both_appear(db: Database, caller: Caller) -> None:
@@ -195,8 +194,10 @@ def test_amend_goes_through_the_same_gate_and_only_raises_the_record(
     ref = service.save(db, caller, body="最初のメモ")["ref"]
     with pytest.raises(EmlekError) as info:
         service.amend(db, caller, ref=ref, body=PHONE)
-    data = info.value.data
-    done = service.amend(db, caller, ref=ref, body=PHONE, notice_token=data["notice_token"])
+    assert info.value.code is ErrorCode.NOT_PERMITTED
+    data = _asked(db, caller)
+    notice.start(db, caller, notice_token=data["notice_token"])
+    done = service.amend(db, caller, ref=ref, body=PHONE)
     assert done["sensitivity"] == "medium"
     plain = service.amend(db, caller, ref=ref, body="秘密を消した版")
     assert plain["sensitivity"] == "medium"  # a record keeps the highest level of any version
@@ -236,8 +237,8 @@ def test_reads_respect_the_sensitivity_cap_everywhere(db: Database, caller: Call
 def test_the_refusal_carries_the_exact_question_to_ask(db: Database, caller: Caller) -> None:
     from pathlib import Path
 
-    medium = _asked(db, caller, PHONE)
-    assert medium["ask_user"] == service.ASK_MEDIUM
+    medium = _asked(db, caller)
+    assert medium["ask_user"] == notice.TERMS
     rules = (Path(__file__).resolve().parents[2] / "docs" / "AGENT_RULES.md").read_text("utf-8")
-    assert service.ASK_MEDIUM in rules
+    assert notice.TERMS in rules
     assert "0912" not in json.dumps(medium)

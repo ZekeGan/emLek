@@ -157,7 +157,7 @@ MCP 伺服器的 `instructions` 放精簡的規則摘要（目前約 600 字元�
 
 - 判斷：AI 依語意判斷；核心另以規則掃描當補強（私鑰區塊、常見金鑰格式、JWT、卡號 Luhn 檢查、電話與證號格式），回傳 `sensitivity_hint`，取兩者較高者。規則掃描不可能完整。
 - high：`save`／`amend` 回 `NOT_PERMITTED`，不發碼；使用者說「是」也不放行。
-- 首次全域同意：`NEEDS_CONFIRMATION`（`state=needs_notice`，綁內容的 `notice_token`），同意後帶碼重送，寫入成功才關提醒。`emlek notice status` 查看、`emlek notice enable personal` 重開（真人終端機、PIN）。
+- 首次全域同意只由 start 觸發：`NEEDS_CONFIRMATION`（needs_notice，綁 start 與固定條款的 notice_token），同意後重送 start，只記同意不存聊天。`emlek notice status` 查看、`emlek notice enable personal` 重設未啟用（真人終端機、PIN），之後仍須主動 start。
 - `amend` 同樣重掃並取較高等級，高風險直接拒絕；AI 傳入的 `sensitivity` 只能調高，調低只能用 `emlek sensitivity set r<id> <level>`。
 - `import` 也掃描：high 一律略過，`--include-high` 不能放行；medium 按使用者批次命令匯入並標記。
 - 記錄的 `sensitivity` 等於各版本最高者；`search`／`get` 回傳該欄位。`emlek export --exclude-high` 可排除 high 記錄。
@@ -205,11 +205,11 @@ MCP 伺服器的 `instructions` 放精簡的規則摘要（目前約 600 字元�
 
 ### 確認碼
 
-`confirm_tokens(token_hash, kind, content_hash, created_at, expires_at, used_at)`。確認碼為 128 位元隨機值，只存 SHA-256；`content_hash`＝SHA-256(操作名稱＋記錄編號（`save` 為空）＋內文)；10 分鐘過期；每次簽發時順手清掉一天前的舊列。
+`confirm_tokens(token_hash, kind, content_hash, created_at, expires_at, used_at)`。確認碼為 128 位元隨機值，只存 SHA-256；啟用碼的 `content_hash`＝SHA-256(start 操作＋空記錄編號＋固定條款)，各段以換行分隔；10 分鐘過期；每次簽發時清掉一天前的舊列。
 
 1. 有效等級 high：所有 `save`／`amend`／匯入入口直接拒絕，不發確認碼；明確要求、舊確認碼與 PIN 均不能放行。既有歷史與備份不自動刪除。
-2. 所有 MCP 寫入與帶自動來源的寫入，首次均需全域同意，涵蓋生活、想法、工作摘要及個資等全部個人資訊。`NEEDS_CONFIRMATION` 附 `state=needs_notice`、`notice_token`、固定 `ask_user`；真正下一回合答「是」才帶碼重送。同意後不逐筆或逐類別詢問。明確執行的 CLI 單筆／批次命令本身是使用者要求；其中 medium 單筆寫入仍共用首次提醒。
-3. 驗證存在、種類、單次使用、10 分鐘期限及操作／記錄／內文雜湊；用碼、寫入與關閉提醒在同一交易，失敗回滾。失敗統一 `TOKEN_INVALID`，碼不入日誌。`notice enable personal`（需 PIN；`medium` 為舊別名）重開提醒並撤銷未用 notice 碼；交易內複核重設狀態，避免檢查與寫入之間繞過同意。
+2. 只有使用者在對話輸入 `emlek start` 才呼叫 MCP `start`，首次回 `NEEDS_CONFIRMATION`，附 `needs_notice`、`notice_token`、固定條款。下一回合答「同意」或「是」才帶碼重送 start；只記同意，不寫筆記、不補存先前聊天。跨聊天／AI 沿用本機庫同意，已同意的重複 start 不再問。未啟用時正常聊天，不主動邀請啟用；所有 MCP save／amend、自動來源及 medium 單筆寫入只回 `NOT_PERMITTED`／`not_started`，不發碼或條款。一般 CLI 明確單筆／批次命令保留直接執行語意，不新增 shell start 子命令。
+3. start 碼驗證存在、種類、單次使用、10 分鐘期限及 start 操作／固定條款雜湊；用碼與同意設定在同一交易，失敗回滾。舊 save 碼不能啟用、start 碼不能代替 save。失敗統一 `TOKEN_INVALID`，碼不入日誌。`notice enable personal`（PIN；medium 舊別名）重設未啟用並撤銷未用 notice 碼，下次仍只在主動 start 時顯示條款。寫入交易內複核重設狀態。
 
 ### 讀取端的敏感度上限
 
@@ -304,10 +304,10 @@ T14、T15、T16，以及新增的 T27（確認碼）、T28（PIN 儲存與狀態
 
 ## M10 規格：自動記錄（2026-11-03；使用者已確認草案並指示開始；**已實作，待驗收**；實作決定見 D87）
 
-**目標**：使用者不必每次說「幫我記錄」。首次同意涵蓋所有個人資訊，之後依政策自動保存個人敘述，只顯示實際筆記編號，事後可看、可撤（D96）。一般問題不詢問保存；不做全部對話錄製。未登記或不確定的內容略過，不主動提議儲存。
+**目標**：使用者主動 `emlek start` 首次同意後，正常聊天，在背景依政策保存往後的個人敘述，成功後附實際筆記編號，事後可看、可撤（D97）。一般問題不詢問保存；不做全部對話錄製。未登記或不確定的內容略過，不主動提議儲存。
 
 ### 政策
-- 新庫總開關預設開，但取得首次同意前不得自動寫入。`emlek auto on|off` 仍需 PIN；關閉後不自動存、不逐筆詢問。
+- 新庫自動政策預設準備好，但尚未 start 同意啟用前不得自動寫入。`emlek auto on|off` 仍需 PIN，start 不改使用者的政策或關閉狀態；關閉後不自動存、不逐筆詢問。
 - 類別表（遷移 0009）：`auto_categories(id, name, description, mode, created_at, updated_at)`。預設五類全為 `auto`：**生活點滴**、**思考**、**工作**（使用者摘要）、**研究筆記**、**靈感**。`ask` 保留命令相容性，但不自動存也不逐筆詢問；`off` 不自動存。`emlek auto set <類別> auto|ask|off` 及增刪改仍需真人終端機與 PIN，AI 只能讀 `auto_policy`。
 - 遷移 0010：舊庫的總開關與明確 `off` 類別不變，舊 `ask` 類別轉為 `auto`。舊 medium 同意不足以涵蓋所有個人資訊，故重開全域提醒並撤銷未用 notice 碼；歷史內文不改寫，沿用既有備份遷移機制。
 - 專案排除：政策可列「專案路徑或名稱關鍵字」；AI 所在目錄命中就不自動存（只能 AI 端遵守，伺服器無法得知所在目錄，文件如實標示為盡力而為）。
@@ -320,14 +320,15 @@ T14、T15、T16，以及新增的 T27（確認碼）、T28（PIN 儲存與狀態
 - 伺服器端閘門：自動來源須總開關開、類別為 `auto`、`kind` 為 `original`／`ai_summary`；所有 MCP 寫入仍要首次同意，省略自動來源不能繞過。滾動 24 小時上限預設 30 筆。**閘門驗證不了使用者意圖**，所以仍需 AI 遵守排除規則與事後可審可撤。
 
 ### 提醒、審閱、撤回
-- AI 存入前不發開場或進度訊息；`save`／`amend` 成功後原樣回傳 `marker`：`◆ emLek｜r231.✔️`，編號為實際記錄而非版本。單純個人敘述只回這一行；失敗不顯示成功符號。回想同樣不發搜尋前進度訊息。
+- AI 存入前不發操作進度訊息；`save`／`amend` 成功後在正常回答末尾另附原樣 `marker`：`◆ emLek｜r231.✔️`，編號為實際記錄而非版本。分享想法／感受／經歷時正常接話，不強制每次追問；只有單純交代資料、無需其他回應時才只回 marker。失敗不顯示成功符號。回想同樣不發搜尋前進度訊息。
 - 審閱：`emlek recent [--auto] [--days N]` 列出最近存入的記錄（標出自動存入、類別、編號）。
 - 撤回：使用者說「撤掉 r231」，AI 用既有的隱藏（可恢復）；整批用 `emlek auto hide --since <日期>`（與匯入批次相同的可恢復隱藏，不是清除）。
 
 ### 測試與驗收
 - T39（核心）：總開關關閉、類別不是 `auto`、最高風險、推論、超過每日上限時 `source="auto:…"` 的存入被拒；個人資料首次取得同意後放行；自動存入帶來源標記；`recent --auto` 與批次隱藏可恢復；政策只有真人終端機加 PIN 能改；`auto_policy` 唯讀。
 - T41：首次同意涵蓋一般個人敘述與 medium，後續跨類別不再問；最高風險永不存；升級撤銷舊同意與 token；重設競爭下 save／amend 不寫入；marker 編號正確。
-- AI 層分平台驗：首次詢問與真正下一回合答「是」、後續生活／想法／個資無逐筆詢問、一般問答不存不問、密碼明確要求也拒存、編號可 hide／unhide。模糊日期不能補造精確日，格式重試不得丟棄已知精度。
+- T42：未啟用寫入不發碼或條款，只有主動 start 發條款；拒絕不啟用，接受不補存；舊 save 碼不能啟用，start 碼不能 save，唯讀不得 start。
+- AI 層分平台驗：未啟用正常聊天、引用 start 不執行、主動 start／拒絕／再 start／同意、後續正常聊天附 marker；跨聊天沿用、重複 start 不重問、最高風險拒存、編號可 hide／unhide。模糊日期不能補造精確日，格式重試不得丟棄已知精度。
 - 實作前須使用者看過本草案；實作後走一般驗收流程。
 
 ## 開發順序（里程碑）

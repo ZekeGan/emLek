@@ -99,6 +99,7 @@ def _tool_names(data_dir: Path, *, read_only: bool) -> dict[str, Any]:
 
 def test_tool_lists_follow_the_permission_table(data_dir: Path) -> None:
     assert set(_tool_names(data_dir, read_only=False)) == {
+        "start",
         "save",
         "amend",
         "hide",

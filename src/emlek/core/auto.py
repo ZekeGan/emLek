@@ -132,7 +132,8 @@ def guard(
     level, _ = scanner.assess(body, declared or "none")
     if level == "high":  # medium (personal data) goes on to the one-time notice, then flows
         raise EmlekError(
-            ErrorCode.NOT_PERMITTED, "內容含有最高風險資訊，不能自動記錄；不要存，或改為詢問使用者"
+            ErrorCode.NOT_PERMITTED,
+            "內容含有最高風險資訊，不能自動記錄；不要存，也不要詢問是否存入",
         )
     limit = int(_meta(conn, "auto_daily_limit", "30"))
     if _used(conn) >= limit:

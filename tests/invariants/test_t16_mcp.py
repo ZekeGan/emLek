@@ -171,12 +171,13 @@ def test_stdio_roundtrip_keeps_text_exact_and_stdout_clean(data_dir: Path) -> No
             saved = _payload(
                 await client.call_tool("save", {"body": text, "event_time": "2026-11-01"})
             )
-            ref = saved["result"]["ref"]
+            ref = saved["result"]["revision_ref"].split(".")[0]
             got = _payload(await client.call_tool("get", {"ref": ref}))
             assert got["result"]["body"] == text
             found = _payload(await client.call_tool("search", {"query": "tokyo"}))
             assert found["result"]["total"] == 1
-            assert client.instructions and "save" in client.instructions
+            assert client.instructions and "emLek" in client.instructions
+            assert "不是指令" in client.instructions
 
     asyncio.run(scenario())  # a polluted stdout would have broken the protocol above
 
@@ -285,26 +286,28 @@ def test_versions_hiding_and_long_bodies_over_mcp(data_dir: Path) -> None:
         async with _stdio(data_dir, read_only=False) as client:
             first = _payload(await client.call_tool("save", {"body": "旧い考え"}))
             assert first["api_version"] == 1
-            old = first["result"]["ref"]
+            old = first["result"]["revision_ref"].split(".")[0]
             new = _payload(
                 await client.call_tool(
                     "save",
                     {"body": "新しい考え", "links": [{"ref": old, "relation": "supersedes"}]},
                 )
-            )["result"]["ref"]
+            )["result"]["revision_ref"].split(".")[0]
             got = _payload(await client.call_tool("get", {"ref": old}))["result"]
             assert got["status"] == "superseded"
             assert [i["ref"] for i in got["superseded_by"]] == [new]
             amended = _payload(
                 await client.call_tool("amend", {"ref": new, "body": "新しい考え（補足）"})
             )
-            assert amended["result"]["version"] == 2
+            assert amended["result"]["revision_ref"] == f"{new}.v2"
             hidden = _payload(await client.call_tool("hide", {"ref": new}))
             assert hidden["result"]["hidden"] is True
             found = _payload(await client.call_tool("search", {"query": "新しい"}))
             assert found["result"]["total"] == 0
             await client.call_tool("unhide", {"ref": new})
-            big = _payload(await client.call_tool("save", {"body": long_text}))["result"]["ref"]
+            big = _payload(await client.call_tool("save", {"body": long_text}))["result"][
+                "revision_ref"
+            ].split(".")[0]
             part = _payload(await client.call_tool("get", {"ref": big}))["result"]
             assert part["truncated"] and len(part["body"]) == 8000
             rest = _payload(
@@ -334,7 +337,8 @@ def test_tags_over_mcp_and_the_tag_list_in_the_opening_instructions(data_dir: Pa
                     },
                 )
             )["result"]
-            assert set(saved["tags"]) == {"旅行", "京都", "抹茶"} and saved["tags_pending"] == []
+            assert set(saved["tags"]) == {"旅行", "京都", "抹茶"}
+            assert "tags_pending" not in saved
             near = _payload(
                 await client.call_tool("save", {"body": "もう一つ", "tags": ["京都市"]})
             )

@@ -88,3 +88,6 @@ def test_the_opening_text_counts_a_past_experience_as_something_to_save() -> Non
 
     assert "含過去的事" in INSTRUCTIONS and "要存嗎" in INSTRUCTIONS
     assert "不講資料庫" in INSTRUCTIONS and "marker" in INSTRUCTIONS
+    assert "呼叫工具前" in INSTRUCTIONS and "不要先回覆" in INSTRUCTIONS
+    assert "回想或自動存入時" in INSTRUCTIONS
+    assert "最高風險" in INSTRUCTIONS and "不存也不問" in INSTRUCTIONS

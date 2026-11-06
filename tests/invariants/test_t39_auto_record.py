@@ -1,6 +1,6 @@
 """T39: auto-record (D85). Off until a person at a terminal with the PIN turns it on; the core
-refuses an automatic save for any category that is not `auto`, for anything the sensitivity scan
-reacts to, for an inference, and past the daily limit; every automatic record can be listed and
+refuses an automatic save for any category that is not `auto`, for highest-risk content, for an
+inference, and past the daily limit; personal data follows the one-time notice. Every record can be
 taken back (hidden, never purged)."""
 
 from __future__ import annotations
@@ -89,7 +89,8 @@ def test_inferences_and_highest_risk_text_are_never_saved_automatically(on: Data
     _refused(on, kind="inference")
     for body in ("密碼：abc12345", "卡號 4111 1111 1111 1111"):
         assert scanner.assess(body, "none")[0] == "high"  # the premise: the scan reacts
-        _refused(on, body)
+        refused = _refused(on, body)
+        assert "改為詢問" not in refused.message
     _refused(on, sensitivity="high")  # the AI declaring it is enough to stop an auto save
     assert on.conn.execute("SELECT count(*) FROM records").fetchone()[0] == 0
     assert on.conn.execute("SELECT count(*) FROM confirm_tokens").fetchone()[0] == 0

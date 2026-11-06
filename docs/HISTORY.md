@@ -2,6 +2,12 @@
 
 從 [PROGRESS](PROGRESS.md) 移出，只供追溯，不需要平常讀。日期見各段標題（未標示者為 2026-11-02）。決策原因見 [DECISIONS](DECISIONS.md)。
 
+## M10 首輪驗收未通過（Agent 受託驗收，2026-11-06）
+
+完整機械檢查為 719 通過、3 失敗：T16 的 stdio 測試仍索取精簡回應已移除的 `ref`、空 `tags_pending`；後續版本斷言也仍使用舊欄位。安靜風格不符合 D91；最高風險內容在 DESIGN／AGENT_RULES 的詢問規則不一致，個資 AI 補測又被核准層拒絕。沒有標通過或前進 M11。
+
+Windows 未核准環境曾在建立 asyncio `socketpair` 時停住；核准環境可完成套件。真實 stdio 的個資通知、合成同意後免問、最高風險拒絕、版本保留與隱藏恢復已驗證；這些不能代替 AI 完整對話。原始證據在被忽略的 `benchmark-output/codex-m10-20261106/`。使用者後續同意修正與固定合成電話寫入（D93）；修正後狀態見 [PROGRESS](PROGRESS.md)，AI 比較見 [BENCHMARK](BENCHMARK.md#m10-codex-專項重驗2026-11-06)。
+
 ## M7 標籤（使用者驗收通過，2026-11-03）
 
 **做了什麼**：標籤（階層、別名、`#標籤`、向下展開、`match`、facets、覆蓋率 `tag_coverage`、近似名稱不新建而回 `tags_pending`）、`tags_find`／`tags_list`／`set_tags`／`tag_link`／`tag_alias`、命令列 `tag`／`tags`、匯出含標籤、`doctor` 顯示標籤狀態、熱門標籤名稱進 AI 開場說明。規格見 [DESIGN_TAGS](DESIGN_TAGS.md)。

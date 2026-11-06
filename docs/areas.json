@@ -1,0 +1,211 @@
+{
+  "description": "規格、程式與測試路由的唯一來源；context按領域取章節，stale依變更點名。tests是相關驗證候選，不是每次必跑全部。",
+  "areas": [
+    {
+      "id": "storage",
+      "docs": [
+        "docs/spec/STORAGE.md"
+      ],
+      "code": [
+        "src/emlek/__*.py",
+        "src/emlek/config.py",
+        "src/emlek/log.py",
+        "src/emlek/core/__init__.py",
+        "src/emlek/core/db.py",
+        "src/emlek/core/vault.py",
+        "src/emlek/core/doctor.py",
+        "src/emlek/core/stats.py",
+        "src/emlek/core/errors.py",
+        "src/emlek/core/refs.py",
+        "src/emlek/core/timeutil.py",
+        "src/emlek/core/migrations/*",
+        "src/emlek/cli/__init__.py",
+        "src/emlek/cli/parser.py",
+        "src/emlek/cli/output.py",
+        "src/emlek/cli/commands/__init__.py",
+        "src/emlek/cli/commands/common.py",
+        "src/emlek/cli/commands/init.py",
+        "src/emlek/cli/commands/doctor.py"
+      ],
+      "tests": [
+        "tests/invariants/test_t25_doctor.py",
+        "tests/invariants/test_t24_migrations.py",
+        "tests/invariants/test_t11_limits.py",
+        "tests/invariants/test_t06_crash.py",
+        "tests/invariants/test_t05_atomic_save.py",
+        "tests/invariants/test_t03_roundtrip.py",
+        "tests/invariants/test_t01_immutability.py"
+      ]
+    },
+    {
+      "id": "memory",
+      "docs": [
+        "docs/spec/MEMORY.md#版本與連結語意",
+        "docs/spec/MEMORY.md#自動記錄",
+        "docs/spec/MEMORY.md#刪除"
+      ],
+      "code": [
+        "src/emlek/core/service.py",
+        "src/emlek/core/versions.py",
+        "src/emlek/core/auto.py",
+        "src/emlek/core/purge.py",
+        "src/emlek/cli/commands/save.py",
+        "src/emlek/cli/commands/versions.py",
+        "src/emlek/cli/commands/autocmd.py",
+        "src/emlek/cli/commands/purgecmd.py"
+      ],
+      "tests": [
+        "tests/invariants/test_t43_prompt_contract.py",
+        "tests/invariants/test_t42_start.py",
+        "tests/invariants/test_t39_auto_record.py",
+        "tests/invariants/test_t23_purge_gate.py",
+        "tests/invariants/test_t22_purge.py",
+        "tests/invariants/test_t13_links.py",
+        "tests/invariants/test_t12_hide.py",
+        "tests/invariants/test_t05_atomic_save.py",
+        "tests/invariants/test_t02_versions.py"
+      ]
+    },
+    {
+      "id": "search",
+      "docs": [
+        "docs/spec/SEARCH.md",
+        "docs/spec/STORAGE.md#輸入輸出與儲存限制"
+      ],
+      "code": [
+        "src/emlek/core/search.py",
+        "src/emlek/core/timeutil.py",
+        "src/emlek/cli/commands/search.py",
+        "src/emlek/cli/commands/get.py"
+      ],
+      "tests": [
+        "tests/invariants/test_t35_slim_search.py",
+        "tests/invariants/test_t34_response_cap.py",
+        "tests/invariants/test_t32_or_search.py",
+        "tests/invariants/test_t26_summary.py",
+        "tests/invariants/test_t10_paging.py",
+        "tests/invariants/test_t09_time.py",
+        "tests/invariants/test_t08_index.py",
+        "tests/invariants/test_t04_normalization.py"
+      ]
+    },
+    {
+      "id": "security",
+      "docs": [
+        "docs/spec/SECURITY.md",
+        "docs/AGENT_RULES.md#1-存入"
+      ],
+      "code": [
+        "src/emlek/core/permissions.py",
+        "src/emlek/core/notice.py",
+        "src/emlek/core/tokens.py",
+        "src/emlek/core/security.py",
+        "src/emlek/core/sensitivity.py",
+        "src/emlek/core/phrases.py",
+        "src/emlek/cli/commands/trust.py"
+      ],
+      "tests": [
+        "tests/invariants/test_t42_start.py",
+        "tests/invariants/test_t41_personal_consent.py",
+        "tests/invariants/test_t38_cap_leaks.py",
+        "tests/invariants/test_t28_pin.py",
+        "tests/invariants/test_t27_tokens.py",
+        "tests/invariants/test_t23_purge_gate.py",
+        "tests/invariants/test_t16_mcp.py",
+        "tests/invariants/test_t15_sensitivity.py",
+        "tests/invariants/test_t14_gate.py"
+      ]
+    },
+    {
+      "id": "tags",
+      "docs": [
+        "docs/DESIGN_TAGS.md"
+      ],
+      "code": [
+        "src/emlek/core/tags.py",
+        "src/emlek/cli/commands/tagcmd.py"
+      ],
+      "tests": [
+        "tests/invariants/test_t43_prompt_contract.py",
+        "tests/invariants/test_t33_backfill.py",
+        "tests/invariants/test_t31_tag_admin.py",
+        "tests/invariants/test_t30_tag_search.py",
+        "tests/invariants/test_t29_tag_safety.py",
+        "tests/invariants/test_t18_hashtags.py",
+        "tests/invariants/test_t17_tags.py"
+      ]
+    },
+    {
+      "id": "transfer",
+      "docs": [
+        "docs/spec/TRANSFER.md"
+      ],
+      "code": [
+        "src/emlek/core/backup.py",
+        "src/emlek/core/backup_crypto.py",
+        "src/emlek/core/export.py",
+        "src/emlek/core/importer.py",
+        "src/emlek/core/cleanup.py",
+        "src/emlek/cli/commands/maintenance.py",
+        "src/emlek/cli/commands/importcmd.py"
+      ],
+      "tests": [
+        "tests/invariants/test_t37_encrypted_backup.py",
+        "tests/invariants/test_t36_backup_crypto.py",
+        "tests/invariants/test_t21_import.py",
+        "tests/invariants/test_t20_export.py",
+        "tests/invariants/test_t19_backup_restore.py"
+      ]
+    },
+    {
+      "id": "mcp",
+      "docs": [
+        "docs/spec/MEMORY.md#工具",
+        "docs/AGENT_RULES.md"
+      ],
+      "code": [
+        "src/emlek/mcp_server/*",
+        "src/emlek/cli/commands/mcp.py"
+      ],
+      "tests": [
+        "tests/invariants/test_t43_prompt_contract.py",
+        "tests/invariants/test_t40_quiet_writes.py",
+        "tests/invariants/test_t38_cap_leaks.py",
+        "tests/invariants/test_t16_mcp.py"
+      ]
+    },
+    {
+      "id": "quality",
+      "docs": [
+        "docs/BENCHMARK.md",
+        "docs/QUESTIONS.md",
+        "docs/TEST_PLAN.md"
+      ],
+      "code": [
+        "tests/benchmark/*",
+        "scripts/benchmark_sample.py",
+        "scripts/add_adjusted_scores.py"
+      ],
+      "tests": [
+        "tests/benchmark/test_system_layer.py",
+        "tests/benchmark/test_scale.py"
+      ]
+    },
+    {
+      "id": "workflow",
+      "docs": [
+        "docs/WORKFLOW.md",
+        "docs/RELEASING.md"
+      ],
+      "code": [
+        "scripts/workflow.py",
+        "scripts/check.py",
+        "scripts/install-hooks.py",
+        "scripts/hooks/*"
+      ],
+      "tests": [
+        "tests/unit/test_workflow.py"
+      ]
+    }
+  ]
+}

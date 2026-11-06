@@ -1,3 +1,4 @@
 #!/bin/sh
 PY=".venv/Scripts/python.exe"; [ -x "$PY" ] || PY=python
+"$PY" -X utf8 scripts/workflow.py check || exit 1
 exec "$PY" -X utf8 "$(git rev-parse --git-dir)/hooks/sensitive_check.py" pre-commit "$@"

@@ -28,8 +28,12 @@ def _project_python() -> str:
 def _steps(mode: str) -> list[tuple[str, list[str]]]:
     py = _project_python()
     steps = [
-        ("ruff check", [py, "-m", "ruff", "check", "src", "tests"]),
-        ("ruff format", [py, "-m", "ruff", "format", "--check", "src", "tests"]),
+        ("workflow documents", [py, "scripts/workflow.py", "check"]),
+        ("ruff check", [py, "-m", "ruff", "check", "src", "tests", "scripts/workflow.py"]),
+        (
+            "ruff format",
+            [py, "-m", "ruff", "format", "--check", "src", "tests", "scripts/workflow.py"],
+        ),
         ("mypy", [py, "-m", "mypy"]),
     ]
     if mode == "quick":

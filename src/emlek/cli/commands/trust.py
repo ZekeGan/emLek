@@ -120,15 +120,15 @@ def run_notice(args: argparse.Namespace) -> Output:
             result = notice.status(db, cli_caller())
         finally:
             db.close()
-        state = "開啟（存入個人資料時會先問你）" if result["medium_notice_enabled"] else "已關閉"
-        return Output(result, f"個人資料（medium）提醒：{state}")
+        state = "尚未同意（首次自動儲存時詢問）" if result["personal_notice_enabled"] else "已同意"
+        return Output(result, f"所有個人資訊自動儲存：{state}")
     caller = authorize(args, "notice_enable")
     db = open_vault(args)
     try:
         result = notice.enable_medium(db, caller)
     finally:
         db.close()
-    return Output(result, "已重新開啟個人資料提醒。")
+    return Output(result, "已重新開啟所有個人資訊的儲存同意提醒。")
 
 
 def run_sensitivity(args: argparse.Namespace) -> Output:

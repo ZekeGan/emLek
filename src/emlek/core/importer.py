@@ -271,9 +271,9 @@ def _classify(
         item.status = "duplicate"
         item.reason = "內容與已匯入的另一個檔案相同（加 --allow-duplicates 才會匯入）"
         return
-    if item.level == "high" and not include_high:
+    if item.level == "high":
         item.status = "high"
-        item.reason = "含最高風險內容，已略過（需在終端機加 --include-high）"
+        item.reason = "含密碼、金鑰等最高風險內容，不予匯入"
         return
     seen.setdefault(item.content_hash, item.file_name)
     changed = conn.execute(
@@ -293,8 +293,8 @@ def apply_import(
     """Write every importable item of an already-read plan in one transaction."""
     require(caller, "import_apply")
     todo = [i for i in plan.items if i.status in IMPORTABLE]
-    if any(i.level == "high" for i in todo):
-        require(caller, "import_apply_high")
+    if any(scanner.assess(i.body, i.level)[0] == "high" for i in todo):
+        raise EmlekError(ErrorCode.NOT_PERMITTED, "密碼、金鑰等最高風險內容不予匯入")
     now = utc_now_iso()
     refs: list[str] = []
     with db.transaction() as conn:

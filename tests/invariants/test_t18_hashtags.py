@@ -55,6 +55,9 @@ def test_typed_hashtags_are_the_users_and_the_text_is_untouched(
 
 
 def test_who_counts_as_user_depends_on_the_entry_not_on_a_claim(db: Database) -> None:
+    from emlek.core import notice
+
+    notice.acknowledge(db.conn)
     person = Caller(Channel.CLI, interactive=True)
     script = Caller(Channel.CLI, interactive=False)
     over_mcp = Caller(Channel.MCP, interactive=True)

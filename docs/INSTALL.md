@@ -29,6 +29,8 @@ codex mcp add emlek -- D:\emlek\.venv\Scripts\emlek.exe mcp
 
 只想讓某個 AI 讀、不能寫，在 `mcp` 後面加 `--read-only`。接上後，把 [AI 使用規則](AGENT_RULES.md) 放進該工具的指示檔（例如 Claude Code 的 `CLAUDE.md`）；規則檔不會自動送給 AI。
 
+新庫首次個人敘述會詢問涵蓋所有個人資訊的同意；同意後自動保存，不逐筆問，成功顯示 `◆ emLek｜r1.✔️`（實際編號）。一般問題不存不問，密碼金鑰永不存。誤存可用 `emlek hide r1` 隱藏，`emlek unhide r1` 恢復。
+
 ## 升級前
 
 ```powershell
@@ -37,6 +39,8 @@ codex mcp add emlek -- D:\emlek\.venv\Scripts\emlek.exe mcp
 ```
 
 `doctor` 全部正常、備份成功再升級（`git pull` 後 `uv sync --locked`）。資料庫結構會在第一次開啟時自動升級，並先在資料夾的 `pre-migration` 留一份升級前的副本；確認一切正常後可用 `emlek cleanup` 清掉這些副本。升級後再跑一次 `doctor`。
+
+結構 0010 將舊 medium 同意重設為新的全域首次同意，舊未用同意碼失效；舊總開關與 off 類別保留，ask 類別轉 auto。既有庫若原本關閉，仍須由你在終端機用 `emlek auto on` 與 PIN 開啟。舊內文與備份不自動刪除。
 
 ## 備份與還原
 

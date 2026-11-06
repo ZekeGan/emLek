@@ -78,15 +78,18 @@ def _checks(work: Path) -> list[Check]:
         Check("export", ["export", "--out", str(exports)]),
         Check("import previews and writes nothing", ["import", str(notes)], contains=("預覽",)),
         Check("stats unchanged after the preview", ["stats"], contains=("記錄 2 筆",)),
-        Check("auto-record starts off", ["auto", "status"], contains=("關閉",)),
+        Check(
+            "auto-record is ready but still needs consent", ["auto", "status"], contains=("開啟",)
+        ),
         Check("recent", ["recent"], contains=("r2",)),
         Check("cleanup previews", ["cleanup"], contains=("預覽",)),
         # the gates: from a script these must all be refused
         Check("auto on is refused", ["auto", "on"], code=NOT_PERMITTED),
         Check(
-            "automatic save is refused while off",
+            "automatic save is refused before personal consent",
             ["save", "--text", "x", "--source", "auto:生活點滴"],
-            code=NOT_PERMITTED,
+            code=3,
+            contains=("所有個人資訊",),
         ),
         Check("purge is refused", ["purge", "r1"], code=NOT_PERMITTED),
         Check("purge --finish is refused", ["purge", "--finish"], code=NOT_PERMITTED),

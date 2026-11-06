@@ -1,4 +1,4 @@
-"""T39: auto-record (D85). Off until a person at a terminal with the PIN turns it on; the core
+"""T39: auto-record policy (D96). The core
 refuses an automatic save for any category that is not `auto`, for highest-risk content, for an
 inference, and past the daily limit; personal data follows the one-time notice. Every record can be
 taken back (hidden, never purged)."""
@@ -15,7 +15,7 @@ import pytest
 
 from emlek.cli.commands import autocmd, common
 from emlek.config import load_config
-from emlek.core import auto, security, service, versions
+from emlek.core import auto, notice, security, service, versions
 from emlek.core import sensitivity as scanner
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
@@ -39,6 +39,7 @@ def fast_kdf(monkeypatch: pytest.MonkeyPatch) -> None:
 def on(db: Database) -> Database:
     auto.set_enabled(db, PERSON, on=True)
     auto.set_mode(db, PERSON, name=CATEGORY, mode="auto")
+    notice.acknowledge(db.conn)
     return db
 
 
@@ -57,21 +58,24 @@ def _refused(
     return info.value
 
 
-def test_everything_is_off_until_a_person_turns_it_on(db: Database) -> None:
+def test_new_vault_is_ready_and_explicitly_disabling_it_blocks_auto(db: Database) -> None:
     seen = auto.policy(db, AI)
-    assert seen["enabled"] is False
-    assert {c["mode"] for c in seen["categories"]} == {"ask"}
+    assert seen["enabled"] is True
+    assert {c["mode"] for c in seen["categories"]} == {"auto"}
     assert len(seen["categories"]) == 5
+    auto.set_enabled(db, PERSON, on=False)
     _refused(db)
-    assert service.save(db, AI, body=MEAL)["ref"] == "r1"  # an ordinary save is unaffected
+    assert service.save(db, Caller(Channel.CLI), body=MEAL)["ref"] == "r1"
 
 
 def test_a_category_that_is_not_auto_is_refused(db: Database) -> None:
     auto.set_enabled(db, PERSON, on=True)
+    auto.set_mode(db, PERSON, name=CATEGORY, mode="ask")
     _refused(db)  # enabled but the category is still "ask"
     auto.set_mode(db, PERSON, name=CATEGORY, mode="auto")
+    notice.acknowledge(db.conn)
     saved = _save(db)
-    assert saved["marker"] == f"◆ emLek｜{CATEGORY} ✓ r1"
+    assert saved["marker"] == "◆ emLek｜r1.✔️"
     auto.set_mode(db, PERSON, name=CATEGORY, mode="off")
     _refused(db)
     with pytest.raises(EmlekError):
@@ -80,9 +84,9 @@ def test_a_category_that_is_not_auto_is_refused(db: Database) -> None:
 
 def test_an_automatic_save_is_marked_and_the_marker_is_ready_to_paste(on: Database) -> None:
     saved = _save(on)
-    assert saved["marker"] == "◆ emLek｜生活點滴 ✓ r1"
+    assert saved["marker"] == "◆ emLek｜r1.✔️"
     assert service.get(on, AI, ref="r1")["source"] == SOURCE
-    assert "marker" not in service.save(on, AI, body="手動存的")
+    assert service.save(on, AI, body="手動存的")["marker"] == "◆ emLek｜r2.✔️"
 
 
 def test_inferences_and_highest_risk_text_are_never_saved_automatically(on: Database) -> None:
@@ -100,6 +104,7 @@ def test_inferences_and_highest_risk_text_are_never_saved_automatically(on: Data
 def test_personal_data_is_asked_once_and_then_flows(on: Database) -> None:
     from emlek.core import notice
 
+    notice.enable_medium(on, PERSON)
     phone = "朋友小明的電話 0912-345-678"
     assert scanner.assess(phone, "none")[0] == "medium"
     with pytest.raises(EmlekError) as asked:  # the first time: the one-time notice
@@ -108,7 +113,7 @@ def test_personal_data_is_asked_once_and_then_flows(on: Database) -> None:
     assert on.conn.execute("SELECT count(*) FROM records").fetchone()[0] == 0
     token = asked.value.data["notice_token"]
     first = service.save(on, AI, body=phone, source=SOURCE, notice_token=token)
-    assert first["marker"] == "◆ emLek｜生活點滴 ✓ r1" and first["sensitivity"] == "medium"
+    assert first["marker"] == "◆ emLek｜r1.✔️" and first["sensitivity"] == "medium"
     assert notice.is_enabled(on.conn) is False
     # afterwards personal data is saved without asking, whether the scan or the AI marked it
     assert _save(on, "同事王小華 0987-654-321")["ref"] == "r2"
@@ -150,7 +155,7 @@ def test_only_a_person_with_the_pin_can_change_the_policy(db: Database) -> None:
             with pytest.raises(EmlekError) as info:
                 attempt()
             assert info.value.code is ErrorCode.NOT_PERMITTED
-    assert auto.policy(db, AI)["enabled"] is False
+    assert auto.policy(db, AI)["enabled"] is True
 
 
 def test_the_read_only_server_cannot_even_read_the_policy(db: Database) -> None:
@@ -222,6 +227,9 @@ def test_amend_cannot_claim_the_automatic_source(on: Database) -> None:
 
 def test_opening_instructions_name_only_the_auto_categories(db: Database, data_dir: Path) -> None:
     path = load_config(data_dir).db_path
+    auto.set_enabled(db, PERSON, on=False)
+    for item in auto.policy(db, PERSON)["categories"]:
+        auto.set_mode(db, PERSON, name=item["name"], mode="off")
     assert "自動記錄已開啟" not in server._instructions(path, "high")
     auto.set_enabled(db, PERSON, on=True)
     assert "自動記錄已開啟" not in server._instructions(path, "high")  # nothing is "auto" yet
@@ -251,6 +259,7 @@ def _args(data_dir: Path, command: str, **extra: object) -> argparse.Namespace:
 def test_the_cli_needs_a_terminal_and_the_pin_but_status_is_free(
     db: Database, data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    auto.set_enabled(db, PERSON, on=False)
     security.set_pin(db, data_dir, PIN)
     _terminal(monkeypatch, pins=[], person=False)
     assert "關閉" in autocmd.run_auto(_args(data_dir, "status")).text
@@ -266,7 +275,7 @@ def test_the_cli_needs_a_terminal_and_the_pin_but_status_is_free(
     assert "直接存" in autocmd.run_auto(_args(data_dir, "set", name=CATEGORY, mode="auto")).text
     assert "上限" in autocmd.run_auto(_args(data_dir, "limit", count=10)).text
     status = autocmd.run_auto(_args(data_dir, "status")).text
-    assert "開啟" in status and "生活點滴　直接存" in status and "思考　先問" in status
+    assert "開啟" in status and "生活點滴　直接存" in status and "思考　直接存" in status
 
 
 def test_the_cli_take_back_needs_a_terminal_but_no_pin(

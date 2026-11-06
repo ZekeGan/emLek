@@ -91,9 +91,9 @@ def _used(conn: sqlite3.Connection) -> int:
     return int(row[0])
 
 
-def marker(category: str, ref: str) -> str:
+def marker(ref: str) -> str:
     """The one line the AI puts at the end of its answer after an automatic save."""
-    return f"◆ emLek｜{category} ✓ {ref}"
+    return f"◆ emLek｜{ref}.✔️"
 
 
 def policy(db: Database, caller: Caller) -> dict[str, Any]:
@@ -106,7 +106,7 @@ def policy(db: Database, caller: Caller) -> dict[str, Any]:
         "used_24h": _used(conn),
         "categories": [{"name": n, "description": d, "mode": m} for n, d, m in rows],
         "excluded_projects": _excluded(conn),
-        "marker_format": marker("<類別>", "r<編號>"),
+        "marker_format": marker("r<編號>"),
         "source_format": f"{PREFIX}<類別>",
     }
 
@@ -121,11 +121,11 @@ def guard(
     conn = db.conn
     category = source[len(PREFIX) :]
     if not enabled(conn):
-        raise EmlekError(ErrorCode.NOT_PERMITTED, "自動記錄是關閉的；請照一般流程詢問使用者")
+        raise EmlekError(ErrorCode.NOT_PERMITTED, "自動記錄已關閉；不要自動儲存，也不要逐筆詢問")
     row = conn.execute("SELECT mode FROM auto_categories WHERE name = ?", (category,)).fetchone()
     if row is None or row[0] != "auto":
         raise EmlekError(
-            ErrorCode.NOT_PERMITTED, f"「{category}」不是可自動記錄的類別；請照一般流程詢問使用者"
+            ErrorCode.NOT_PERMITTED, f"「{category}」未啟用自動記錄；不要自動儲存，也不要逐筆詢問"
         )
     if kind not in AUTO_KINDS:
         raise EmlekError(ErrorCode.NOT_PERMITTED, "自動記錄只能存使用者的原文或你的整理，不存推論")
@@ -138,7 +138,7 @@ def guard(
     limit = int(_meta(conn, "auto_daily_limit", "30"))
     if _used(conn) >= limit:
         raise EmlekError(
-            ErrorCode.NOT_PERMITTED, f"24 小時內自動記錄已達上限 {limit} 筆；請改為詢問使用者"
+            ErrorCode.NOT_PERMITTED, f"24 小時內自動記錄已達上限 {limit} 筆；停止自動儲存"
         )
     return category
 

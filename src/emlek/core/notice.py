@@ -1,4 +1,4 @@
-"""The one-time notice for medium-sensitivity content (phone, address, ...)."""
+"""One consent for personal auto-recording. The legacy database key remains 'medium'."""
 
 from __future__ import annotations
 
@@ -34,12 +34,14 @@ def status(db: Database, caller: Caller) -> dict[str, Any]:
     return {
         "medium_notice_enabled": is_enabled(db.conn),
         "medium_acknowledged_at": row[1] if row else None,
+        "personal_notice_enabled": is_enabled(db.conn),
     }
 
 
 def enable_medium(db: Database, caller: Caller) -> dict[str, Any]:
     require(caller, "notice_enable")
     with db.transaction() as conn:
+        conn.execute("DELETE FROM confirm_tokens WHERE kind = 'notice'")
         conn.execute(
             "INSERT OR REPLACE INTO notice_settings (level, enabled, acknowledged_at)"
             " VALUES ('medium', 1, NULL)"

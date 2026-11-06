@@ -120,7 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     imp.add_argument("path", nargs="?", help="檔案或資料夾")
     imp.add_argument("--apply", action="store_true", help="真的寫入（預設只預覽）")
     imp.add_argument(
-        "--include-high", action="store_true", help="也匯入含最高風險內容的檔案（需要 PIN）"
+        "--include-high", action="store_true", help="舊版相容參數；最高風險內容仍一律略過"
     )
     imp.add_argument("--allow-duplicates", action="store_true", help="內容相同的檔案也匯入")
     imp.add_argument("--list", action="store_true", help="列出匯入過的批次")
@@ -200,11 +200,11 @@ def build_parser() -> argparse.ArgumentParser:
     phrase_remove = phrase_sub.add_parser("remove", help="刪除語句")
     phrase_remove.add_argument("id", type=int)
 
-    notice = sub.add_parser("notice", help="個人資料（medium）提醒")
+    notice = sub.add_parser("notice", help="所有個人資訊的首次儲存同意")
     notice_sub = notice.add_subparsers(dest="notice_command", required=True, metavar="<動作>")
     notice_sub.add_parser("status", help="目前是否會先詢問")
     notice_enable = notice_sub.add_parser("enable", help="重新開啟提醒（需要 PIN）")
-    notice_enable.add_argument("level", choices=("medium",))
+    notice_enable.add_argument("level", choices=("personal", "medium"))
 
     sens = sub.add_parser("sensitivity", help="直接設定記錄的敏感度（需要 PIN）")
     sens_sub = sens.add_subparsers(dest="sensitivity_command", required=True, metavar="<動作>")

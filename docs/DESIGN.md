@@ -11,7 +11,7 @@
 1. 原文不可變：修改＝新增版本。
 2. 來源與時間必標；未知記為未知，不補造。
 3. 內容分三類：`original`（使用者原文）、`ai_summary`（AI 整理）、`inference`（AI 推論）。
-4. 預設不讀不存；只有明確指令才存（[AGENT_RULES](AGENT_RULES.md)）。
+4. 一般問答不讀不存、不詢問保存；個人敘述取得首次全域同意後依自動政策保存（[AGENT_RULES](AGENT_RULES.md)）。密碼、金鑰等最高風險永不新增保存。
 5. 可離開：隨時匯出 JSON／Markdown。
 
 ## 技術選型
@@ -34,7 +34,7 @@
 | `revisions` | `id`、`record_id`、`version_no`、`body`（UTF-8 原文）、`body_norm`（NFKC＋casefold 的衍生副本，供搜尋）、`kind`、`created_at`、`event_time`（可空）、`event_time_precision`（可空）、`source`（可空＝未知）、`event_date_start`／`event_date_end`（由 event_time 與精度推出的日曆日期區間，虛擬欄位，供日期範圍查詢） |
 | `links` | `revision_id`、`derived_from_revision_id`、`relation`（選填） |
 | `phrases` | `id`、`kind`（save／purge／exclude）、`text`、`enabled`、`created_at`、`updated_at` |
-| `notice_settings` | `level`（medium）、`enabled`、`acknowledged_at` |
+| `notice_settings` | `level`（保留相容鍵 medium，代表全體個人資訊同意）、`enabled`、`acknowledged_at` |
 | `import_batches`、`import_log` | 批次與每檔紀錄：`file_name`、`content_hash`、`record_id`（清除後為空）、`purged`、`batch_id`、`imported_at`（M8 精簡版，`chunk_index` 延後） |
 | 標籤相關 | `tags`、`record_tags`、`tag_links`、`tag_aliases`、`tag_events`，見 [DESIGN_TAGS](DESIGN_TAGS.md) |
 | `meta` | schema 版本、上次備份時間 |
@@ -59,7 +59,7 @@
 | `emlek phrase remove <id>` | 刪 |
 
 - AI 只能用 MCP 唯讀工具 `phrases_list`。語句只是 AI 的判斷依據，不是機械比對。沒有啟用的 `purge` 語句時，徹底清除關閉。
-- **需要真人終端機與 PIN 的 CLI 命令**：`phrase add·set·remove`（所有類別）、`notice enable`、`restore`、`tag merge·remove`、`sensitivity set`、`purge`、`import --include-high`、`pin change·reset`。檢查兩層：(1) 標準輸入、輸出、錯誤輸出都必須是終端機，否則回 `NOT_PERMITTED`（結束碼 3）；(2) 以 `getpass` 從主控台輸入 PIN，**絕不接受參數、環境變數或標準輸入傳入**。
+- **需要真人終端機與 PIN 的 CLI 命令**：`phrase add·set·remove`（所有類別）、`notice enable`、`restore`、`tag merge·remove`、`sensitivity set`、`purge`、`pin change·reset`，以及 M10 的自動政策修改。檢查兩層：(1) 標準輸入、輸出、錯誤輸出都必須是終端機，否則回 `NOT_PERMITTED`（結束碼 3）；(2) 以 `getpass` 從主控台輸入 PIN，**絕不接受參數、環境變數或標準輸入傳入**。
 - **PIN**：細節見「信任閘門規格（M6）」。**PIN 不得告訴任何 AI**；若貼在對話，須立即 `emlek pin change`。
 - 限制（已實測）：Claude Code 的 PowerShell 工具回報標準輸入是終端機、標準輸出不是，所以三條串流都要驗。PIN 擋得住只透過 CLI 操作的 AI；能開偽終端機並讀到使用者輸入、或直接開資料庫檔改資料的 AI 仍能繞過。這是主要防線而非絕對隔離。
 
@@ -151,15 +151,15 @@ MCP 伺服器的 `instructions` 放精簡的規則摘要（目前約 600 字元�
 
 | 等級 | 例子 | 存入時 |
 |---|---|---|
-| high（最高） | 密碼、API 金鑰與 token、私鑰、信用卡號、一次性復原碼 | **每次**詢問，不可關閉；建議改存密碼管理器 |
-| medium（中） | 電話、住址、身分證或護照號碼、生日 | **第一次**詢問並提醒，同意後不再詢問；`emlek notice enable medium` 可重新開啟提醒 |
-| none | 其他 | 不提示 |
+| high（最高） | 密碼、API 金鑰與 token、私鑰、信用卡號、一次性復原碼 | 永不新增保存，不詢問是否儲存 |
+| medium（中） | 電話、住址、身分證或護照號碼、生日 | 與一般個人敘述共用首次全域同意；之後不再問 |
+| none | 其他 | 個人敘述仍需首次全域同意；一般問題不存不問 |
 
 - 判斷：AI 依語意判斷；核心另以規則掃描當補強（私鑰區塊、常見金鑰格式、JWT、卡號 Luhn 檢查、電話與證號格式），回傳 `sensitivity_hint`，取兩者較高者。規則掃描不可能完整。
-- high：`save` 回傳 `NEEDS_CONFIRMATION`（`state=needs_confirmation`，`error.data` 含一次性 `confirm_token`，綁定內容雜湊，10 分鐘過期；機制見「信任閘門規格（M6）」）；使用者答「是」才帶 token 重送。
-- medium：未確認過時回傳 `NEEDS_CONFIRMATION`（`state=needs_notice`，含綁定該內容的 `notice_token`）；使用者同意後帶 token 重送，核心寫入 `notice_settings`（`enabled=0`）。`emlek notice status` 查看、`emlek notice enable medium` 重開（CLI，真人終端機）。
-- `amend` 同樣掃描並取較高等級，高風險新內容一樣走確認；AI 傳入的 `sensitivity` 只能調高，調低只能用 `emlek sensitivity set r<id> <level>`。
-- `import` 也掃描：含 high 的檔案預設略過並列出，使用者檢視後可用 `--include-high` 在真人終端機確認匯入；medium 直接匯入並標記，匯入摘要回報數量。
+- high：`save`／`amend` 回 `NOT_PERMITTED`，不發碼；使用者說「是」也不放行。
+- 首次全域同意：`NEEDS_CONFIRMATION`（`state=needs_notice`，綁內容的 `notice_token`），同意後帶碼重送，寫入成功才關提醒。`emlek notice status` 查看、`emlek notice enable personal` 重開（真人終端機、PIN）。
+- `amend` 同樣重掃並取較高等級，高風險直接拒絕；AI 傳入的 `sensitivity` 只能調高，調低只能用 `emlek sensitivity set r<id> <level>`。
+- `import` 也掃描：high 一律略過，`--include-high` 不能放行；medium 按使用者批次命令匯入並標記。
 - 記錄的 `sensitivity` 等於各版本最高者；`search`／`get` 回傳該欄位。`emlek export --exclude-high` 可排除 high 記錄。
 - 限制：AI 若自行帶 token 而未真正詢問，核心無法分辨，與清除流程同一信任邊界；以題庫與審查驗證各 AI 平台的遵守程度。
 
@@ -207,9 +207,9 @@ MCP 伺服器的 `instructions` 放精簡的規則摘要（目前約 600 字元�
 
 `confirm_tokens(token_hash, kind, content_hash, created_at, expires_at, used_at)`。確認碼為 128 位元隨機值，只存 SHA-256；`content_hash`＝SHA-256(操作名稱＋記錄編號（`save` 為空）＋內文)；10 分鐘過期；每次簽發時順手清掉一天前的舊列。
 
-1. 有效等級 high：`save`／`amend` 不帶碼 → `NEEDS_CONFIRMATION`，`error.data` 含 `state=needs_confirmation`、`confirm_token`、`categories`、`ask_user`（要原樣問使用者的固定句式，與 AGENT_RULES §1 同一份文字，測試會比對）、`expires_in`。帶碼重送：驗證通過（存在、種類相符、未用過、未過期、內容雜湊相符）才寫入，且「標記已用」與寫入在**同一交易**（寫入失敗則碼不被消耗）。每次都要問，不可關閉。
-2. 有效等級 medium 且 `notice_settings.enabled=1`：同上，`state=needs_notice`、`notice_token`；通過後寫入並把 `enabled` 設為 0、記 `acknowledged_at`。**等級層級共用**：同意一次，所有 medium 類別都不再問（Q41 的「同類」指同一等級）。`notice enable medium`（需 PIN）重新開啟。
-3. 同時命中 high 與 medium 時只走 high。任何驗證失敗一律回 `TOKEN_INVALID`，訊息相同，不透露是哪一項不符。碼不寫入日誌。
+1. 有效等級 high：所有 `save`／`amend`／匯入入口直接拒絕，不發確認碼；明確要求、舊確認碼與 PIN 均不能放行。既有歷史與備份不自動刪除。
+2. 所有 MCP 寫入與帶自動來源的寫入，首次均需全域同意，涵蓋生活、想法、工作摘要及個資等全部個人資訊。`NEEDS_CONFIRMATION` 附 `state=needs_notice`、`notice_token`、固定 `ask_user`；真正下一回合答「是」才帶碼重送。同意後不逐筆或逐類別詢問。明確執行的 CLI 單筆／批次命令本身是使用者要求；其中 medium 單筆寫入仍共用首次提醒。
+3. 驗證存在、種類、單次使用、10 分鐘期限及操作／記錄／內文雜湊；用碼、寫入與關閉提醒在同一交易，失敗回滾。失敗統一 `TOKEN_INVALID`，碼不入日誌。`notice enable personal`（需 PIN；`medium` 為舊別名）重開提醒並撤銷未用 notice 碼；交易內複核重設狀態，避免檢查與寫入之間繞過同意。
 
 ### 讀取端的敏感度上限
 
@@ -247,13 +247,13 @@ T14、T15、T16，以及新增的 T27（確認碼）、T28（PIN 儲存與狀態
 
 ### 匯入精簡版（`emlek import`；使用者目前沒有日記，要求「增加太多複雜度就先放著」）
 - **做**：`emlek import <檔案或資料夾>`，預設只預覽，加 `--apply` 才寫入；只讀 `.txt`、`.md`，每檔一筆 `original`；單檔 ≤ 1 MiB、一次最多 20,000 檔、單批原文合計 ≤ 512 MiB；其他副檔名列為略過。
-- **權限**：新增操作 `import_preview`（任何入口）、`import_apply`（`INTERACTIVE_ONLY`，真人終端機，不需 PIN；預防有 shell 的 AI 把整個資料夾一次匯入）、`import_apply_high`（另加 `PIN_REQUIRED`）。`--include-high`：PIN 通過後再列一次 high 檔名與類別，使用者輸入「是」才寫入（預覽與寫入之間檔案可能被換掉）。
+- **權限**：`import_preview`（任何入口）、`import_apply`（`INTERACTIVE_ONLY`，真人終端機，不需 PIN）。high 永遠略過，`--include-high` 僅保留參數相容性，PIN 不能放行；套用時重新掃描待寫入內文，防止舊或偽造計畫繞過。
 - **不解析 `#標籤`**：匯入寫入一律 `parse_hashtags=False`，不寫 `record_tags`／`tag_events`；現有 `save` 對 original 會以 user 身分建立標籤，若匯入走那條路，外部檔案的文字就能進 AI 開場說明（提示注入）。測試保證匯入後 `record_tags` 數量不變。
 - **路徑**：遞迴；略過資料夾本身、`backup_dir`、任何含 `export.jsonl` 的目錄（摘要列為「略過（emLek 自己的檔案）」）；略過所有 reparse point（`st_file_attributes & FILE_ATTRIBUTE_REPARSE_POINT`，涵蓋符號連結、junction、雲端預留檔）；每檔只讀一次（最多讀 1 MiB＋1 位元組），雜湊、解碼、掃描用同一份 bytes；單檔 `OSError`（路徑過長、權限、保留名稱）列為失敗，不中止整批。
 - **編碼**：只收嚴格 UTF-8（接受 BOM），解碼失敗列為失敗，不替換壞字元。
 - **日期**：只取檔名。先把主檔名做 NFKC；數字前後不得緊鄰數字（避免從 `IMG_202601151230` 或電話號碼誤取）；格式 `YYYY-MM-DD`、`YYYYMMDD`、`YYYY年M月D日`；年份限 1900–2100；不合法（如 `20261301`）視為沒有；檔名含兩個以上「不同」的合法日期時留空並於摘要列出；沒有日期就留空，精度為日，不用檔案修改時間。
 - **來源與冪等**：`source=import:<相對檔名>`，去除控制字元、長度 ≤ 300，不記錄任何絕對路徑；`file_name` 為相對匯入根目錄的路徑，分隔符統一為 `/` 並做 NFC；`content_hash` ＝ SHA-256（去掉 BOM 的 UTF-8 原文，不轉換換行）。（檔名、雜湊）已匯入則跳過；改檔後視為新內容並警告；內容相同但檔名不同（含同一批內）預設略過並列出，`--allow-duplicates` 才匯入；從不同層級的資料夾匯入會因相對檔名改變而靠雜湊判成重複，文件載明。**`undo` 之後重新匯入會被略過並提示「該記錄已隱藏，請用 `unhide`」**。
-- **敏感掃描**：用 `sensitivity` 掃描自己決定等級，不簽發確認碼；high 預設略過並列出（只列檔名與類別）；medium 照匯入並標為 medium，摘要回報數量。
+- **敏感掃描**：用 `sensitivity` 掃描自己決定等級，不簽發確認碼；high 一律略過並列出（只列檔名與類別）；medium 照使用者明確執行的批次命令匯入並標為 medium，摘要回報數量。
 - **寫入**：整批一個交易，錯誤整批回復；匯入期間其他寫入（含 AI 的 `save`）會回 `BUSY`（`busy_timeout` 5 秒），文件載明；提交後執行 `wal_checkpoint(TRUNCATE)`。`import undo <批次>`：以單一 `UPDATE records SET hidden=1 … WHERE id IN (該批)` 在同一交易完成，不逐筆呼叫 `versions.hide`；若該批記錄後來被 `amend` 過，先提示並列出數量。`import list` 列批次。
 - **遷移 0007**：`import_batches(id, created_at, file_count, options_json, undone_at)`；`import_log(id, batch_id REFERENCES import_batches, file_name, content_hash, record_id REFERENCES records NULL, purged INTEGER DEFAULT 0, imported_at, UNIQUE(file_name, content_hash))`；索引 `content_hash`、`batch_id`。`import_batches` 不存根目錄的絕對路徑。**匯出**新增 `import_batch`、`import_log` 兩種型別並計入標頭 `counts`，`verify_export` 一併檢查（現況匯出沒有輸出 `import_log`）。日誌只記批次編號與各項數量，不記檔名。
 - **延後**（等有真實需求，見 ROADMAP）：`--split-by-heading`、`--encoding`（cp932、big5、gbk）、內文 `#標籤` 解析（需新增 `import` 來源並重建標籤表，且不得進開場說明清單）、內文第一行日期的辨識、段落序號（`chunk_index`）。
@@ -304,28 +304,30 @@ T14、T15、T16，以及新增的 T27（確認碼）、T28（PIN 儲存與狀態
 
 ## M10 規格：自動記錄（2026-11-03；使用者已確認草案並指示開始；**已實作，待驗收**；實作決定見 D87）
 
-**目標**：使用者不必每次說「幫我記錄」。使用者事先登記哪些類別 AI 可以直接存，AI 照政策存，存完只附一行小提醒，事後可看、可撤。**不做全部對話錄製**（雜訊淹沒搜尋、會混入 AI 與被注入的內容、密碼與他人資料進庫、`original` 失去「使用者自己要保存的話」的意義；本機 AI 的對話記錄本來就在清除到不了的地方）。部分取代 D04（「只有明確要求才存」）：D04 仍適用於所有未登記的類別（維持建議或詢問）。
+**目標**：使用者不必每次說「幫我記錄」。首次同意涵蓋所有個人資訊，之後依政策自動保存個人敘述，只顯示實際筆記編號，事後可看、可撤（D96）。一般問題不詢問保存；不做全部對話錄製。未登記或不確定的內容略過，不主動提議儲存。
 
 ### 政策
-- 總開關預設**關**（`emlek auto on`，需 PIN）。關閉時行為與現在完全相同。
-- 類別表（資料庫，遷移 0009）：`auto_categories(id, name, description, mode, created_at, updated_at)`，`mode` 為 `auto`（直接存）、`ask`（存之前問，等同現在）、`off`。預設五類且全為 `ask`：**生活點滴**（吃飯、去哪）、**思考**（人生、意義等）、**工作**（今天做了什麼）、**研究筆記**、**靈感**。使用者用 `emlek auto set <類別> auto|ask|off` 切換；增刪改都需真人終端機與 PIN；AI 只能用唯讀工具 `auto_policy` 讀取（與 `phrases_list` 同一模式）。
+- 新庫總開關預設開，但取得首次同意前不得自動寫入。`emlek auto on|off` 仍需 PIN；關閉後不自動存、不逐筆詢問。
+- 類別表（遷移 0009）：`auto_categories(id, name, description, mode, created_at, updated_at)`。預設五類全為 `auto`：**生活點滴**、**思考**、**工作**（使用者摘要）、**研究筆記**、**靈感**。`ask` 保留命令相容性，但不自動存也不逐筆詢問；`off` 不自動存。`emlek auto set <類別> auto|ask|off` 及增刪改仍需真人終端機與 PIN，AI 只能讀 `auto_policy`。
+- 遷移 0010：舊庫的總開關與明確 `off` 類別不變，舊 `ask` 類別轉為 `auto`。舊 medium 同意不足以涵蓋所有個人資訊，故重開全域提醒並撤銷未用 notice 碼；歷史內文不改寫，沿用既有備份遷移機制。
 - 專案排除：政策可列「專案路徑或名稱關鍵字」；AI 所在目錄命中就不自動存（只能 AI 端遵守，伺服器無法得知所在目錄，文件如實標示為盡力而為）。
 - 開場說明只列出已開啟的 `auto` 類別名稱；AI 依清單直接存，不必每次呼叫 `auto_policy`，僅需確認專案排除或 24 小時上限時才查（D87、D91）。
 
 ### 什麼會自動存、什麼不會
 - 只存**使用者自己說的內容**。思考與靈感類存使用者原文（`original`）；太長才由 AI 整理成 `ai_summary` 並標明。同一件事在同一場對話繼續補充＝為原記錄新增版本，不開新記錄；粒度為「一件事一筆」。
 - 工作類只存使用者說的摘要，**不存貼進來的程式碼、文件、log**。
-- 自動記錄排除與個資例外：①敏感掃描命中最高風險（密碼、金鑰、token、卡號等**不需要存**，使用者 2026-11-03 明確表示），自動模式連問都不問，直接不存；個人資料（medium：電話、住址、證號、生日、信箱，以及 AI 判斷含私人姓名而標 medium 的）放行到既有的一次性提醒——第一次問、同意後不再問，`emlek notice enable medium`（PIN）可重新開啟（D92）；②使用者說了「不要記」；③AI 自己的推論或判斷；④從檔案、網頁、工具輸出讀到的內容；⑤未登記的類別。
-- 伺服器端閘門：`save` 帶 `source="auto:<類別>"` 時，總開關須開、該類別須為 `auto`、`kind` 只能為 `original`／`ai_summary`；AI 宣告或掃描為最高風險時拒絕、不發確認碼、不建議改走詢問；個人資料（medium）走既有的一次性提醒（D92）。滾動 24 小時自動存入上限（預設 30 筆）擋住失控或被注入的迴圈。**閘門驗證不了「這是不是使用者的意圖」**，所以保留可審可撤。
+- 排除：最高風險（密碼、金鑰、token、卡號等）在所有寫入入口永不儲存；「不要記」、AI 推論、檔案／網頁／工具輸出、未登記類別、一般問題均不自動存，也不詢問是否保存。電話等 medium 個資屬首次全域同意範圍，不另問。
+- 伺服器端閘門：自動來源須總開關開、類別為 `auto`、`kind` 為 `original`／`ai_summary`；所有 MCP 寫入仍要首次同意，省略自動來源不能繞過。滾動 24 小時上限預設 30 筆。**閘門驗證不了使用者意圖**，所以仍需 AI 遵守排除規則與事後可審可撤。
 
 ### 提醒、審閱、撤回
-- 自動存入時，AI 呼叫工具前不發開場或進度訊息；工具成功後原樣回傳 `marker`：`◆ emLek｜生活點滴 ✓ r231`，單純生活敘述的整則回答只有這一行（D91）。未成功不得宣稱已保存或捏造提醒；回想時也直接查找後回答，不發搜尋前進度訊息。建議模式則是 `◆ emLek｜要存嗎？〈一行摘要〉`。使用者要求不要提醒時由 AI 省略，不影響存入。
+- AI 存入前不發開場或進度訊息；`save`／`amend` 成功後原樣回傳 `marker`：`◆ emLek｜r231.✔️`，編號為實際記錄而非版本。單純個人敘述只回這一行；失敗不顯示成功符號。回想同樣不發搜尋前進度訊息。
 - 審閱：`emlek recent [--auto] [--days N]` 列出最近存入的記錄（標出自動存入、類別、編號）。
 - 撤回：使用者說「撤掉 r231」，AI 用既有的隱藏（可恢復）；整批用 `emlek auto hide --since <日期>`（與匯入批次相同的可恢復隱藏，不是清除）。
 
 ### 測試與驗收
 - T39（核心）：總開關關閉、類別不是 `auto`、最高風險、推論、超過每日上限時 `source="auto:…"` 的存入被拒；個人資料首次取得同意後放行；自動存入帶來源標記；`recent --auto` 與批次隱藏可恢復；政策只有真人終端機加 PIN 能改；`auto_policy` 唯讀。
-- AI 層題（新增）：該自動存的（「今天去吃拉麵」「我在想活著的意義」）、不該存的（「幫我看這段程式」「密碼是…」「不要記這個」、讀檔案內容）、提醒格式與編號正確。每個 AI（Claude Code、Codex）分開測，穩定的類別才建議使用者開成 `auto`，其餘維持 `ask`。
+- T41：首次同意涵蓋一般個人敘述與 medium，後續跨類別不再問；最高風險永不存；升級撤銷舊同意與 token；重設競爭下 save／amend 不寫入；marker 編號正確。
+- AI 層分平台驗：首次詢問與真正下一回合答「是」、後續生活／想法／個資無逐筆詢問、一般問答不存不問、密碼明確要求也拒存、編號可 hide／unhide。模糊日期不能補造精確日，格式重試不得丟棄已知精度。
 - 實作前須使用者看過本草案；實作後走一般驗收流程。
 
 ## 開發順序（里程碑）

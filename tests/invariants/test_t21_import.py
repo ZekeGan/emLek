@@ -148,7 +148,7 @@ def test_same_content_under_another_name_is_a_duplicate_unless_allowed(
     assert allowed.count("duplicate") == 0 and _count(db, "records") == 3
 
 
-def test_high_risk_files_are_left_out_unless_a_person_with_the_pin_says_so(
+def test_high_risk_files_are_left_out_even_with_include_high_and_pin(
     db: Database, data_dir: Path, notes: Path
 ) -> None:
     _write(notes, "ok.txt", "普通のメモ")
@@ -158,13 +158,16 @@ def test_high_risk_files_are_left_out_unless_a_person_with_the_pin_says_so(
     shown = str([i.public() for i in plan.items if i.status == "high"])
     assert "PRIVATE" not in shown and "abc" not in shown  # the content is never echoed
     wanted = _plan(db, data_dir, notes, include_high=True)
-    assert wanted.count("import") == 1  # ok.txt is already in, the key file would now go
-    with pytest.raises(EmlekError) as info:  # a terminal is not enough, the PIN is needed
-        importer.apply_import(db, PERSON, wanted, options={})
-    assert info.value.code is ErrorCode.NOT_PERMITTED and _count(db, "records") == 1
+    assert wanted.count("high") == 1 and wanted.count("import") == 0
     importer.apply_import(db, PERSON_PIN, wanted, options={})
     high = db.conn.execute("SELECT count(*) FROM records WHERE sensitivity = 'high'").fetchone()
-    assert high[0] == 1 and _count(db, "records") == 2
+    assert high[0] == 0 and _count(db, "records") == 1
+    item = next(i for i in wanted.items if i.status == "high")
+    item.status, item.level = "import", "none"  # stale or forged plan must not bypass rescanning
+    with pytest.raises(EmlekError) as denied:
+        importer.apply_import(db, PERSON_PIN, wanted, options={})
+    assert denied.value.code is ErrorCode.NOT_PERMITTED
+    assert _count(db, "records") == 1
 
 
 def test_personal_data_is_imported_and_marked_medium(

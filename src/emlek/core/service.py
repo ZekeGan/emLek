@@ -13,7 +13,7 @@ from emlek.core import sensitivity as scanner
 from emlek.core import tags as tagmod
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
-from emlek.core.permissions import Caller, require
+from emlek.core.permissions import Caller, Channel, require
 from emlek.core.refs import parse_ref
 from emlek.core.timeutil import infer_precision, is_valid_event_time, utc_now_iso
 
@@ -55,7 +55,11 @@ def _check_meta(
         return None, None
     resolved = precision or infer_precision(event_time)
     if resolved is None or not is_valid_event_time(event_time, resolved):
-        raise EmlekError(ErrorCode.INVALID_INPUT, "事件時間格式不正確")
+        raise EmlekError(
+            ErrorCode.INVALID_INPUT,
+            "事件時間格式不正確；year 用 YYYY、month 用 YYYY-MM、day 用 YYYY-MM-DD；"
+            "只修正格式，不要刪除或提高原本精度",
+        )
     return event_time, resolved
 
 
@@ -106,14 +110,10 @@ def _insert_revision(
     return cursor.lastrowid
 
 
-ASK_HIGH = (
-    "這段內容含有密碼或金鑰等**最高風險**資訊，會以明文存在本機，並可能進入備份與匯出。"
-    "建議改存密碼管理器。是否仍要存入？**是 / 否**"
-)
 ASK_MEDIUM = (
-    "這段內容含個人資料，會以明文存在本機，也會進入備份與匯出。"
-    "同意後之後遇到個人資料不再詢問，可用 `emlek notice enable medium` 重新開啟提醒。"
-    "是否存入？**是 / 否**"
+    "是否同意 emLek 自動儲存你分享的所有個人資訊（生活、想法、工作摘要及個資等）？"
+    "內容會以明文存在本機，也可能進入備份與匯出；同意後不再逐筆詢問，密碼與金鑰永不儲存。"
+    "可用 `emlek notice enable personal` 重新開啟同意提醒。**是 / 否**"
 )
 
 
@@ -126,12 +126,19 @@ class _Gate:
         self.kind = kind
         self.token = token
         self.chash = ""
+        self.check_consent = False
 
     def hint(self) -> dict[str, Any]:
         return {"level": self.level, "categories": self.categories}
 
     def spend(self, conn: sqlite3.Connection) -> None:
         if self.kind is None:
+            if self.check_consent and notice.is_enabled(conn):
+                raise EmlekError(
+                    ErrorCode.CONFLICT,
+                    "儲存同意已重設，本次未寫入；請重新呼叫以取得首次同意提示",
+                    retryable=True,
+                )
             return
         tokens.consume(conn, self.kind, self.token, self.chash)
         if self.kind == "notice":
@@ -147,6 +154,7 @@ def _sensitivity_gate(
     declared: str | None,
     confirm_token: str | None,
     notice_token: str | None,
+    automatic: bool = False,
 ) -> _Gate:
     """Scan the text and decide whether this write needs the user's yes. Without the right token
     the write is refused and a fresh token is issued; the token is spent inside the write."""
@@ -155,28 +163,30 @@ def _sensitivity_gate(
         raise EmlekError(ErrorCode.INVALID_INPUT, "sensitivity 必須是 none、medium 或 high")
     level, categories = scanner.assess(body, declared)
     if level == "high":
-        kind: str | None = "confirm"
-    elif level == "medium" and notice.is_enabled(db.conn):
-        kind = "notice"
-    else:
-        kind = None
-    token = confirm_token if kind == "confirm" else notice_token
+        raise EmlekError(
+            ErrorCode.NOT_PERMITTED, "密碼、金鑰等最高風險內容不予儲存，也不詢問是否存入"
+        )
+    kind = (
+        "notice"
+        if notice_token is not None
+        or ((automatic or level == "medium") and notice.is_enabled(db.conn))
+        else None
+    )
+    token = notice_token
     gate = _Gate(level, categories, kind, token)
+    gate.check_consent = automatic or level == "medium"
     gate.chash = tokens.content_hash(operation, ref, body)
     if kind is not None and not token:
         fresh = tokens.issue(db, kind, gate.chash)
-        high = kind == "confirm"
         raise EmlekError(
             ErrorCode.NEEDS_CONFIRMATION,
-            "含有最高風險資訊，須先以固定句式詢問使用者並取得「是」"
-            if high
-            else "含有個人資料，須先提醒使用者並取得同意",
+            "尚未取得涵蓋所有個人資訊的自動儲存同意",
             data={
-                "state": "needs_confirmation" if high else "needs_notice",
-                "confirm_token" if high else "notice_token": fresh,
+                "state": "needs_notice",
+                "notice_token": fresh,
                 "categories": categories,
                 "sensitivity": level,
-                "ask_user": ASK_HIGH if high else ASK_MEDIUM,
+                "ask_user": ASK_MEDIUM,
                 "expires_in": tokens.TTL_SECONDS,
             },
         )
@@ -249,6 +259,7 @@ def save(
         declared=sensitivity,
         confirm_token=confirm_token,
         notice_token=notice_token,
+        automatic=category is not None or caller.channel is Channel.MCP,
     )
     now = utc_now_iso()
     with db.transaction() as conn:
@@ -278,7 +289,7 @@ def save(
         "links_added": added,
         "sensitivity": gate.level,
         "sensitivity_hint": gate.hint(),
-        **({"marker": auto.marker(category, f"r{record_id}")} if category else {}),
+        "marker": auto.marker(f"r{record_id}"),
         **tag_result,
     }
 
@@ -320,6 +331,7 @@ def amend(
         declared=sensitivity,
         confirm_token=confirm_token,
         notice_token=notice_token,
+        automatic=caller.channel is Channel.MCP,
     )
     now = utc_now_iso()
     with db.transaction() as conn:
@@ -375,6 +387,7 @@ def amend(
         "version": version + 1,
         "revision_ref": f"r{record_id}.v{version + 1}",
         "previous_version": version,
+        "marker": auto.marker(f"r{record_id}"),
         "created_at": now,
         "links_added": added,
         "sensitivity": record_level,

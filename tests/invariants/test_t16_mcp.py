@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from emlek.config import load_config
-from emlek.core import search, service
+from emlek.core import notice, search, service
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
 from emlek.core.permissions import (
@@ -25,6 +25,18 @@ from emlek.core.permissions import (
     require,
 )
 from emlek.mcp_server.server import build_server
+
+
+@pytest.fixture
+def data_dir(data_dir: Path) -> Path:
+    """These transport tests use a consenting synthetic owner; T41 checks the first notice."""
+    db = Database.open(load_config(data_dir).db_path)
+    try:
+        notice.acknowledge(db.conn)
+    finally:
+        db.close()
+    return data_dir
+
 
 SEARCH_PARAMS = {
     "query",

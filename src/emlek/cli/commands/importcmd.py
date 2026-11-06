@@ -135,12 +135,6 @@ def _import(args: argparse.Namespace) -> Output:
                 {"imported": 0, **plan.summary()}, "\n".join([*lines, "沒有需要匯入的檔案。"])
             )
         sys.stderr.write("\n".join(lines) + "\n")
-        high = [i for i in todo if i.level == "high"]
-        if high:
-            caller = authorize(args, "import_apply_high")  # terminal and PIN
-            sys.stderr.write("以下檔案含最高風險內容（只列檔名與類別），將以明文存入：\n")
-            for item in high:
-                sys.stderr.write(f"  {item.file_name}　{'、'.join(item.categories)}\n")
         _ask(f"將寫入 {len(todo)} 筆記錄（整批一次完成，出錯會全部回復）。")
         result = importer.apply_import(db, caller, plan, options=options)
     finally:

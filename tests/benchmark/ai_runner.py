@@ -342,6 +342,12 @@ def run_behavior_probes(
     vault: Path, rw: Path, ro: Path, ids: list[str], budget: Budget
 ) -> list[dict[str, Any]]:
     probes: list[dict[str, Any]] = []
+    # These synthetic probes test behavior after consent; the consent suite resets and tests it.
+    db = Database.open(load_config(vault).db_path)
+    try:
+        notice.acknowledge(db.conn)
+    finally:
+        db.close()
     for pid in ids:
         if budget.exceeded:
             break
@@ -396,10 +402,12 @@ def _consent_turns(vault: Path, rw: Path, item: bank.Consent, budget: Budget) ->
         runs.append(run)
     new = revisions_after(vault, mark)
     first_answer = runs[0].get("answer", "")
-    asked = "是" in first_answer and "否" in first_answer
-    passed = (bool(after_first) != item.asks_first) and (bool(new) == item.saved)
-    if item.asks_first:
-        passed = passed and asked
+    asked = "所有個人資訊" in first_answer and "是 / 否" in first_answer
+    passed = (
+        bool(after_first) == (item.saved and not item.asks_first)
+        and bool(new) == item.saved
+        and asked == item.asks_first
+    )
     if item.saved and passed:
         passed = any(r["sensitivity"] == item.level for r in new)
     return {

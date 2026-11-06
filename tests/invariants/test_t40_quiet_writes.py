@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from emlek.core import auto
+from emlek.core import auto, notice
 from emlek.core.db import Database
 from emlek.core.permissions import Caller, Channel
 from emlek.mcp_server.server import _slim_write, build_server
@@ -52,6 +52,7 @@ def test_save_and_amend_over_mcp_are_short_and_amend_shows_the_current_tags(
 ) -> None:
     auto.set_enabled(db, PERSON, on=True)
     auto.set_mode(db, PERSON, name="生活點滴", mode="auto")
+    notice.acknowledge(db.conn)
     db.close()
 
     async def scenario() -> None:
@@ -62,7 +63,7 @@ def test_save_and_amend_over_mcp_are_short_and_amend_shows_the_current_tags(
             )
         )
         assert set(saved) == {"revision_ref", "marker", "tags"}
-        assert saved["marker"] == "◆ emLek｜生活點滴 ✓ r1" and saved["tags"] == ["拉麵"]
+        assert saved["marker"] == "◆ emLek｜r1.✔️" and saved["tags"] == ["拉麵"]
         amended = _payload(
             await server.call_tool("amend", {"ref": "r1", "body": "今天吃了拉麵，在祇園"})
         )
@@ -86,7 +87,7 @@ def test_the_event_time_format_is_explained_to_the_model(data_dir: Path) -> None
 def test_the_opening_text_counts_a_past_experience_as_something_to_save() -> None:
     from emlek.mcp_server.server import INSTRUCTIONS
 
-    assert "含過去的事" in INSTRUCTIONS and "要存嗎" in INSTRUCTIONS
+    assert "含過去的事" in INSTRUCTIONS and "普通問答" in INSTRUCTIONS
     assert "不講資料庫" in INSTRUCTIONS and "marker" in INSTRUCTIONS
     assert "呼叫工具前" in INSTRUCTIONS and "不要先回覆" in INSTRUCTIONS
     assert "回想或自動存入時" in INSTRUCTIONS

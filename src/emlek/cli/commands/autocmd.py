@@ -10,7 +10,7 @@ from emlek.core import auto
 from emlek.core.db import Database
 from emlek.core.permissions import Caller
 
-_MODE_LABEL = {"auto": "直接存", "ask": "先問", "off": "關閉"}
+_MODE_LABEL = {"auto": "直接存（首次需全域同意）", "ask": "不自動存", "off": "關閉"}
 
 
 def _status_text(result: dict[str, object]) -> str:

@@ -6,7 +6,7 @@ import logging
 import sqlite3
 from typing import Any
 
-from emlek.core import tokens
+from emlek.core import auto, tokens
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
 from emlek.core.permissions import Caller, require
@@ -41,7 +41,12 @@ def start(db: Database, caller: Caller, *, notice_token: str | None = None) -> d
                 "expires_in": tokens.TTL_SECONDS,
             },
         )
-    return {"started": True, "message": "emLek 已啟用。"}
+    on = auto.enabled(db.conn)
+    return {
+        "started": True,
+        "auto_enabled": on,
+        "message": "emLek 已啟用。" if on else "emLek 已完成同意；自動記錄目前關閉。",
+    }
 
 
 def is_enabled(conn: sqlite3.Connection) -> bool:

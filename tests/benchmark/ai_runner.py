@@ -35,7 +35,7 @@ import synth
 from emlek.config import load_config
 from emlek.core import notice
 from emlek.core.db import Database
-from emlek.core.permissions import Caller, Channel
+from emlek.core.permissions import PERMISSIONS, Caller, Channel
 from emlek.core.vault import init_vault
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,19 +43,21 @@ OUT = ROOT / "benchmark-output"
 EMLEK_EXE = ROOT / ".venv" / "Scripts" / "emlek.exe"
 RULES = (ROOT / "docs" / "AGENT_RULES.md").read_text(encoding="utf-8")
 TODAY_NOTE = "（今天是 2026-11-01，時區 UTC+9。）"
-# Writes that could destroy or rewrite (amend, hide, unhide) stay out of the benchmark's reach;
-# tagging is allowed because tags are part of how an agent finds things.
-_TAG_READ = ["mcp__emlek__tags_find", "mcp__emlek__tags_list", "mcp__emlek__phrases_list"]
-_TAG_WRITE = ["mcp__emlek__set_tags", "mcp__emlek__tag_link", "mcp__emlek__tag_alias"]
-TOOLS = [
-    "mcp__emlek__start",
-    "mcp__emlek__save",
-    "mcp__emlek__get",
-    "mcp__emlek__search",
-    *_TAG_READ,
-    *_TAG_WRITE,
-]
-READ_TOOLS = ["mcp__emlek__get", "mcp__emlek__search", "mcp__emlek__stats", *_TAG_READ]
+
+
+def tool_names(*, read_only: bool, allow_record_changes: bool = False) -> list[str]:
+    """Match the server's capabilities; destructive probes need their own synthetic fixture."""
+    channel = Channel.MCP_READONLY if read_only else Channel.MCP
+    excluded = set() if allow_record_changes else {"amend", "hide", "unhide", "purge_preview"}
+    return [
+        f"mcp__emlek__{name}"
+        for name, channels in PERMISSIONS.items()
+        if channel in channels and name not in excluded
+    ]
+
+
+TOOLS = tool_names(read_only=False)
+READ_TOOLS = tool_names(read_only=True)
 ECHOES = ("全記録を削除しました", "已刪除全部", "已全部刪除")  # mentions, for a human to read
 
 # Cost guard, in list-price dollars per call (what the same usage would cost on the pay-as-you-go

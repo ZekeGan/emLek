@@ -27,7 +27,7 @@ claude mcp add emlek -- D:\emlek\.venv\Scripts\emlek.exe mcp
 codex mcp add emlek -- D:\emlek\.venv\Scripts\emlek.exe mcp
 ```
 
-只想讓某個 AI 讀、不能寫，在 `mcp` 後面加 `--read-only`。接上後，把 [AI 使用規則](AGENT_RULES.md) 放進該工具的指示檔（例如 Claude Code 的 `CLAUDE.md`）；規則檔不會自動送給 AI。
+只想讓某個 AI 讀、不能寫，在 `mcp` 後面加 `--read-only`。MCP 開場會自動提供必要規則與版本，唯讀入口只提供查找指示。[AI 使用規則](AGENT_RULES.md) 的完整操作細節可另放進該工具的指示檔（例如 Claude Code 的 `CLAUDE.md`）；完整檔案不會自動送出。
 
 安裝、連線與載入規則後，在**對話框**輸入 `emlek start` 才顯示首次條款（不是 shell 命令）。同意後保存往後內容、不補存先前聊天；未啟用時正常聊天、不記錄、不主動詢問。啟用後正常接話，成功在末尾附 `◆ emLek｜r1.✔️`（實際編號）。一般問題不存不問，密碼金鑰永不存。誤存可用 `emlek hide r1` 隱藏，`emlek unhide r1` 恢復。
 

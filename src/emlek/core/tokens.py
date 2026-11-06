@@ -61,7 +61,9 @@ def issue(db: Database, kind: str, chash: str) -> str:
 
 def consume(conn: sqlite3.Connection, kind: str, token: str | None, chash: str) -> None:
     """Mark the token used, or raise TOKEN_INVALID. Every failure looks the same on purpose."""
-    invalid = EmlekError(ErrorCode.TOKEN_INVALID, "確認碼無效、已過期或已使用，請重新詢問使用者")
+    invalid = EmlekError(
+        ErrorCode.TOKEN_INVALID, "確認碼無效、已過期或已使用；不可沿用先前同意或重播確認碼"
+    )
     if not isinstance(token, str) or not token:
         raise invalid
     now = _iso(_now())

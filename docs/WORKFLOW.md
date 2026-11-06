@@ -57,6 +57,7 @@ python scripts/install-hooks.py
 - 環境：Python 3.14（uv 管理，`.python-version` 已固定）。依賴由 `uv.lock` 鎖定。
 - 型別：`uv run mypy（設定已含 src 與 tests）`　格式與檢查：`uv run ruff format --check .`、`uv run ruff check .`　測試：快速＝`uv run pytest -m "not slow and not scale"`，完整＝`uv run pytest`。
 - AI 層基準（手動，用訂閱額度，不在預設測試內）：在 `tests/benchmark` 執行 `ai_runner.py`，環境變數見檔頭說明；報告寫到被忽略的 `benchmark-output/`。
+- AI 測試工具白名單由 `ai_runner.tool_names` 依核心權限表產生；一般題庫不開 amend／hide／unhide／purge_preview，這些操作僅在獨立合成驗收 fixture 設 allow_record_changes。標籤工具與 auto_policy 不得遺漏。MCP-only／完整規則分開用新會話、同等工具配置測；記錄規則版本、模型、平台設定及付費估算，不把 append 說成移除平台預設提示。
 - 受控測試資料：`tests/` 的合成資料與暫存目錄；`vault/`、`backups/`、`exports/` 已被 `.gitignore` 排除。
 - 版本號規則見 DESIGN「版本號規則」：目前 0.1.0（2026-11-02 M6 驗收後升版；尚未對外發布、未打標籤）；兩處版本字串（`pyproject.toml`、`src/emlek/__init__.py`）必須一致；已發布的遷移檔不得修改；`CHANGELOG.md` 只有 Unreleased 區，不逐批升版。
 

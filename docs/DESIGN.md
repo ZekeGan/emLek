@@ -124,7 +124,7 @@
 
 僅 CLI（不開放 MCP）：`init`、`doctor`、`reindex`、`mcp`（啟動 MCP 伺服器）、`backup`、`restore`、`export`、`import`、`purge`、`pin set·change·reset`、`notice status·enable`、`sensitivity set`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。
 
-MCP 伺服器的 `instructions` 放精簡的規則摘要（目前約 600 字元，另加熱門標籤名稱；完整規則在 AGENT_RULES，**不會自動送給 AI**，使用者須把它裝進所用 AI 平台的全域或專案指令，安裝說明列入 M11；題庫的 AI 層目前是附上完整規則來測，只有開場說明的情境尚未測），工具說明保持簡短，因為每個 AI 會話都要為它們付 token；每次工具呼叫各自開關資料庫連線，伺服器行程不長期持有。
+MCP `instructions` 直接交付必要行為規則，標示規則版本並區分可寫／唯讀；唯讀不收到寫入流程。完整操作細節在 AGENT_RULES，可另載入，但不以檔名引用當成已載入。AI 測試分 MCP-only 與附完整規則兩種配置，記錄實際工具白名單及平台預設上下文限制。工具 schema 列明標籤／連結結構與有限值；MCP save／amend 不提供舊同意碼參數，CLI 相容參數保留。每次工具呼叫各自開關資料庫連線，行程不長期持有；不引入新服務或資料格式（D98）。
 
 **唯讀模式**：`emlek mcp --read-only` 的工具清單只含 `search`、`get`、`phrases_list`、`stats`、`tags_find`、`tags_list`（寫入工具根本不存在，不是被拒絕），供無人看管的排程使用；`max_sensitivity` 預設為 medium。每日簡報見 [DAILY_BRIEFING](DAILY_BRIEFING.md)。
 
@@ -311,7 +311,7 @@ T14、T15、T16，以及新增的 T27（確認碼）、T28（PIN 儲存與狀態
 - 類別表（遷移 0009）：`auto_categories(id, name, description, mode, created_at, updated_at)`。預設五類全為 `auto`：**生活點滴**、**思考**、**工作**（使用者摘要）、**研究筆記**、**靈感**。`ask` 保留命令相容性，但不自動存也不逐筆詢問；`off` 不自動存。`emlek auto set <類別> auto|ask|off` 及增刪改仍需真人終端機與 PIN，AI 只能讀 `auto_policy`。
 - 遷移 0010：舊庫的總開關與明確 `off` 類別不變，舊 `ask` 類別轉為 `auto`。舊 medium 同意不足以涵蓋所有個人資訊，故重開全域提醒並撤銷未用 notice 碼；歷史內文不改寫，沿用既有備份遷移機制。
 - 專案排除：政策可列「專案路徑或名稱關鍵字」；AI 所在目錄命中就不自動存（只能 AI 端遵守，伺服器無法得知所在目錄，文件如實標示為盡力而為）。
-- 開場說明只列出已開啟的 `auto` 類別名稱；AI 依清單直接存，不必每次呼叫 `auto_policy`，僅需確認專案排除或 24 小時上限時才查（D87、D91）。
+- 開場只列已開啟的 auto 類別名稱與同意初始快照；每段對話首次遇到可保存個人內容先讀 `auto_policy` 的即時同意／總開關／類別／排除專案／上限，之後狀態不明或被拒再查。這是政策中繼資料，不讀筆記、不啟用或保存。開場與政策回應提供帶時區的 reference_time 及庫 timezone；模糊相對日期無法確定月份就未知，不一律猜上月。start 不改總開關，關閉時如實回「已完成同意；自動記錄目前關閉」（D98）。
 
 ### 什麼會自動存、什麼不會
 - 只存**使用者自己說的內容**。思考與靈感類存使用者原文（`original`）；太長才由 AI 整理成 `ai_summary` 並標明。同一件事在同一場對話繼續補充＝為原記錄新增版本，不開新記錄；粒度為「一件事一筆」。

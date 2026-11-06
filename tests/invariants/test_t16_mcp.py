@@ -138,8 +138,6 @@ def test_tool_contracts_are_stable(data_dir: Path) -> None:
         "event_time_precision",
         "links",
         "sensitivity",
-        "confirm_token",
-        "notice_token",
         "tags",
         "allow_new",
     }

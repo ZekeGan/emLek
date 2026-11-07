@@ -136,7 +136,7 @@ def _slim_write(result: dict[str, Any], *, tags: list[str] | None = None) -> dic
     if result.get("links_added"):
         slim["links_added"] = result["links_added"]
     shown = tags if tags is not None else result.get("tags")
-    if shown:
+    if shown or tags is not None:
         slim["tags"] = shown
     for key in ("tags_pending", "hashtags_skipped"):
         if result.get(key):
@@ -210,6 +210,10 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
         result = service.amend(*(db, *args), **kwargs)
         names = [t["name"] for t in tagmod.tags_of(db.conn, int(result["record_id"]))]
         return _slim_write(result, tags=names)
+
+    def _retagged(db: Database, **kwargs: Any) -> dict[str, Any]:
+        result = tagmod.set_tags(db, caller, **kwargs)
+        return {key: value for key, value in result.items() if key in ("ref", "tags") or value}
 
     def start(notice_token: str | None = None) -> dict[str, Any]:
         return run("start", lambda db: notice.start(db, caller, notice_token=notice_token))
@@ -366,9 +370,7 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
     ) -> dict[str, Any]:
         return run(
             "set_tags",
-            lambda db: tagmod.set_tags(
-                db, caller, ref=ref, add=add, remove=remove, allow_new=allow_new or ()
-            ),
+            lambda db: _retagged(db, ref=ref, add=add, remove=remove, allow_new=allow_new or ()),
         )
 
     def tags_find(text: str, limit: int = 10) -> dict[str, Any]:
@@ -446,7 +448,7 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
         "stats": (stats, "筆數、日期範圍、上次備份（不含內容）。", read),
         "set_tags": (
             set_tags,
-            "增減既有筆記標籤，不新增筆記／版本；tags_pending 時重用建議名稱，"
+            "增減標籤，不新增筆記／版本；回傳tags為最終標籤；tags_pending 時重用建議名稱，"
             "確須新建才帶 allow_new。",
             write,
         ),

@@ -69,6 +69,11 @@ def test_save_and_amend_over_mcp_are_short_and_amend_shows_the_current_tags(
         )
         assert amended["revision_ref"] == "r1.v2" and amended["tags"] == ["拉麵"]  # still there
         assert "created_at" not in amended and "record_id" not in amended
+        removed = _payload(await server.call_tool("set_tags", {"ref": "r1", "remove": ["拉麵"]}))
+        assert removed["tags"] == [] and removed["removed"] == ["拉麵"]
+        assert "added" not in removed and "tags_pending" not in removed
+        empty = _payload(await server.call_tool("amend", {"ref": "r1", "body": "今天改吃烏龍麵"}))
+        assert empty["tags"] == [] and empty["revision_ref"] == "r1.v3"
 
     asyncio.run(scenario())
 

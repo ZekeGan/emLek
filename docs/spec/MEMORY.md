@@ -54,7 +54,7 @@
 | `start` | 只有使用者主動輸入 emlek start 才啟動首次條款；同意後只記同意狀態、不保存先前聊天，也不改自動政策總開關 |
 | `auto_policy` | 即時同意／總開關／類別／排除專案／24小時用量，MCP另附reference_time與timezone |
 | `save` | 新增；參數為內容、kind、來源、事件時間／精度、標籤、關聯版本／relation及sensitivity。MCP回revision_ref、marker及必要後續資訊，不回敏感分類／hint；tags_pending仍已提交，另回tag_update_ref／hint，以set_tags修標籤 |
-| `amend` | 為既有記錄新增版本；重新掃描敏感內容並取較高等級 |
+| `amend` | 為既有記錄新增版本；重新掃描敏感內容並取較高等級；MCP回傳最終tags，空陣列表示目前無標籤 |
 | `search` | 見下方「搜尋規則」 |
 | `get` | 讀取指定記錄與版本；回傳 `status`、`invalidated`、`superseded_by`、`linked_from`、`links_out`；隱藏的記錄預設回 `NOT_FOUND`（`include_hidden=true` 可讀）；長內容分段（`offset`）；敏感度上限見 [SECURITY](SECURITY.md) |
 | `hide`／`unhide` | 隱藏與恢復（冪等；回傳被連帶失效的衍生記錄） |

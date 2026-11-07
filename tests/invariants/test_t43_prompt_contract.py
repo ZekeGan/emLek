@@ -41,7 +41,19 @@ def test_pending_tags_recover_without_another_note(data_dir: Path, db: Database)
         assert saved["tags_pending"]
         assert saved["tag_update_ref"] == "r2"
         assert "set_tags" in saved["tag_update_hint"]
-        await server.call_tool("set_tags", {"ref": saved["tag_update_ref"], "add": ["京都"]})
+        pending = payload(
+            await server.call_tool("set_tags", {"ref": saved["tag_update_ref"], "add": ["京都市"]})
+        )
+        assert pending["tags_pending"] and pending["tags"] == []
+        assert "added" not in pending and "removed" not in pending
+        repaired = payload(
+            await server.call_tool("set_tags", {"ref": saved["tag_update_ref"], "add": ["京都"]})
+        )
+        assert repaired == {
+            "ref": "r2",
+            "added": ["京都"],
+            "tags": [{"name": "京都", "type": "topic", "added_by": "ai"}],
+        }
 
     asyncio.run(scenario())
     assert db.conn.execute("SELECT count(*) FROM records").fetchone()[0] == 2

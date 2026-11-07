@@ -51,7 +51,7 @@ DESIGN 的分冊，只在做標籤、查詢定位或寬泛問題時讀。標籤�
 |---|---|
 | `tags_find(text, limit?)` | 模糊查標籤：NFKC＋casefold（全半形）、trigram 全文索引（名稱、別名、說明）、編輯距離 ≤ 1 的錯字（名稱 ≥ 3 字元）。**不做簡繁轉換**。**錯字容忍只限查標籤，不及於內文搜尋**。排序：完全相符 > 別名 > 前綴 > 全文 > 模糊，再依使用次數 |
 | `tags_list(tree?, related_to?, type?, limit?)` | 預設：熱門標籤（名稱、類型、次數）；`tree=<標籤>`：向下最多 3 層的目錄；`related_to=<標籤>`：常一起出現的標籤（純統計，前 20） |
-| `set_tags(ref, add?, remove?, allow_new?)` | 增減記錄的標籤；`save`／`amend` 也可帶 `tags` |
+| `set_tags(ref, add?, remove?, allow_new?)` | 增減記錄的標籤；`save`／`amend` 也可帶 `tags`。MCP保留ref、最終tags（含空陣列及added_by來源）；added／removed／tags_pending為空時省略，缺少即空；非空修復資訊保留，核心／CLI不精簡 |
 | `tag_link(parent, child)`、`tag_alias(alias, tag)` | 新增包含關係與別名（AI 與使用者皆可，記錄來源、寫入 `tag_events`）；使用者的說法（「那間店＝一蘭」）記為別名 |
 
 AI 不能刪除或合併，只有命令列能。權限：

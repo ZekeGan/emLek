@@ -174,6 +174,34 @@ def _payload(result: Any) -> dict[str, Any]:
 
 
 @pytest.mark.slow
+def test_start_over_stdio_returns_only_the_actual_message_and_terms(data_dir: Path) -> None:
+    db = Database.open(load_config(data_dir).db_path)
+    try:
+        notice.enable_medium(db, Caller(Channel.CLI, interactive=True, pin_verified=True))
+    finally:
+        db.close()
+
+    async def scenario() -> None:
+        async with _stdio(data_dir, read_only=False) as client:
+            asked = _payload(await client.call_tool("start", {}))
+            assert asked["error"]["data"]["ask_user"] == notice.TERMS
+            accepted = _payload(
+                await client.call_tool(
+                    "start", {"notice_token": asked["error"]["data"]["notice_token"]}
+                )
+            )["result"]
+            assert accepted == {
+                "started": True,
+                "auto_enabled": True,
+                "message": "emLek 已啟用。",
+            }
+            assert _payload(await client.call_tool("start", {}))["result"] == accepted
+            assert _payload(await client.call_tool("stats", {}))["result"]["records"] == 0
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.slow
 def test_stdio_roundtrip_keeps_text_exact_and_stdout_clean(data_dir: Path) -> None:
     text = "MCP経由 😀\r\n京都メモ ＴＯＫＹＯ"
 

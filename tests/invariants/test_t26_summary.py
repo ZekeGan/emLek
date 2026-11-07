@@ -49,6 +49,47 @@ def test_summary_by_month_for_a_short_span(db: Database, caller: Caller) -> None
     assert sum(summary["by_month"].values()) == 90 and summary["undated"] == 0
 
 
+def test_summary_does_not_turn_months_into_days(db: Database, caller: Caller) -> None:
+    for i in range(52):
+        month = i % 26
+        service.save(
+            db,
+            caller,
+            body=f"散步 {i}",
+            event_time=f"{2023 + month // 12}-{month % 12 + 1:02d}",
+            event_time_precision="month",
+        )
+    service.save(db, caller, body="其他生活記錄")
+    summary = search.search(db, caller, query="散步")["summary"]
+    assert summary["first"] == "2023-01" and summary["last"] == "2025-02"
+    assert summary["first_precision"] == summary["last_precision"] == "month"
+    assert summary["scope"] == "query_matches" and summary["total"] == 52
+
+
+def test_summary_uses_coarser_precision_for_tied_boundaries(db: Database, caller: Caller) -> None:
+    service.save(db, caller, body="散步 精確日期", event_time="2024-01-01")
+    for i in range(51):
+        service.save(db, caller, body=f"散步 {i}", event_time="2024", event_time_precision="year")
+    summary = search.search(db, caller, query="散步")["summary"]
+    assert summary["first"] == summary["last"] == "2024"
+    assert summary["first_precision"] == summary["last_precision"] == "year"
+
+
+def test_summary_does_not_pick_an_arbitrary_time_within_a_day(db: Database, caller: Caller) -> None:
+    for i in range(52):
+        hour = 18 if i % 2 == 0 else 9
+        service.save(
+            db,
+            caller,
+            body=f"散步 {i}",
+            event_time=f"2024-01-02T{hour:02d}+09:00",
+            event_time_precision="hour",
+        )
+    summary = search.search(db, caller, query="散步")["summary"]
+    assert summary["first"] == summary["last"] == "2024-01-02"
+    assert summary["first_precision"] == summary["last_precision"] == "day"
+
+
 def test_undated_records_are_counted_apart(db: Database, caller: Caller) -> None:
     _fill(db, caller, 60, 3)
     for i in range(7):

@@ -41,7 +41,7 @@ def test_the_trimmed_reply_keeps_only_what_is_not_a_default() -> None:
         "sensitivity": "high",
         "sensitivity_hint": {"level": "high", "categories": ["x"]},
     }
-    assert _slim_write(loud)["sensitivity"] == "high" and "sensitivity_hint" in _slim_write(loud)
+    assert "sensitivity" not in _slim_write(loud) and "sensitivity_hint" not in _slim_write(loud)
     pending = {**full, "tags_pending": [{"name": "a", "similar": ["b"]}], "links_added": 2}
     shown = _slim_write(pending)
     assert shown["tags_pending"] and shown["links_added"] == 2
@@ -88,7 +88,7 @@ def test_the_opening_text_counts_a_past_experience_as_something_to_save() -> Non
     from emlek.mcp_server.server import INSTRUCTIONS
 
     assert "含過去的事" in INSTRUCTIONS and "普通問答" in INSTRUCTIONS
-    assert "不講資料庫" in INSTRUCTIONS and "marker" in INSTRUCTIONS
+    assert "內部分類不需轉述" in INSTRUCTIONS and "marker" in INSTRUCTIONS
     assert "呼叫工具前" in INSTRUCTIONS and "不要宣告操作" in INSTRUCTIONS
     assert "回想或自動存入時" in INSTRUCTIONS
     assert "最高風險" in INSTRUCTIONS and "不存也不問" in INSTRUCTIONS

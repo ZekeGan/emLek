@@ -53,7 +53,7 @@
 |---|---|
 | `start` | 只有使用者主動輸入 emlek start 才啟動首次條款；同意後只記同意狀態、不保存先前聊天，也不改自動政策總開關 |
 | `auto_policy` | 即時同意／總開關／類別／排除專案／24小時用量，MCP另附reference_time與timezone |
-| `save` | 新增；參數為內容、kind、來源、事件時間／精度、標籤、關聯版本／relation及sensitivity。MCP回revision_ref、marker及非預設值；tags_pending仍已提交，另回tag_update_ref／hint，以set_tags修標籤 |
+| `save` | 新增；參數為內容、kind、來源、事件時間／精度、標籤、關聯版本／relation及sensitivity。MCP回revision_ref、marker及必要後續資訊，不回敏感分類／hint；tags_pending仍已提交，另回tag_update_ref／hint，以set_tags修標籤 |
 | `amend` | 為既有記錄新增版本；重新掃描敏感內容並取較高等級 |
 | `search` | 見下方「搜尋規則」 |
 | `get` | 讀取指定記錄與版本；回傳 `status`、`invalidated`、`superseded_by`、`linked_from`、`links_out`；隱藏的記錄預設回 `NOT_FOUND`（`include_hidden=true` 可讀）；長內容分段（`offset`）；敏感度上限見 [SECURITY](SECURITY.md) |
@@ -95,4 +95,4 @@ MCP `instructions` 直接交付必要行為規則，標示規則版本並區分�
 
 ## 原文來源限制
 
-通用MCP的save／amend只接收模型填入的body，沒有宿主可信的使用者訊息可比對；資料庫保證收到後不覆寫，無法證明模型傳入前沒有改字。AI仍須逐字複製，不得自動把改寫標成original或改存摘要規避檢查；原文失真維持阻擋項。使用者核定保留通用MCP，暫不新增宿主專用整合；未解驗收見PROGRESS。
+通用MCP的save／amend只接收模型填入的body，沒有宿主可信的使用者訊息可比對；資料庫保證收到後不覆寫，無法證明模型傳入前沒有改字。AI仍須逐字複製，不得自動把改寫標成original或改存摘要規避檢查；改變字詞、數字或意思仍阻擋；無語意影響的排版差異不單獨判失敗，保存時不主動正規化。使用者核定保留通用MCP，暫不新增宿主專用整合；未解驗收見PROGRESS。

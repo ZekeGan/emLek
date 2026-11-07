@@ -10,10 +10,19 @@ from typing import Any
 from emlek.core import auto, notice, service
 from emlek.core.db import Database
 from emlek.core.permissions import Caller, Channel
-from emlek.mcp_server.server import _instructions, build_server
+from emlek.mcp_server.server import RULES_VERSION, _instructions, _slim_write, build_server
 
 AI = Caller(Channel.MCP)
 PERSON = Caller(Channel.CLI, interactive=True, pin_verified=True)
+
+
+def test_write_success_does_not_expose_internal_sensitivity_labels(db: Database) -> None:
+    notice.acknowledge(db.conn)
+    saved = service.save(db, AI, body="合成朋友的電話是 0912-345-678。")
+    assert saved["sensitivity"] == "medium"
+    shown = _slim_write(saved)
+    assert shown["revision_ref"] and shown["marker"]
+    assert "sensitivity" not in shown and "sensitivity_hint" not in shown
 
 
 def payload(reply: Any) -> dict[str, Any]:
@@ -48,6 +57,10 @@ def test_start_reports_disabled_policy_without_enabling_it(db: Database) -> None
 
 
 def test_profiles_and_live_policy(data_dir: Path, db: Database) -> None:
+    rules = (Path(__file__).resolve().parents[2] / "docs/AGENT_RULES.md").read_text(
+        encoding="utf-8"
+    )
+    assert f"規則版本：`{RULES_VERSION}`" in rules
     readonly = _instructions(db.path, "medium", can_write=False)
     assert "唯讀" in readonly and "invalidated" in readonly and "by_year" in readonly
     assert "呼叫 start" not in readonly and "set_tags" not in readonly

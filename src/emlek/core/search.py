@@ -23,6 +23,7 @@ from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
 from emlek.core.permissions import Caller, Channel, require
 from emlek.core.service import KINDS, normalize_for_search
+from emlek.core.timeutil import PRECISIONS
 
 MAX_QUERY_CHARS = 512
 MAX_TERMS = 30
@@ -778,11 +779,35 @@ def _summary(
         if len(by_month) <= MAX_SUMMARY_MONTHS
         else {"by_year": dict(sorted(Counter(day[:4] for day in days).items()))}
     )
+
+    def boundary(day: str | None) -> tuple[str | None, str | None]:
+        if day is None:
+            return None, None
+        if date_field == "created_at":
+            return day, "day"
+        values = [
+            db.conn.execute(
+                "SELECT event_time, event_time_precision FROM revisions WHERE id = ?",
+                (row["rev_id"],),
+            ).fetchone()
+            for row in ordered
+            if row["ev_start"] == day
+        ]
+        value, precision = min(values, key=lambda pair: PRECISIONS.index(pair[1]))
+        if PRECISIONS.index(precision) > PRECISIONS.index("day"):
+            return day, "day"
+        return value, precision
+
+    first, first_precision = boundary(min(days) if days else None)
+    last, last_precision = boundary(max(days) if days else None)
     return {
         "total": len(ordered),
         "date_field": date_field,
-        "first": min(days) if days else None,
-        "last": max(days) if days else None,
+        "first": first,
+        "last": last,
+        "first_precision": first_precision,
+        "last_precision": last_precision,
+        "scope": "query_matches",
         **distribution,
         "undated": undated,
         "basis": "keyword",

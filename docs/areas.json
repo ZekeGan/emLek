@@ -32,6 +32,7 @@
         "tests/invariants/test_t24_migrations.py",
         "tests/invariants/test_t11_limits.py",
         "tests/invariants/test_t06_crash.py",
+        "tests/unit/test_crash_recovery.py",
         "tests/invariants/test_t05_atomic_save.py",
         "tests/invariants/test_t03_roundtrip.py",
         "tests/invariants/test_t01_immutability.py"

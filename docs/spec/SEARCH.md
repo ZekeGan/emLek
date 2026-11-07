@@ -16,6 +16,7 @@
 - **結果過多時的摘要**：當總筆數超過 50（`aggregate_threshold`），回應多一個 `summary` 物件，`results` 仍是依 `limit` 分頁的片段（預設 20 筆），所以舊客戶端不受影響：
   - `summary.undated` 與頂層的 `undated` 不同：前者數**所有**符合者中沒有事件日期的，後者只在有日期過濾時才計。
   - `summary.total`、`summary.first` 與 `summary.last`（依 `date_field` 的最早與最晚日期）、`summary.by_month`（`YYYY-MM` 對筆數，超過 24 個月改為 `by_year`）、`summary.undated`（沒有日期者的數量）。
+  - `summary.scope=query_matches`表明僅本次查詢；`first`／`last`保留來源年／月精度，細於日者仍以日呈現，並附`first_precision`／`last_precision`，同日不任取某個時刻。
   - `summary.basis` 固定為 `"keyword"`，`summary.note` 固定為「依關鍵字比對，可能漏掉不同說法的記錄；僅供縮小範圍，不代表全貌」。AI 轉述數字時必須帶出這個限制（AGENT_RULES）。
   - 隱藏的、超過 `max_sensitivity` 的記錄**不計入**任何數字，也不洩漏其筆數（`withheld` 仍只在權限內的呼叫端有意義，沿用現行行為）。
   - 沒有獨立的統計工具；沒有趨勢判斷或情緒統計。按人物等新分組需求見 ROADMAP。

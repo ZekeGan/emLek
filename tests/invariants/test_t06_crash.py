@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
@@ -31,6 +32,24 @@ WRITER = textwrap.dedent(
 )
 
 
+def _recover_after_kill(path: Path) -> tuple[sqlite3.Connection, str]:
+    """Windows may briefly reject hot-journal truncation after TerminateProcess."""
+    deadline = time.monotonic() + 1
+    while True:
+        conn = sqlite3.connect(path)
+        try:
+            return conn, conn.execute("PRAGMA integrity_check").fetchone()[0]
+        except sqlite3.Error as exc:
+            conn.close()
+            if (
+                sys.platform != "win32"
+                or getattr(exc, "sqlite_errorcode", None) != sqlite3.SQLITE_IOERR_TRUNCATE
+                or time.monotonic() >= deadline
+            ):
+                raise
+            time.sleep(0.05)
+
+
 @pytest.mark.slow
 def test_killed_writer_leaves_a_consistent_database(data_dir: Path, tmp_path: Path) -> None:
     script = tmp_path / "writer.py"
@@ -50,9 +69,9 @@ def test_killed_writer_leaves_a_consistent_database(data_dir: Path, tmp_path: Pa
         proc.kill()
         proc.wait()
 
-    conn = sqlite3.connect(db_path)
+    conn, integrity = _recover_after_kill(db_path)
     try:
-        assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert integrity == "ok"
         records = conn.execute("SELECT count(*) FROM records").fetchone()[0]
         revisions = conn.execute("SELECT count(*) FROM revisions WHERE version_no = 1").fetchone()[
             0

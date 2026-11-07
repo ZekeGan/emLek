@@ -403,6 +403,15 @@ def get(
     _log.info(
         "get record=%d version=%d channel=%s", record_id, revision["version_no"], caller.channel
     )
+    state = versions.describe(db.conn, record_id, versions.statuses(db.conn))
+    if caller.channel != Channel.CLI and state["invalidated"]:
+        return {
+            "ref": f"r{record_id}",
+            "revision_ref": f"r{record_id}.v{revision['version_no']}",
+            "kind": revision["kind"],
+            **state,
+            "content_withheld": True,
+        }
     body = revision["body"]
     shown = body[offset:] if max_chars is None else body[offset : offset + max_chars]
     next_offset = offset + len(shown)
@@ -427,7 +436,7 @@ def get(
         "source": revision["source"],
         "hidden": bool(record[1]),
         "sensitivity": record[2],
-        **versions.describe(conn, record_id, versions.statuses(conn)),
+        **state,
         "superseded_by": versions.superseded_by(conn, record_id, max_sensitivity=max_sensitivity),
         "linked_from": linked,
         "linked_from_truncated": linked_truncated,

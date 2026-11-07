@@ -17,7 +17,7 @@
 | T09 | 事件時間：精度、時區、日界線正確 | 日精度不受時區影響；分精度保留偏移；跨日界線的範圍查詢 | M2 |
 | T10 | 分頁：總筆數正確、不重複、不遺漏、游標穩定 | 查詢中途新增資料，頁間不重複不漏 | M2 |
 | T11 | 輸入限制與錯誤碼 | 超長原文、過多標籤、空查詢、未知欄位都回對應 `INVALID_INPUT`，結束碼正確 | M1（標籤限制於 M7 補） |
-| T12 | 隱藏：搜尋與讀取看不到、恢復後回來、衍生摘要同步失效；隱藏與 `unhide` 冪等；隱藏者不計入 `summary` 數字；推翻者被隱藏則被推翻者恢復為 `current`；`supersedes` 不傳遞隱藏效果、`derived`／`summarizes` 會 | 隱藏、恢復、檢查 `status`、`superseded_by` 與衍生記錄狀態、`summary` 筆數 | M5 |
+| T12 | 隱藏：搜尋與讀取看不到、恢復後回來、衍生摘要同步失效；隱藏與 `unhide` 冪等；隱藏者不計入 `summary` 數字；推翻者被隱藏則被推翻者恢復為 `current`；`supersedes` 不傳遞隱藏效果、`derived`／`summarizes` 會 | 隱藏、恢復、檢查 `status`、`superseded_by` 與衍生記錄狀態、`summary` 筆數；MCP指定版本／offset／分頁／唯讀不交付失效本文、片段與專屬標籤，含facets與父子展開 | M5 |
 | T13 | 推翻與支持：`superseded_by`、`linked_from`、`status` 正確還原 A→B→C→A（`current`／`superseded`／`reaffirmed`）；連到不存在、自己、隱藏者被拒；重複連結冪等；`amend` 的 `expected_version` 衝突、內文未變、隱藏中、`kind` 不可改、省略與 null 的差別；`current_only` 排除規則；`linked_from` 超過 50 條標 `truncated` | 建立四筆記錄與關係，逐一檢查各自回傳與錯誤碼 | M5 |
 | T26 | 結果過多摘要：超過 50 筆才有 `summary`；`by_month` 加總等於總筆數減未標日期；超過 24 個月改 `by_year`；固定 `basis` 與 `note`；`get` 超過 8000 字元截斷並可用 `offset` 取完；舊欄位不變 | 以合成 120 筆跨 30 個月的資料查詢，對照 SQL 直接統計 | M5 |
 | T27 | start 同意碼：首次主動啟用不帶碼回 NEEDS_CONFIRMATION，接受後帶碼只記同意、不寫筆記；單次有效、並行只有一個成功、10 分鐘過期、綁 start 與條款、種類不符拒絕；同意設定失敗回滾不消耗碼；失敗訊息一致、不記碼明文；high 拒絕不發碼；重設後只在主動 start 再問 | 注入時鐘與失敗點；兩個執行緒獨立連線並行用碼 | M6／D97 |

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
-from emlek.core import search, service, versions
+from emlek.core import search, service, tags, versions
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
-from emlek.core.permissions import Caller
+from emlek.core.permissions import Caller, Channel
 
 
 def _refs(db: Database, caller: Caller, query: str, **kwargs: object) -> set[str]:
@@ -83,6 +85,88 @@ def test_derived_records_become_invalid_while_their_source_is_hidden(
 
     versions.unhide(db, caller, ref=source)
     assert service.get(db, caller, ref=meta)["invalidated"] is False
+
+
+@pytest.mark.parametrize("channel", [Channel.MCP, Channel.MCP_READONLY])
+def test_invalidated_content_is_withheld_from_ai(
+    db: Database, caller: Caller, channel: Channel
+) -> None:
+    source = service.save(db, caller, body="合成來源")["ref"]
+    derived = service.save(
+        db,
+        caller,
+        body="紫色河馬",
+        kind="ai_summary",
+        source="紫色河馬",
+        tags=["紫色河馬"],
+        links=[{"ref": source, "relation": "summarizes"}],
+    )["ref"]
+    meta = service.save(
+        db,
+        caller,
+        body="銀色斑馬",
+        kind="inference",
+        links=[{"ref": derived, "relation": "derived"}],
+    )["ref"]
+    versions.hide(db, caller, ref=source)
+    ai = Caller(channel)
+    for ref in (derived, meta):
+        for version in (None, 1):
+            result = service.get(
+                db, ai, ref=ref, version=version, offset=1, include_hidden=True, max_chars=1
+            )
+            assert result["invalidated"] and result["content_withheld"]
+            assert set(result) == {
+                "ref",
+                "revision_ref",
+                "kind",
+                "status",
+                "invalidated",
+                "content_withheld",
+            }
+    assert service.get(db, caller, ref=derived)["body"] == "紫色河馬"
+    found = search.search(db, ai, facets=True)
+    assert "紫色河馬" not in json.dumps(found, ensure_ascii=False)
+    assert tags.find(db, ai, text="紫色河馬")["results"] == []
+    assert "紫色河馬" not in json.dumps(tags.listing(db, ai), ensure_ascii=False)
+    assert "紫色河馬" not in tags.popular_names(db.conn, "high")
+    with pytest.raises(EmlekError):
+        tags.listing(db, ai, tree="紫色河馬")
+    service.save(db, caller, body="安全標籤基準", tags=["動物"])
+    tags.link(db, caller, parent="動物", child="紫色河馬")
+    expanded = search.search(db, ai, tags=["動物"], expand=True, facets=True)
+    assert "紫色河馬" not in json.dumps(expanded, ensure_ascii=False)
+    for compact in (False, True):
+        result = search.search(
+            db,
+            ai,
+            query="河馬 OR 斑馬",
+            all_versions=True,
+            current_only=True,
+            compact=compact,
+            limit=1,
+        )
+        assert result["total"] == 2 and result["returned_count"] == 1
+        assert result["content_count"] == 0 and result["next_cursor"]
+        assert "snippet" not in result["results"][0]
+        assert "tags" not in result["results"][0]
+        assert "source" not in result["results"][0]
+        second = search.search(
+            db,
+            ai,
+            query="河馬 OR 斑馬",
+            all_versions=True,
+            current_only=True,
+            compact=compact,
+            limit=1,
+            cursor=result["next_cursor"],
+        )
+        assert second["results"][0]["content_withheld"]
+    versions.unhide(db, caller, ref=source)
+    assert service.get(db, ai, ref=derived)["body"] == "紫色河馬"
+    assert service.get(db, ai, ref=meta)["body"] == "銀色斑馬"
+    result = search.search(db, ai, query="河馬 OR 斑馬")
+    assert result["returned_count"] == result["content_count"] == 2
 
 
 def test_supersedes_and_supports_do_not_carry_hiding_down(db: Database, caller: Caller) -> None:

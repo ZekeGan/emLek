@@ -11,10 +11,12 @@ import logging
 import re
 import sqlite3
 import unicodedata
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from typing import Any
 
 from emlek.core import sensitivity as scanner
+from emlek.core import versions
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
 from emlek.core.permissions import Caller, Channel, require
@@ -335,7 +337,9 @@ def _allowed(cap: str) -> str:
     return ", ".join(f"'{level}'" for level in order[: order.index(cap) + 1])
 
 
-def _visible_counts(conn: sqlite3.Connection, cap: str) -> dict[int, tuple[int, int]]:
+def _visible_counts(
+    conn: sqlite3.Connection, cap: str, *, withhold_invalidated: bool = True
+) -> dict[int, tuple[int, int]]:
     """tag id -> (visible uses, all uses)."""
     rows = conn.execute(
         "SELECT rt.tag_id, SUM(CASE WHEN rec.hidden = 0 AND rec.sensitivity IN ("
@@ -343,7 +347,18 @@ def _visible_counts(conn: sqlite3.Connection, cap: str) -> dict[int, tuple[int, 
         + ") THEN 1 ELSE 0 END), count(*) FROM record_tags rt JOIN records rec"
         " ON rec.id = rt.record_id GROUP BY rt.tag_id"
     ).fetchall()
-    return {int(t): (int(v or 0), int(a)) for t, v, a in rows}
+    counts = {int(t): (int(v or 0), int(a)) for t, v, a in rows}
+    if withhold_invalidated and versions.has_links(conn):
+        for record_id, tag_id in conn.execute(
+            "SELECT rt.record_id, rt.tag_id FROM record_tags rt JOIN records rec"
+            " ON rec.id = rt.record_id WHERE rec.hidden = 0 AND rec.sensitivity IN ("
+            + _allowed(cap)
+            + ")"
+        ).fetchall():
+            if versions.hidden_sources(conn, record_id):
+                visible, total = counts[tag_id]
+                counts[tag_id] = (visible - 1, total)
+    return counts
 
 
 def matching(
@@ -374,6 +389,12 @@ def matching(
 def _listable(counts: dict[int, tuple[int, int]], tag_id: int) -> bool:
     visible, total = counts.get(tag_id, (0, 0))
     return total == 0 or visible > 0  # a tag known only from hidden or capped records stays hidden
+
+
+def visible_names(conn: sqlite3.Connection, names: list[str], cap: str) -> list[str]:
+    """Filter expanded tag names before returning them to an AI reader."""
+    counts = _visible_counts(conn, cap)
+    return [name for name in names if _listable(counts, resolve_id(conn, name) or -1)]
 
 
 def popular_names(conn: sqlite3.Connection, cap: str, limit: int = INSTRUCTION_LIMIT) -> list[str]:
@@ -519,7 +540,9 @@ def find(
     if not key:
         raise EmlekError(ErrorCode.INVALID_INPUT, "請給要找的字")
     conn = db.conn
-    counts = _visible_counts(conn, max_sensitivity)
+    counts = _visible_counts(
+        conn, max_sensitivity, withhold_invalidated=caller.channel != Channel.CLI
+    )
     scored: dict[int, tuple[int, str]] = {}
 
     def offer(tag_id: int, rank: int, via: str) -> None:
@@ -582,29 +605,36 @@ def listing(
     if tree and related_to:
         raise EmlekError(ErrorCode.INVALID_INPUT, "tree 與 related_to 只能擇一")
     conn = db.conn
-    counts = _visible_counts(conn, max_sensitivity)
+    counts = _visible_counts(
+        conn, max_sensitivity, withhold_invalidated=caller.channel != Channel.CLI
+    )
     if tree:
         root = resolve_id(conn, tree)
-        if root is None:
+        if root is None or not _listable(counts, root):
             raise EmlekError(ErrorCode.NOT_FOUND, "找不到指定的標籤")
         return {"tree": _tree(conn, root, counts, MAX_DEPTH)}
     if related_to:
         base = resolve_id(conn, related_to)
-        if base is None:
+        if base is None or not _listable(counts, base):
             raise EmlekError(ErrorCode.NOT_FOUND, "找不到指定的標籤")
         rows = conn.execute(
-            "SELECT other.tag_id, count(*) FROM record_tags own JOIN record_tags other"
+            "SELECT other.tag_id, own.record_id FROM record_tags own JOIN record_tags other"
             " ON other.record_id = own.record_id AND other.tag_id <> own.tag_id"
             " JOIN records rec ON rec.id = own.record_id"
             " WHERE own.tag_id = ? AND rec.hidden = 0 AND rec.sensitivity IN ("
             + _allowed(max_sensitivity)
-            + ") GROUP BY other.tag_id ORDER BY count(*) DESC LIMIT 20",
+            + ")",
             (base,),
         ).fetchall()
+        together = Counter(
+            tag_id
+            for tag_id, record_id in rows
+            if caller.channel == Channel.CLI or not versions.hidden_sources(conn, record_id)
+        )
         return {
             "related": [
                 {"name": tag_name(conn, int(i)), "together": int(n)}
-                for i, n in rows
+                for i, n in together.most_common(20)
                 if _listable(counts, int(i))
             ]
         }

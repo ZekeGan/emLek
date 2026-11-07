@@ -21,7 +21,7 @@ from emlek.core import tags as tagmod
 from emlek.core import versions
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
-from emlek.core.permissions import Caller, require
+from emlek.core.permissions import Caller, Channel, require
 from emlek.core.service import KINDS, normalize_for_search
 
 MAX_QUERY_CHARS = 512
@@ -509,6 +509,8 @@ def search(
     if impossible:
         return {
             "total": 0,
+            "returned_count": 0,
+            "content_count": 0,
             "undated": 0,
             "withheld": 0,
             "order": applied,
@@ -608,6 +610,11 @@ def search(
     used = 0
     for row in page:
         item = _describe(db, row, terms, status_map)
+        if caller.channel != Channel.CLI and item["invalidated"]:
+            item = {
+                key: item[key] for key in ("ref", "revision_ref", "kind", "status", "invalidated")
+            }
+            item["content_withheld"] = True
         if compact:
             item = _compact(item)
         size = len(json.dumps(item, ensure_ascii=False))
@@ -643,7 +650,11 @@ def search(
     )
     extra: dict[str, Any] = {}
     if tags:
-        extra["expanded_tags"] = expanded
+        extra["expanded_tags"] = (
+            expanded
+            if caller.channel == Channel.CLI
+            else tagmod.visible_names(db.conn, expanded, max_sensitivity)
+        )
         if unknown:
             warnings = [*warnings, "unknown_tags_ignored"]
         if cut:
@@ -667,7 +678,15 @@ def search(
         if named:
             extra["matching_tags"] = named
     if facets:
-        extra["facets"] = tagmod.facets(db.conn, [row["record_id"] for row in ordered])
+        extra["facets"] = tagmod.facets(
+            db.conn,
+            [
+                row["record_id"]
+                for row in ordered
+                if caller.channel == Channel.CLI
+                or not versions.hidden_sources(db.conn, row["record_id"])
+            ],
+        )
     if not ordered and (terms or tags):
         near = [
             s
@@ -678,6 +697,8 @@ def search(
             extra["similar_tags"] = list(dict.fromkeys(near))[:5]
     return {
         "total": len(ordered),
+        "returned_count": len(results),
+        "content_count": sum(not item.get("content_withheld", False) for item in results),
         "undated": undated,
         "withheld": withheld,
         "order": applied,

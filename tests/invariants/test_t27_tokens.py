@@ -240,5 +240,5 @@ def test_the_refusal_carries_the_exact_question_to_ask(db: Database, caller: Cal
     medium = _asked(db, caller)
     assert medium["ask_user"] == notice.TERMS
     rules = (Path(__file__).resolve().parents[2] / "docs" / "AGENT_RULES.md").read_text("utf-8")
-    assert notice.TERMS in rules
+    assert notice.TERMS not in rules  # terms are delivered by start, never copied into prompts
     assert "0912" not in json.dumps(medium)

@@ -87,8 +87,7 @@ def test_the_event_time_format_is_explained_to_the_model(data_dir: Path) -> None
 def test_the_opening_text_counts_a_past_experience_as_something_to_save() -> None:
     from emlek.mcp_server.server import INSTRUCTIONS
 
-    assert "含過去的事" in INSTRUCTIONS and "普通問答" in INSTRUCTIONS
+    assert "經歷" in INSTRUCTIONS and "普通問答" in INSTRUCTIONS
     assert "內部分類不需轉述" in INSTRUCTIONS and "marker" in INSTRUCTIONS
-    assert "呼叫工具前" in INSTRUCTIONS and "不要宣告操作" in INSTRUCTIONS
-    assert "回想或自動存入時" in INSTRUCTIONS
+    assert "不宣告工具操作" in INSTRUCTIONS
     assert "最高風險" in INSTRUCTIONS and "不存也不問" in INSTRUCTIONS

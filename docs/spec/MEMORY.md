@@ -65,7 +65,7 @@
 
 僅 CLI（不開放 MCP）：`init`、`doctor`、`reindex`、`mcp`（啟動 MCP 伺服器）、`backup`、`restore`、`export`、`import`、`purge`、`pin set·change·reset`、`notice status·enable`、`sensitivity set`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。
 
-MCP `instructions` 直接交付必要行為規則，標示規則版本並區分可寫／唯讀；唯讀不收到寫入流程。完整操作細節在 AGENT_RULES，可另載入，但不以檔名引用當成已載入。AI 測試分 MCP-only 與附完整規則兩種配置，記錄實際工具白名單及平台預設上下文限制。工具 schema 列明標籤／連結結構與有限值；MCP save／amend 不提供舊同意碼參數，CLI 相容參數保留。每次工具呼叫各自開關資料庫連線，行程不長期持有；不引入新服務或資料格式（D98）。
+MCP instructions與可攜核心文件由mcp_server/rules.py同源提供，依唯讀／可寫入口取用；唯讀不含存入段，不承諾寫入。MCP已收到適用核心，不需再附整份文件；其他整合用prompt_for按入口選取。參數、狀態及後續修復留在工具說明與回傳，操作細則留在規格，不常駐AI提示。核心文件用scripts/sync-agent-rules.py同步；AI基準的附加規則也按入口裁切，自訂舊規則僅供明確對照。工具及資料格式、權限、資料庫開關連線方式不變。
 
 **唯讀模式**：`emlek mcp --read-only` 的工具清單只含 `search`、`get`、`phrases_list`、`stats`、`tags_find`、`tags_list`（寫入工具根本不存在，不是被拒絕），供無人看管的排程使用；`max_sensitivity` 預設為 medium。每日簡報見 [DAILY_BRIEFING](../DAILY_BRIEFING.md)。
 
@@ -96,3 +96,10 @@ MCP `instructions` 直接交付必要行為規則，標示規則版本並區分�
 ## 原文來源限制
 
 通用MCP的save／amend只接收模型填入的body，沒有宿主可信的使用者訊息可比對；資料庫保證收到後不覆寫，無法證明模型傳入前沒有改字。AI仍須逐字複製，不得自動把改寫標成original或改存摘要規避檢查；改變字詞、數字或意思仍阻擋；無語意影響的排版差異不單獨判失敗，保存時不主動正規化。使用者核定保留通用MCP，暫不新增宿主專用整合；未解驗收見PROGRESS。
+
+### 操作細則的歸屬
+
+- 保存期限／約定需填已知事件日期與狀態標籤；完成時存完成記錄，以supplements連回原記錄。補充／修正用amend；新看法用supersedes，重新確認用supports；原文／摘要／推論不得混淆。
+- 工作只存使用者摘要，不保存貼入的程式碼、文件或log；其餘保存範圍依自動記錄政策。人名由AI標medium，電話等依核心掃描與較高宣告級別處理，未知作者、來源與日期不補造。
+- 保存成功但tags_pending時筆記已存在，只用set_tags修復，不重送save／amend；修改標籤不增筆記或版本。新標籤含近義說明、不得含敏感個資；優先重用，AI標籤／情緒仍是推測。
+- 使用者未要求不執行備份／還原／匯出；徹底清除詳本檔刪除章節，固定確認與PIN由CLI提供，既有備份及已傳給AI的內容無法收回。

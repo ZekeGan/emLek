@@ -25,6 +25,7 @@ from emlek.core import auto, notice, service, versions
 from emlek.core.db import Database
 from emlek.core.permissions import Caller, Channel
 from emlek.core.vault import init_vault
+from emlek.mcp_server.rules import prompt_for
 from emlek.mcp_server.server import RULES_VERSION, build_server
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -196,7 +197,6 @@ def main() -> None:
     base = base / args.profile
     base.mkdir(parents=True, exist_ok=True)
     frozen = fingerprint()
-    rules = (ROOT / "docs/AGENT_RULES.md").read_text(encoding="utf-8")
     total = sum(len(c.turns) for c in dialogues.CASES.values()) * args.runs
     estimate = total * 0.0012
     print(
@@ -308,7 +308,7 @@ def main() -> None:
                     session,
                 ]
                 if args.profile == "full-rules":
-                    cmd += ["--append-system-prompt", rules]
+                    cmd += ["--append-system-prompt", prompt_for(read_only=case.read_only)]
                 try:
                     result = subprocess.run(
                         cmd,

@@ -20,7 +20,7 @@
 
 ## 敏感內容提示
 
-存入時依危險度提示，避免使用者在不知情下把高風險資料留在明文資料庫（備份與匯出也會帶出）。固定句式在 [AGENT_RULES](../AGENT_RULES.md) §1。
+首次條款只在使用者主動start時顯示，固定文字由core/notice.py提供，不複製進AI核心提示。內容說明本機明文、備份／匯出、保存範圍及隱藏方式，明確同意後才啟用；不是每筆依危險度詢問。
 
 | 等級 | 例子 | 存入時 |
 |---|---|---|
@@ -28,7 +28,7 @@
 | medium（中） | 電話、住址、身分證或護照號碼、生日 | 與一般個人敘述共用首次全域同意；之後不再問 |
 | none | 其他 | 個人敘述仍需首次全域同意；一般問題不存不問 |
 
-- 判斷：AI 依語意判斷；核心另以規則掃描當補強（私鑰區塊、常見金鑰格式、JWT、卡號 Luhn 檢查、電話與證號格式），回傳 `sensitivity_hint`，取兩者較高者。規則掃描不可能完整。
+- 判斷：AI 依語意判斷；核心另以規則掃描當補強（私鑰區塊、常見金鑰格式、JWT、卡號 Luhn 檢查、電話與證號格式），核心產生 `sensitivity_hint` 並取兩者較高者；MCP成功回傳省略此內部分類。規則掃描不可能完整。
 - high：`save`／`amend` 回 `NOT_PERMITTED`，不發碼；使用者說「是」也不放行。
 - 首次全域同意只由 start 觸發：`NEEDS_CONFIRMATION`（needs_notice，綁 start 與固定條款的 notice_token），同意後重送 start，只記同意不存聊天。`emlek notice status` 查看、`emlek notice enable personal` 重設未啟用（真人終端機、PIN），之後仍須主動 start。
 - `amend` 同樣重掃並取較高等級，高風險直接拒絕；AI 傳入的 `sensitivity` 只能調高，調低只能用 `emlek sensitivity set r<id> <level>`。

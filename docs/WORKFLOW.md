@@ -39,7 +39,7 @@ finish 自動驗證、選檔、提交，不推送或略過 hooks。close／versi
 
 現行規格只放核定行為；實作差距／未驗收只放 PROGRESS，未核定方向只放 ROADMAP。路由只放 areas.json，不手抄完整對應表，新增檔同批登錄。完成過程由 CHANGELOG／Git 保存；重大取捨才追加 decisions 當月全文並更新 DECISIONS 索引／取代關係。歷史不作現行指令。
 
-舊結果進 history，BENCHMARK 只留評分／成本規則與最新摘要；不另產報告文件，原始合成證據維持忽略。AI 必要規則及工具說明仍在 MCP，完整細則在 AGENT_RULES；修改時核對兩種交付路徑，不因省 token 移除安全或原文契約。版本、測試數、Git 狀態優先由命令取得，不抄進每份規格。
+舊結果進 history，BENCHMARK 只留評分／成本規則與最新摘要；不另產報告文件，原始合成證據維持忽略。AI核心由mcp_server/rules.py供應MCP及生成的AGENT_RULES，按入口裁切；操作契約在工具，產品細則在spec，驗收在測試。修改核心後同步生成文件，不因省token移除安全或原文契約。版本、測試數、Git 狀態優先由命令取得，不抄進每份規格。
 
 ## 本機工具
 

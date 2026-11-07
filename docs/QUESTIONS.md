@@ -216,6 +216,6 @@
 | D23 | 換聊天仍沿用同意 | 7 | 是 | 0、0、0、0、0、0、1 |
 | D24 | 達上限不繞過或假報成功 | 1 | 否 | 0 |
 
-執行：`python tests/benchmark/dialogue_runner.py mcp-only --runs 3 --budget-usd .15`，另跑full-rules；合計上限US$0.30。`--preflight`只建立合成fixture及檢查工具，不呼叫模型。每個情境獨立庫／聊天，情境內保留上下文；D23最後一回合換新聊天。內建工具停用，不用API金鑰，原始輸出與狀態保存在忽略的benchmark-output。
+執行：`python tests/benchmark/dialogue_runner.py mcp-only --runs 3 --budget-usd .15`，另跑full-rules；該配置現在只附加適用入口核心，唯讀不含存入段；合計上限US$0.30。`--preflight`只建立合成fixture及檢查工具，不呼叫模型。每個情境獨立庫／聊天，情境內保留上下文；D23最後一回合換新聊天。內建工具停用，不用API金鑰，原始輸出與狀態保存在忽略的benchmark-output。
 
 自動檢查僅涵蓋狀態、筆數、原文比對、版本、指定答案片語、標記及實際標籤；`mechanical_pass`不是整體答案通過。每回合answer_review預設pending，須對照原始輸出人工複核：首次條款與同意、保存邀請／內部分類、D19日期精度、D20只統計散步52筆而非庫內全部55筆、D24不得口頭假報成功。失效本文另檢查工具回傳；一般隱藏題不得自行include_hidden追讀，W03權限本身不變。

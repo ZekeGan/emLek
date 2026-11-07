@@ -94,7 +94,7 @@
       "id": "security",
       "docs": [
         "docs/spec/SECURITY.md",
-        "docs/AGENT_RULES.md#1-存入"
+        "docs/AGENT_RULES.md#1-共用核心"
       ],
       "code": [
         "src/emlek/core/permissions.py",
@@ -166,7 +166,8 @@
       ],
       "code": [
         "src/emlek/mcp_server/*",
-        "src/emlek/cli/commands/mcp.py"
+        "src/emlek/cli/commands/mcp.py",
+        "scripts/sync-agent-rules.py"
       ],
       "tests": [
         "tests/invariants/test_t43_prompt_contract.py",

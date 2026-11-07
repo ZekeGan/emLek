@@ -16,7 +16,7 @@
 
 ## 獨立版本
 
-程式版在 pyproject.toml／__init__.py；資料庫版由遷移編號／PRAGMA user_version 管理，已發布遷移不可改；匯出格式由 export.FORMAT_VERSION 管理，不相容時升版並保留舊格式讀取；工具介面由 api_version 管理，只加相容欄位不升版。提示版本在 MCP，改行為時同步完整規則。
+程式版在 pyproject.toml／__init__.py；資料庫版由遷移編號／PRAGMA user_version 管理，已發布遷移不可改；匯出格式由 export.FORMAT_VERSION 管理，不相容時升版並保留舊格式讀取；工具介面由 api_version 管理，只加相容欄位不升版。提示版本在mcp_server/rules.py，改動後同步生成核心文件。
 
 ## 對外發布關卡
 

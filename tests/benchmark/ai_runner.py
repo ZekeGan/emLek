@@ -37,11 +37,12 @@ from emlek.core import notice
 from emlek.core.db import Database
 from emlek.core.permissions import PERMISSIONS, Caller, Channel
 from emlek.core.vault import init_vault
+from emlek.mcp_server.rules import prompt_for
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "benchmark-output"
 EMLEK_EXE = ROOT / ".venv" / "Scripts" / "emlek.exe"
-RULES = (ROOT / "docs" / "AGENT_RULES.md").read_text(encoding="utf-8")
+RULES = prompt_for(read_only=False)
 TODAY_NOTE = "（今天是 2026-11-01，時區 UTC+9。）"
 
 
@@ -120,7 +121,8 @@ def ask(
         str(CALL_CAP_USD),
     ]
     if with_rules:
-        command += ["--append-system-prompt", rules or RULES]
+        applicable = RULES if "mcp__emlek__save" in allowed else prompt_for(read_only=True)
+        command += ["--append-system-prompt", rules if rules is not None else applicable]
     model = model or os.environ.get("EMLEK_AI_MODEL")
     if model:
         command += ["--model", model]

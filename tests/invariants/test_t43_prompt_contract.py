@@ -10,6 +10,7 @@ from typing import Any
 from emlek.core import auto, notice, service
 from emlek.core.db import Database
 from emlek.core.permissions import Caller, Channel
+from emlek.mcp_server.rules import WRITE_CORE, document, prompt_for
 from emlek.mcp_server.server import RULES_VERSION, _instructions, _slim_write, build_server
 
 AI = Caller(Channel.MCP)
@@ -61,8 +62,11 @@ def test_profiles_and_live_policy(data_dir: Path, db: Database) -> None:
         encoding="utf-8"
     )
     assert f"規則版本：`{RULES_VERSION}`" in rules
+    assert rules == document()
+    assert WRITE_CORE not in prompt_for(read_only=True)
+    assert WRITE_CORE in prompt_for(read_only=False)
     readonly = _instructions(db.path, "medium", can_write=False)
-    assert "唯讀" in readonly and "invalidated" in readonly and "by_year" in readonly
+    assert "唯讀" in readonly and "invalidated" in readonly and "查詢" in readonly
     assert "呼叫 start" not in readonly and "set_tags" not in readonly
 
     async def scenario() -> None:

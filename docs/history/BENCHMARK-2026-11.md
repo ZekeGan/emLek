@@ -730,3 +730,22 @@ a25c855凍結src及AGENT_RULES，沿用同一compare.py（加--model參數）與
 剩餘：Haiku MCP第3輪條款標點改半形；兩配置各1次D19寫出event_time；Haiku full第2輪D10用簡體「这个不存」；Sonnet full的D22在預算上限中斷、無回答文字，但筆記與京都市標籤已正確存入。Sonnet只1輪，不作模型間結論；跑滿3輪約需US$0.9。沒有依本輪結果再改提示、改題或重跑取好答案。
 
 證據：忽略的benchmark-output/prompt-ab-20261111b/（frozen、compare.py、analyze.py、四格summary與原始jsonl、comparison.md／json），來源與runner雜湊99893b23c8da1af495779bce37dff03500c9c01f562dcccbc7fe1cc0bcdc0bca。
+
+### Sonnet補滿3輪（2026-11-11）
+
+使用者要求補跑。compare.py把自身位元組納入凍結雜湊，故不改檔，另以run_with_cap.py在原路徑執行同一原始碼、只把Sonnet每格上限由US$0.15提為US$0.50；fixture雜湊仍為99893b23…。被預算截斷的full run-1/D22連同原summary移到ratelimited/sonnet-full-rules-budgetcut，以新環境重跑。
+
+| 指標 | 第二輪Haiku MCP | Sonnet MCP | 第二輪Haiku full | Sonnet full |
+|---|---:|---:|---:|---:|
+| 回合 | 24 | 24 | 24 | 24 |
+| 成本US$ | 0.02075982 | 0.3452461 | 0.02202201 | 0.3489992 |
+| 輸入總token | 548940 | 480749 | 591138 | 519060 |
+| 輸出token | 8524 | 4994 | 7259 | 4689 |
+| 可見字元 | 1790 | 1513 | 1521 | 1430 |
+| 資料控制 | 24/24 | 24/24 | 24/24 | 24/24 |
+| 條款完全原樣 | 2/3 | 3/3 | 3/3 | 3/3 |
+| 明確保存邀請（人工） | 0 | 0 | 0 | 0 |
+| D18／D19／D10／D22 | 全3/3 | 全3/3 | 全3/3 | 全3/3 |
+| 回答含內部欄位名 | 1 | 0 | 1 | 0 |
+
+Sonnet僅觀察到一般回覆偶用半形標點（條款不受影響），MCP第3輪D22只回「記好了,散步愉快!」未複述標籤但資料正確。兩模型在同一設計下品質差距只剩Haiku的少量標點／欄位名／簡體字；以每回合成本約16倍換取此差距，是否改用由使用者決定。另含截斷D22約US$0.017，Sonnet合計約US$0.71。

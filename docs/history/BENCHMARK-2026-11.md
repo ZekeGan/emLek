@@ -706,3 +706,27 @@ e6bb5b2（規則m10-20261111-1：4則正反範例、條款回傳on_decline）以
 ### 證據
 
 忽略的benchmark-output/prompt-ab-20261111/保存frozen、compare.py、analyze.py、兩格summary.json與原始jsonl、comparison.md（含48回合問答）及comparison.json；中斷證據在prompt-ab-20261111-interrupted。來源與runner雜湊6ec76e71201e89053ac519ba26c68ea94143f67acd6f04f2d2ed3b122f3a5693。
+
+## W07 第二輪：收尾提示與範例（2026-11-11）
+
+a25c855凍結src及AGENT_RULES，沿用同一compare.py（加--model參數）與D02／D10／D16／D18／D19／D22。第一次執行遇訂閱5小時用量上限：Haiku MCP第4回合及其他三格首回合回傳錯誤，原紀錄連同summary移到prompt-ab-20261111b-ratelimited，該題以新環境重跑，不重送原請求；Haiku MCP前3回合有效保留。
+
+| 指標 | W07首輪Haiku MCP | 第二輪Haiku MCP | 第二輪Sonnet MCP（1輪） | W07首輪Haiku full | 第二輪Haiku full | 第二輪Sonnet full（1輪） |
+|---|---:|---:|---:|---:|---:|---:|
+| 回合 | 24 | 24 | 8 | 24 | 24 | 8 |
+| 成本US$ | 0.02300288 | 0.02075982 | 0.1482324 | 0.02525243 | 0.02202201 | 0.1512142 |
+| 輸入總token | 569387 | 548940 | 160345 | 635989 | 591138 | 168921 |
+| 輸出token | 11842 | 8524 | 1745 | 11260 | 7259 | 1560 |
+| 可見字元 | 2795 | 1790 | 489 | 2323 | 1521 | 454 |
+| 資料控制 | 24/24 | 24/24 | 8/8 | 24/24 | 24/24 | 8/8 |
+| 條款完全原樣 | 1/3 | 2/3 | 1/1 | 2/3 | 3/3 | 1/1 |
+| 明確保存邀請（人工） | 3 | 0 | 0 | 1 | 0 | 0 |
+| D18無寫入暗示（人工） | 2/3 | 3/3 | 1/1 | 3/3 | 3/3 | 1/1 |
+| D19不評論測試資料 | 1/3 | 3/3 | 1/1 | 0/3 | 3/3 | 1/1 |
+| D10只拒絕不另邀 | 1/3 | 3/3 | 1/1 | 2/3 | 3/3 | 1/1 |
+| D22照用京都市 | 2/3 | 3/3 | 1/1 | 2/3 | 3/3 | 1/1 |
+| 回答含內部欄位名 | 3 | 1 | 0 | 2 | 1 | 0 |
+
+剩餘：Haiku MCP第3輪條款標點改半形；兩配置各1次D19寫出event_time；Haiku full第2輪D10用簡體「这个不存」；Sonnet full的D22在預算上限中斷、無回答文字，但筆記與京都市標籤已正確存入。Sonnet只1輪，不作模型間結論；跑滿3輪約需US$0.9。沒有依本輪結果再改提示、改題或重跑取好答案。
+
+證據：忽略的benchmark-output/prompt-ab-20261111b/（frozen、compare.py、analyze.py、四格summary與原始jsonl、comparison.md／json），來源與runner雜湊99893b23c8da1af495779bce37dff03500c9c01f562dcccbc7fe1cc0bcdc0bca。

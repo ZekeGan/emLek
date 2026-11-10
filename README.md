@@ -21,6 +21,22 @@
 
 [安裝與接上 AI](docs/INSTALL.md)・[設計](docs/DESIGN.md)・[標籤系統](docs/DESIGN_TAGS.md)・[AI 使用規則](docs/AGENT_RULES.md)・[每日簡報](docs/DAILY_BRIEFING.md)・[題庫](docs/QUESTIONS.md)・[基準測試](docs/BENCHMARK.md)・[測試計畫](docs/TEST_PLAN.md)・[進度](docs/PROGRESS.md)・[決策紀錄](docs/DECISIONS.md)・[開發 Agent 指引](AGENTS.md)・[舊藍圖](docs/archive/)（非現行）
 
+## 接上 AI 與示範
+
+```powershell
+claude mcp add emlek -- <專案路徑>\.venv\Scripts\emlek.exe mcp
+```
+
+詳見 [安裝](docs/INSTALL.md)。對話範例（r12 為實際編號）：
+
+```text
+你：emlek start            → 顯示首次條款，回「同意」後啟用
+你：今天和小美去京都，買了抹茶
+AI：聽起來很愉快！     ◆ emLek｜r12.✔️
+你：我上次去京都買了什麼？
+AI：抹茶（r12，2026-11-11）。
+```
+
 ## 怎麼執行（開發版）
 
 `emlek` 裝在專案的 `.venv` 裡，沒有加進系統 PATH，所以在 PowerShell 要這樣用：

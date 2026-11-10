@@ -7,8 +7,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from emlek.core import auto, notice, service
 from emlek.core.db import Database
+from emlek.core.errors import EmlekError
 from emlek.core.permissions import Caller, Channel
 from emlek.mcp_server.rules import WRITE_CORE, document, prompt_for
 from emlek.mcp_server.server import RULES_VERSION, _instructions, _slim_write, build_server
@@ -24,6 +27,12 @@ def test_write_success_does_not_expose_internal_sensitivity_labels(db: Database)
     shown = _slim_write(saved)
     assert shown["revision_ref"] and shown["marker"]
     assert "sensitivity" not in shown and "sensitivity_hint" not in shown
+
+
+def test_declined_terms_say_to_stop(db: Database) -> None:
+    with pytest.raises(EmlekError) as raised:
+        notice.start(db, AI)
+    assert "不再詢問" in raised.value.data["on_decline"]
 
 
 def payload(reply: Any) -> dict[str, Any]:

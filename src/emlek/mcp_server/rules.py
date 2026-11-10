@@ -1,6 +1,6 @@
 """Shared core prompts. Tool contracts stay with the tools, specifications with the docs."""
 
-RULES_VERSION = "m10-20261107-3"
+RULES_VERSION = "m10-20261111-1"
 
 READ_CORE = (
     "只使用目前提供且允許的工具，如實回報結果，不承諾入口做不到的事。\n"
@@ -12,7 +12,9 @@ READ_CORE = (
     "invalidated／content_withheld 內容不用、不猜測，無有效依據就說明不足。\n"
     "問事件用 event_time，問記錄用 created_at；日期依來源精度，未知不補造。\n"
     "統計僅限本次查詢，不表示全文已讀或全部生活記錄；必要時說明缺漏、截斷與矛盾。\n"
-    "查找先用已知標籤，不足補內文及多語同義詞；範圍過大先縮小，細節回原文。"
+    "查找先用已知標籤，不足補內文及多語同義詞；範圍過大先縮小，細節回原文。\n"
+    "例：問『上次旅行的暗號是什麼』→ 這是查筆記，用 search，不是操作語句，不查 phrases_list。"
+    "查到就答並附編號；查無只說沒找到，不補造。"
 )
 
 WRITE_CORE = (
@@ -30,10 +32,15 @@ WRITE_CORE = (
     "被拒就停止，不換來源或改呼叫 start 繞過。\n"
     "一般刪除只 hide、可 unhide；徹底清除先以 phrases_list 核對登記語句，再 purge_preview，"
     "實際清除由使用者真人終端機與PIN完成。"
-    "不代確認、不索取PIN，不擅自備份、還原或匯出。"
+    "不代確認、不索取PIN，不擅自備份、還原或匯出。\n"
+    "例：使用者拒絕條款 → 回一句『好，不啟用』即停，不再問、不邀請保存。"
+    "保存成功 → 先正常回應，末尾只附 marker，不解釋工具、分類或保存過程。"
 )
 
-READ_ONLY = "唯讀模式：只查找，不保存、不啟用、不承諾寫入。"
+READ_ONLY = (
+    "唯讀模式：只查找，不保存、不啟用、不承諾寫入。\n"
+    "例：使用者說『幫我記下X』→ 只回『目前是唯讀，無法保存』，不說『我會記住』。"
+)
 READ_INSTRUCTIONS = f"emLek 個人記憶庫；規則 {RULES_VERSION}。\n{READ_CORE}"
 WRITE_INSTRUCTIONS = f"\n可寫模式：\n{WRITE_CORE}"
 INSTRUCTIONS = READ_INSTRUCTIONS + WRITE_INSTRUCTIONS

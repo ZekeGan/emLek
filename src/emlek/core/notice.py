@@ -38,7 +38,6 @@ def start(db: Database, caller: Caller, *, notice_token: str | None = None) -> d
                 "state": "needs_notice",
                 "notice_token": token,
                 "ask_user": TERMS,
-                "on_decline": "不同意就回一句即停，不再詢問或邀請保存。",
                 "expires_in": tokens.TTL_SECONDS,
             },
         )

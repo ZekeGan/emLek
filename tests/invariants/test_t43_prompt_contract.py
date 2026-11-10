@@ -14,7 +14,13 @@ from emlek.core.db import Database
 from emlek.core.errors import EmlekError
 from emlek.core.permissions import Caller, Channel
 from emlek.mcp_server.rules import WRITE_CORE, document, prompt_for
-from emlek.mcp_server.server import RULES_VERSION, _instructions, _slim_write, build_server
+from emlek.mcp_server.server import (
+    RULES_VERSION,
+    _instructions,
+    _reply_hints,
+    _slim_write,
+    build_server,
+)
 
 AI = Caller(Channel.MCP)
 PERSON = Caller(Channel.CLI, interactive=True, pin_verified=True)
@@ -29,10 +35,24 @@ def test_write_success_does_not_expose_internal_sensitivity_labels(db: Database)
     assert "sensitivity" not in shown and "sensitivity_hint" not in shown
 
 
-def test_declined_terms_say_to_stop(db: Database) -> None:
+def test_terms_carry_only_the_text_to_show(db: Database) -> None:
     with pytest.raises(EmlekError) as raised:
         notice.start(db, AI)
-    assert "不再詢問" in raised.value.data["on_decline"]
+    data = raised.value.data
+    assert data["ask_user"] == notice.TERMS
+    assert "on_decline" not in data  # W07: models paraphrased it into the terms reply
+
+
+def test_search_closing_hints_only_where_answers_drift() -> None:
+    empty = _reply_hints({"total": 0, "hints": ["沒有找到。"]}, read_only=False)
+    assert empty["hints"][0] == "沒有找到。" and "不邀請保存" in empty["hints"][-1]
+    stale = {"total": 1, "returned_count": 1, "content_count": 0, "hints": []}
+    withheld = _reply_hints(stale, read_only=True)
+    assert "不建議重新寫入" in withheld["hints"][0] and "唯讀" in withheld["hints"][-1]
+    found = {"total": 1, "returned_count": 1, "content_count": 1, "hints": []}
+    assert _reply_hints(found, read_only=True) is found
+    paged = {"total": 0, "next_cursor": "c", "hints": []}
+    assert _reply_hints(paged, read_only=False) is paged
 
 
 def payload(reply: Any) -> dict[str, Any]:
@@ -50,6 +70,7 @@ def test_pending_tags_recover_without_another_note(data_dir: Path, db: Database)
         assert saved["tags_pending"]
         assert saved["tag_update_ref"] == "r2"
         assert "set_tags" in saved["tag_update_hint"]
+        assert "allow_new" in saved["tag_update_hint"]
         pending = payload(
             await server.call_tool("set_tags", {"ref": saved["tag_update_ref"], "add": ["京都市"]})
         )

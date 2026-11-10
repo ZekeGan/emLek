@@ -143,8 +143,31 @@ def _slim_write(result: dict[str, Any], *, tags: list[str] | None = None) -> dic
             slim[key] = result[key]
     if result.get("tags_pending"):
         slim["tag_update_ref"] = str(result["revision_ref"]).split(".")[0]
-        slim["tag_update_hint"] = "筆記已儲存；用 set_tags 修正標籤，勿重送 save／amend。"
+        slim["tag_update_hint"] = (
+            "筆記已儲存；用 set_tags 修正標籤，勿重送 save／amend。"
+            "使用者明確指定的名稱照用並帶 allow_new，不反問；否則改用 similar。"
+        )
     return slim
+
+
+_EMPTY_REPLY = "回覆：只說沒找到並列查過的詞；不邀請保存、不建議補存。"
+_WITHHELD_REPLY = "回覆：命中的都已失效不可用，只說找不到可用內容；不寫欄位名稱、不建議重新寫入。"
+_READONLY_REPLY = "唯讀：不提保存或寫入。"
+
+
+def _reply_hints(result: dict[str, Any], *, read_only: bool) -> dict[str, Any]:
+    """Give the closing line the model should use where answers kept drifting (W07)."""
+    if result.get("next_cursor"):
+        return result
+    if result.get("total") == 0:
+        extra = [_EMPTY_REPLY]
+    elif result.get("returned_count") and not result.get("content_count"):
+        extra = [_WITHHELD_REPLY]
+    else:
+        return result
+    if read_only:
+        extra.append(_READONLY_REPLY)
+    return {**result, "hints": [*result.get("hints", []), *extra]}
 
 
 def _clock(timezone: str) -> dict[str, str]:
@@ -334,31 +357,34 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
     ) -> dict[str, Any]:
         return run(
             "search",
-            lambda db: core_search.search(
-                db,
-                caller,
-                query=query,
-                kinds=kinds,
-                date_field=date_field,
-                date_from=date_from,
-                date_to=date_to,
-                order=order,
-                direction=dir,
-                limit=min(limit, MAX_SEARCH_LIMIT),
-                cursor=cursor,
-                all_versions=all_versions,
-                include_hidden=include_hidden,
-                current_only=current_only,
-                tags=tags,
-                match=match,
-                tag_types=tag_types,
-                expand=expand,
-                facets=facets,
-                untagged=untagged,
-                max_response_chars=MAX_SEARCH_CHARS,
-                compact=True,
-                max_sensitivity=_lower_cap(max_sensitivity, default_cap),
-                timezone=config.timezone,
+            lambda db: _reply_hints(
+                core_search.search(
+                    db,
+                    caller,
+                    query=query,
+                    kinds=kinds,
+                    date_field=date_field,
+                    date_from=date_from,
+                    date_to=date_to,
+                    order=order,
+                    direction=dir,
+                    limit=min(limit, MAX_SEARCH_LIMIT),
+                    cursor=cursor,
+                    all_versions=all_versions,
+                    include_hidden=include_hidden,
+                    current_only=current_only,
+                    tags=tags,
+                    match=match,
+                    tag_types=tag_types,
+                    expand=expand,
+                    facets=facets,
+                    untagged=untagged,
+                    max_response_chars=MAX_SEARCH_CHARS,
+                    compact=True,
+                    max_sensitivity=_lower_cap(max_sensitivity, default_cap),
+                    timezone=config.timezone,
+                ),
+                read_only=read_only,
             ),
         )
 

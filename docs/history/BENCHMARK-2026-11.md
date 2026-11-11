@@ -806,3 +806,27 @@ Sonnet以同版本跑D15／D16／D17各3輪×2配置，18/18機械通過、D15 6
 修正後仍有MCP run-1/D15先說「今天沒有記錄到行程」再引用r1，並說「我再幫你記下來」；機械通過但屬回想誤讀及保存邀請，Sonnet同題0/6，列Haiku模型限制。另一處「合成資料」為模型列出的搜尋詞，非評論，判讀為誤報。使用者同意把Haiku偶發簡體字與條款全半形標點歸為模型外觀問題（規則見BENCHMARK驗收分級）。修正後未再跑完整24題：改動只影響查無時的提示，其他題為推論未實測。
 
 證據：忽略的benchmark-output/full-bank-20261111/（兩配置summary與原始jsonl、phone/、sonnet/、haiku-fix/、analyze.py、comparison.md／json、sonnet_recheck.py及haiku_recheck.py）；來源雜湊：全題庫2be9a62b…、Sonnet複查ec68c526…、修正後d7e2099c…。
+
+## W04 Codex 沙箱探針與交叉審查（2026-11-11）
+
+使用者要求以免費版 Codex 測試。Codex CLI 0.166.0、ChatGPT 帳號（訂閱已到期，改免費），設定檔預設 gpt-6.1-sol 免費帳號不可用，改指定 gpt-6-luna。全部用拋棄式合成庫，未碰真實資料。
+
+**隔離更正**：第一次探針在專案資料夾內執行且未關閉外掛，Codex 讀了專案 AGENTS.md，並兩次呼叫使用者帳號的 Notion 連接器（notion.fetch，只讀、未寫入）。之後工作區移到暫存區，並以 -c 關閉 apps／plugins／browser_use／computer_use／memories 及 project_doc_max_bytes=0。
+
+**沙箱結果（不需模型的 codex sandbox 直接驗證）**
+| 測試 | 結果 |
+|---|---|
+| Codex 唯讀沙箱讀 emLek 資料夾（擁有者限定 ACL） | Access denied；一般資料夾可讀。沙箱 shell 無法直接讀資料庫 |
+| 唯讀沙箱跑 emlek stats（ACL 放寬） | 原本寫日誌崩潰；修正後改回乾淨的「資料庫錯誤」，因 WAL 需寫 -shm |
+| codex exec 列出 emlek MCP 工具（唯讀、放寬 ACL、可寫沙箱三種） | 三種都「沒有可用的 emlek MCP 工具」；設定已被 Codex 讀到。2026-11-06 付費期間同機器曾成功呼叫 MCP 8 次，判斷為免費方案限制，未改使用者全域設定驗證 |
+
+寫入／隱藏內容探針因取不到 MCP 工具未執行，不能稱 Codex 端驗證通過。資料庫唯讀開啟（讓唯讀 MCP 能在唯讀沙箱跑）依使用者指示不做，等有付費 Codex 方案、確實要在唯讀沙箱使用時再處理。
+
+**Codex 交叉審查 M7／M10**（gpt-6-luna，唯讀，輸入約 23.7 萬 token）4 條，逐條對照程式核實：
+1. 原文 #標籤經 MCP 也算使用者建立，無標點命令句可進開場說明 → 確認，改以指令字過濾（不改 #標籤信任設計）。
+2. 專案排除未在核心強制 → 誤判；MEMORY 已載明只能由 AI 端遵守。
+3. 每日上限在交易前檢查，並行可超量 → 確認，改在寫入交易內再查。
+4. 明標 token／secret 未列最高風險 → 確認，新增規則。
+核實時另發現自 M6（7972ca9）起地址規則的 word boundary 被誤存為退格字元，英文 address 標示從未生效，一併修正。
+
+證據：忽略的 benchmark-output/codex-w04-20261111/（probe.py、各案例 report／events、_failed-model 下的無效嘗試、review/ 的審查原始輸出）。

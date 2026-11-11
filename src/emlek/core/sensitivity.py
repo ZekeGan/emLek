@@ -71,6 +71,28 @@ _HIGH: tuple[tuple[str, re.Pattern[str]], ...] = (
         ),
     ),
     (
+        # W04: a value plainly labelled as a key, whatever the vendor format. These labels name
+        # a credential outright, so any 8+ character value holding a letter or digit counts.
+        "api_key",
+        re.compile(
+            r"(?:access[ _-]?token|api[ _-]?(?:key|token)|client[ _-]?secret|secret[ _-]?key"
+            r"|access[ _-]?key|auth[ _-]?token|private[ _-]?key|passphrase|credentials?"
+            r"|權杖|令牌|金鑰|密鑰|私鑰|秘鑰|トークン|アクセスキー|シークレット)"
+            r"\s*(?:[:：=＝]|は|是|為|为|\bis\b)\s*(?=\S*[A-Za-z0-9])\S{8,}",
+            _FLAGS,
+        ),
+    ),
+    (
+        # The bare words also appear in ordinary notes ("my secret is chocolate"), so their
+        # value must look generated: both a letter and a digit.
+        "api_key",
+        re.compile(
+            r"(?<![A-Za-z])(?:token|secret|bearer)(?![A-Za-z])"
+            r"\s*(?:[:：=＝]|は|是|為|为|\bis\b)\s*(?=\S*[A-Za-z])(?=\S*\d)\S{8,}",
+            _FLAGS,
+        ),
+    ),
+    (
         "recovery_code",
         re.compile(
             r"(?:復原碼|恢復碼|リカバリーコード|recovery code|backup code)\s*[:：=＝]?\s*\S{4,}",
@@ -96,7 +118,7 @@ _MEDIUM: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     ("address", re.compile(r"〒\s?\d{3}-?\d{4}")),
     ("address", re.compile(r"(?:住所|住址|地址)\s*[:：=＝は是]?\s*\S{4,}")),
-    ("address", re.compile(r"address\s*[:=]\s*\S{4,}", _FLAGS)),
+    ("address", re.compile(r"(?<![A-Za-z])address\s*[:=]\s*\S{4,}", _FLAGS)),
     ("address", re.compile(r"[縣市]\S{1,6}[區鄉鎮市]\S{0,8}[路街道]\S{0,8}\d+號")),
     ("address", re.compile(r"(?<!\d)\d{1,3}丁目\d{0,3}番?\d{0,3}号?")),
     (

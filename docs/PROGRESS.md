@@ -4,11 +4,10 @@
 
 ## 進行中
 
-- **W04** 後續驗證｜領域：tags,security,quality
-  M7 標籤／M10 核心完整交叉審查；全題庫每題三次、T29 無標點命令句及 Codex 沙箱探針。已完成的同意碼審查不重列，未做不得標通過。其餘方向見 ROADMAP，不進 M11。
-  使用者要求設計解法並用Codex免費版測試。
-
 ## 待驗收
+
+- **W04** 後續驗證｜領域：tags,security,quality
+  T29、明標token、上限重查、日誌退路已做；Codex免費版無MCP，探針待付費。Q題庫三次未跑。
 
 - **W03** AI不讀隱藏內容｜領域：security
   D103：隱藏對AI即刪除；include_hidden與unhide只限終端機。

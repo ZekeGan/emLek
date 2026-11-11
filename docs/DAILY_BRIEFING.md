@@ -12,7 +12,7 @@ emLek 本身不排程、不推播。由使用者的 Agent（例如 Codex 的定�
 ## 前提與限制
 
 - 排程必須在**本機**執行（雲端排程碰不到本機資料庫）；電腦關機時不會執行，下次執行請多查過去幾天補漏。
-- 排程的 Agent 使用 MCP 唯讀模式（`emlek mcp --read-only`，工具清單根本沒有寫入工具，`max_sensitivity` 預設 medium，high 記錄的內文不會送出）。唯讀模式只限制 MCP，擁有 shell 的 Agent 仍可直接跑 `emlek hide` 等命令，因此排程另須用平台的唯讀沙箱或工具白名單（Codex 的唯讀沙箱選項；Claude Code 只允許 emlek 的唯讀 MCP 工具並禁用 Bash）。已用 Claude Code 2.1.316（Windows）實測：啟動時 `--tools ""`（不給任何內建工具），只用 `--allowedTools` 預先核准 emlek 的唯讀工具，即使要求它寫入也寫不進去；若保留 PowerShell 工具但不預先核准，無人看管時會被拒絕。對照組（預先核准 PowerShell）確實寫入，證明測試有效。Codex CLI 尚未測。
+- 排程的 Agent 使用 MCP 唯讀模式（`emlek mcp --read-only`，工具清單根本沒有寫入工具，`max_sensitivity` 預設 medium，high 記錄的內文不會送出）。唯讀模式只限制 MCP，擁有 shell 的 Agent 仍可直接跑 `emlek hide` 等命令，因此排程另須用平台的唯讀沙箱或工具白名單（Codex 的唯讀沙箱選項；Claude Code 只允許 emlek 的唯讀 MCP 工具並禁用 Bash）。已用 Claude Code 2.1.316（Windows）實測：啟動時 `--tools ""`（不給任何內建工具），只用 `--allowedTools` 預先核准 emlek 的唯讀工具，即使要求它寫入也寫不進去；若保留 PowerShell 工具但不預先核准，無人看管時會被拒絕。對照組（預先核准 PowerShell）確實寫入，證明測試有效。Codex CLI 0.166（Windows，2026-11-11）實測：emLek 資料夾權限只限本人，Codex 唯讀沙箱讀不到它（shell 無法直接讀資料庫）；emLek 在唯讀環境不再因日誌崩潰，但資料庫仍需寫入 WAL 附檔，所以「Codex 唯讀沙箱＋emLek 唯讀 MCP」目前無法使用。免費版 Codex 也取不到 MCP 工具，完整寫入探針待付費方案或資料庫唯讀模式。
 - 到期提醒依賴「存入時已填事件日期與標籤」（見 MEMORY 的操作細則）；漏填就查不到。這是盡力提醒，不是保證。
 - 提醒內容會送到所用的 AI 平台；每次執行約耗 1–3 千 token（實測以題庫統計為準）。
 - 完成判斷：原記錄有 `supplements` 連結且標籤「已完成」的新記錄（`linked_from`）即視為已完成，不再提醒。

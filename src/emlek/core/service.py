@@ -227,6 +227,8 @@ def save(
     )
     now = utc_now_iso()
     with db.transaction() as conn:
+        if category is not None:
+            auto.check_limit(conn)  # again under the write lock (W04)
         gate.spend(conn)
         record_id = _insert_record(conn, now, gate.level)
         revision_id = _insert_revision(

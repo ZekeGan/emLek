@@ -24,7 +24,7 @@
 
 | 等級 | 例子 | 存入時 |
 |---|---|---|
-| high（最高） | 密碼、API 金鑰與 token、私鑰、信用卡號、一次性復原碼 | 永不新增保存，不詢問是否儲存 |
+| high（最高） | 密碼、API 金鑰與 token（W04：明標為 api key／access token／client secret／private key／passphrase／credentials／權杖／金鑰等且值含英數字 ≥ 8 字；單獨的 token／secret／bearer 須值同時含英文與數字，避免「my secret is chocolate」被擋）、私鑰、信用卡號、一次性復原碼 | 永不新增保存，不詢問是否儲存 |
 | medium（中） | 電話、住址、身分證或護照號碼、生日 | 與一般個人敘述共用首次全域同意；之後不再問 |
 | none | 其他 | 個人敘述仍需首次全域同意；一般問題不存不問 |
 

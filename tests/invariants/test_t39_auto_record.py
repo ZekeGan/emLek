@@ -299,3 +299,26 @@ def test_the_cli_take_back_needs_a_terminal_but_no_pin(
         argparse.Namespace(data_dir=str(data_dir), json=False, auto=True, days=7, limit=10)
     )
     assert "r1" in shown.text and "已隱藏" in shown.text and CATEGORY in shown.text
+
+
+def test_the_daily_limit_holds_when_another_session_saves_in_between(
+    on: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """W04 (Codex review): the early check ran before the write lock, so a save landing in
+    between let both through. The cap is checked again inside the transaction."""
+    auto.set_limit(on, PERSON, limit=1)
+    real_guard = auto.guard
+    raced: list[bool] = []
+
+    def guard_then_race(*args: object, **kwargs: object) -> str | None:
+        category = real_guard(*args, **kwargs)  # type: ignore[arg-type]
+        if not raced:  # another AI session commits its auto save right after our early check
+            raced.append(True)
+            _save(on, "另一個對話先存了")
+        return category
+
+    monkeypatch.setattr(auto, "guard", guard_then_race)
+    with pytest.raises(EmlekError) as info:
+        _save(on, "這一筆會超過上限")
+    assert info.value.code is ErrorCode.NOT_PERMITTED and "上限" in info.value.message
+    assert auto.policy(on, AI)["used_24h"] == 1

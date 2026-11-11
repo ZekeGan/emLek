@@ -136,12 +136,18 @@ def guard(
             ErrorCode.NOT_PERMITTED,
             "內容含有最高風險資訊，不能自動記錄；不要存，也不要詢問是否存入",
         )
+    check_limit(conn)
+    return category
+
+
+def check_limit(conn: sqlite3.Connection) -> None:
+    """The rolling 24-hour cap. `save` calls it again inside its write transaction, so two AI
+    sessions saving at the same moment cannot both pass a check made before either commits."""
     limit = int(_meta(conn, "auto_daily_limit", "30"))
     if _used(conn) >= limit:
         raise EmlekError(
             ErrorCode.NOT_PERMITTED, f"24 小時內自動記錄已達上限 {limit} 筆；停止自動儲存"
         )
-    return category
 
 
 # --- configuration (a person at a terminal, with the PIN) -----------------------------------

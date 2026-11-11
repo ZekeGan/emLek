@@ -102,3 +102,41 @@ def test_a_one_mebibyte_note_is_scanned_quickly(filler: str) -> None:
     started = time.perf_counter()
     s.scan(text)
     assert time.perf_counter() - started < 5
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "token: abc123def456",
+        "passphrase: correct-horse-9",
+        "API token = Zx9kQ2mN7pLw4tR8",
+        "我的存取權杖是 Zx9kQ2mN7pLw4tR8",
+        "secret: hunter2hunter2",
+        "api_key=Zx9kQ2mN7pLw4tR8",
+        "the token is AbCd1234EfGh",
+    ],
+)
+def test_a_labelled_token_or_secret_is_highest_risk(text: str) -> None:
+    """W04: Codex review: only vendor formats were known; a plainly labelled value counts too."""
+    level, categories = s.assess(text, "none")
+    assert level == "high" and "api_key" in categories
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "我拿到一個 token 了",
+        "token 是什麼？",
+        "secret: 其實我很喜歡你哈哈",
+        "金鑰是在抽屜裡",
+        "my secret is chocolate",
+        "我的 secret 是 BTS的Jungkook",
+    ],
+)
+def test_talking_about_tokens_is_not_a_token(text: str) -> None:
+    assert s.assess(text, "none")[0] != "high"
+
+
+def test_an_english_address_label_is_personal_data() -> None:
+    """A literal backspace had replaced the word boundary since M6, so this never matched."""
+    assert s.assess("address: 1-2-3 Main Street", "none") == ("medium", ["address"])

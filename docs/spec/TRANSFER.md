@@ -23,7 +23,7 @@
 ### 匯入
 - **做**：`emlek import <檔案或資料夾>`，預設只預覽，加 `--apply` 才寫入；只讀 `.txt`、`.md`，每檔一筆 `original`；單檔 ≤ 1 MiB、一次最多 20,000 檔、單批原文合計 ≤ 512 MiB；其他副檔名列為略過。
 - **權限**：`import_preview`（任何入口）、`import_apply`（`INTERACTIVE_ONLY`，真人終端機，不需 PIN）。high 永遠略過，`--include-high` 僅保留參數相容性，PIN 不能放行；套用時重新掃描待寫入內文，防止舊或偽造計畫繞過。
-- **不解析 `#標籤`**：匯入寫入一律 `parse_hashtags=False`，不寫 `record_tags`／`tag_events`；現有 `save` 對 original 會以 user 身分建立標籤，若匯入走那條路，外部檔案的文字就能進 AI 開場說明（提示注入）。測試保證匯入後 `record_tags` 數量不變。
+- **不解析 `#標籤`**：匯入寫入一律 `parse_hashtags=False`，不寫 `record_tags`／`tag_events`；終端機的 `save` 對 original 會以 user 身分建立標籤，若匯入走那條路，外部檔案的文字就能進 AI 開場說明（提示注入）。測試保證匯入後 `record_tags` 數量不變。
 - **路徑**：遞迴；略過資料夾本身、`backup_dir`、任何含 `export.jsonl` 的目錄（摘要列為「略過（emLek 自己的檔案）」）；略過所有 reparse point（`st_file_attributes & FILE_ATTRIBUTE_REPARSE_POINT`，涵蓋符號連結、junction、雲端預留檔）；每檔只讀一次（最多讀 1 MiB＋1 位元組），雜湊、解碼、掃描用同一份 bytes；單檔 `OSError`（路徑過長、權限、保留名稱）列為失敗，不中止整批。
 - **編碼**：只收嚴格 UTF-8（接受 BOM），解碼失敗列為失敗，不替換壞字元。
 - **日期**：只取檔名。先把主檔名做 NFKC；數字前後不得緊鄰數字（避免從 `IMG_202601151230` 或電話號碼誤取）；格式 `YYYY-MM-DD`、`YYYYMMDD`、`YYYY年M月D日`；年份限 1900–2100；不合法（如 `20261301`）視為沒有；檔名含兩個以上「不同」的合法日期時留空並於摘要列出；沒有日期就留空，精度為日，不用檔案修改時間。

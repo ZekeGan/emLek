@@ -355,7 +355,13 @@ def _gather(
 
 
 def _term_hits(
-    db: Database, terms: list[str], include_hidden: bool, max_sensitivity: str, *, stale: bool
+    db: Database,
+    terms: list[str],
+    include_hidden: bool,
+    max_sensitivity: str,
+    *,
+    stale: bool,
+    exclude: set[int] | None = None,
 ) -> dict[str, int]:
     """How many current records contain each word on its own. Words of three characters or more
     are counted through the index; the short ones share one pass over the table."""
@@ -381,6 +387,20 @@ def _term_hits(
             )
     if scan:
         counts.update(_scan_hits(db, scan, include_hidden, allowed))
+    if exclude:  # records whose content is withheld must not be counted by their words
+        marks = ",".join("?" * len(exclude))
+        for term in terms:
+            counts[term] -= int(
+                db.conn.execute(
+                    "SELECT COUNT(*) FROM revisions r JOIN records rec ON rec.id = r.record_id"
+                    f" WHERE r.record_id IN ({marks}) AND r.version_no ="
+                    " (SELECT MAX(v.version_no) FROM revisions v WHERE v.record_id = r.record_id)"
+                    f" AND rec.hidden = 0 AND rec.sensitivity IN ({allowed})"
+                    " AND r.body_norm LIKE ? ESCAPE '\\'",
+                    [*sorted(exclude), _like_pattern(term)],
+                ).fetchone()[0]
+            )
+            counts[term] = max(counts[term], 0)
     return {term: counts[term] for term in terms}
 
 
@@ -501,7 +521,12 @@ def search(
     cut = False
     impossible = False
     if tags:
-        groups, unknown, expanded, cut = tagmod.resolve_filter(db.conn, tags, expand=expand)
+        groups, unknown, expanded, cut = tagmod.resolve_filter(
+            db.conn,
+            tags,
+            expand=expand,
+            cap=None if caller.channel == Channel.CLI else max_sensitivity,
+        )
         # Unknown names are ignored (and reported). Only when nothing else narrows the
         # search is a lone unknown tag a real "no result".
         narrowed = bool(terms or date_from or date_to or kinds or tag_types)
@@ -557,10 +582,23 @@ def search(
         if fallback:
             _log.warning("search index is stale; answered from a full scan")
             rows, warnings = fallback, ["index_stale"]
+    # A derivative of a hidden note keeps its ref for AI callers but never its content, so a
+    # word or tag filter must not be able to find it (that would read the content back).
+    invalid = (
+        versions.invalidated_ids(db.conn)
+        if caller.channel != Channel.CLI and (terms or tags or tag_types or untagged)
+        else set()
+    )
     undated = 0
     if date_field == "event_time" and (date_from or date_to):
         undated_rows = _gather(db, alternatives, stale=bool(warnings), only_undated=True, **shared)
-        undated = len({r[1] for r in undated_rows if caps[r[6]] <= caps[max_sensitivity]})
+        undated = len(
+            {
+                r[1]
+                for r in undated_rows
+                if caps[r[6]] <= caps[max_sensitivity] and r[1] not in invalid
+            }
+        )
 
     ordered: list[dict[str, Any]] = []
     seen: set[int] = set()
@@ -570,6 +608,8 @@ def search(
         if record_id in seen:
             continue
         seen.add(record_id)
+        if record_id in invalid:
+            continue
         if caps[sensitivity] > caps[max_sensitivity]:
             withheld += 1
             continue
@@ -629,7 +669,11 @@ def search(
     if trimmed:  # the answer would be too big to read: hand back fewer, and the way to the rest
         page = page[: len(results)]
         next_cursor = _encode_cursor(applied, direction, page[-1]["key"])
-    hints = _zero_result_hints(db, terms) if terms and not ordered and not warnings else []
+    hints = (
+        _zero_result_hints(db, terms, include_hidden, max_sensitivity, invalid)
+        if terms and not ordered and not warnings
+        else []
+    )
     if trimmed:
         hints = [
             *hints,
@@ -645,6 +689,7 @@ def search(
             include_hidden,
             max_sensitivity,
             stale="index_stale" in warnings,
+            exclude=invalid,
         )
         if not ordered:
             hints = [*hints, _word_hint(alternatives, term_hits)]
@@ -672,7 +717,13 @@ def search(
             only_undated=False,
             **plain,
         )
-        base_ids = sorted({int(r[1]) for r in base_rows if caps[r[6]] <= caps[max_sensitivity]})
+        base_ids = sorted(
+            {
+                int(r[1])
+                for r in base_rows
+                if caps[r[6]] <= caps[max_sensitivity] and int(r[1]) not in invalid
+            }
+        )
         extra["tag_coverage"] = (
             tagmod.tagged_share(db.conn, base_ids) if len(base_ids) <= MAX_COVERAGE_SET else None
         )
@@ -717,9 +768,23 @@ def search(
     }
 
 
-def _script_shares(db: Database) -> dict[str, float]:
+def _script_shares(
+    db: Database, include_hidden: bool, max_sensitivity: str, withheld: set[int]
+) -> dict[str, float]:
+    """Which scripts the readable notes use. Hidden, capped and withheld notes do not count:
+    the hint would otherwise say something about text the caller may not read."""
+    allowed = ",".join(
+        f"'{lvl}'" for lvl in SENSITIVITY_LEVELS[: SENSITIVITY_LEVELS.index(max_sensitivity) + 1]
+    )
     kana = han = latin = 0
-    for (body,) in db.conn.execute("SELECT body FROM revisions ORDER BY id DESC LIMIT 400"):
+    for record_id, body in db.conn.execute(
+        "SELECT r.record_id, r.body FROM revisions r JOIN records rec ON rec.id = r.record_id"
+        f" WHERE (rec.hidden = 0 OR ?) AND rec.sensitivity IN ({allowed})"
+        " ORDER BY r.id DESC LIMIT 400",
+        (1 if include_hidden else 0,),
+    ):
+        if record_id in withheld:
+            continue
         for char in body[:600]:
             code = ord(char)
             if 0x3040 <= code <= 0x30FF:
@@ -732,8 +797,14 @@ def _script_shares(db: Database) -> dict[str, float]:
     return {"kana": kana / total, "han": han / total, "latin": latin / total}
 
 
-def _zero_result_hints(db: Database, terms: list[str]) -> list[str]:
-    shares = _script_shares(db)
+def _zero_result_hints(
+    db: Database,
+    terms: list[str],
+    include_hidden: bool,
+    max_sensitivity: str,
+    withheld: set[int],
+) -> list[str]:
+    shares = _script_shares(db, include_hidden, max_sensitivity, withheld)
     labels = (("kana", "日文假名"), ("han", "漢字（中文或日文）"), ("latin", "英文字母"))
     present = [(key, label) for key, label in labels if shares[key] >= 0.05]
     tried = {key for key, _ in labels if any(_SCRIPTS[key].search(t) for t in terms)}

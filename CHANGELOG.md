@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 安全（1.0前對抗審查，D104）：只用在隱藏筆記上的標籤對AI等同不存在（搜尋視為未知、不給近似名稱、不能掛上或建連結／別名）；經MCP送來的原文 `#標籤` 算AI建立，不再進開場說明；`source` 與內文一起做敏感掃描，金鑰類一律拒存；失效衍生記錄不能以查詢詞、term_hits或標籤找到，AI不能amend／set_tags它；查無提示的文字種類不再看隱藏筆記。
 - 還原：成功後刪除暫存檔留下的 `emlek.db.restoring-shm／-wal`，資料夾不再殘留 `cleanup` 看不到的附檔。題庫測試：MCP 參考時間固定為題庫日期 2026-11-01，Q36／Q80／Q86 依審題修正歧義（見 QUESTIONS）。
 - W04：開場標籤清單排除含覆寫字或兩個以上指令字的名稱（含原文#標籤與無標點命令句，單一常見字不擋）；明標的金鑰類內容列為最高風險（單獨token／secret須值含英文與數字）；自動記錄每日上限在寫入交易內再查一次，避免同時保存超量；日誌無法寫入時改為不寫檔並在stderr提示一次，不再讓emLek啟動失敗；修正自M6起地址規則中word boundary被誤存成退格字元而從不生效。
 - 安全（D103，W03）：隱藏筆記對AI等同刪除。MCP的search／get移除include_hidden、移除unhide工具，核心以CLI專屬的read_hidden／unhide拒絕其他入口；AI對隱藏記錄的hide／amend／set_tags／purge_preview回NOT_FOUND，links_out與清除預覽不列隱藏編號。終端機`--include-hidden`與`emlek unhide`保留。AI規則m10-20261111-3同步。

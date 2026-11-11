@@ -232,6 +232,17 @@ def derivatives_of(conn: sqlite3.Connection, record_id: int) -> list[int]:
     return sorted(found)
 
 
+def invalidated_ids(conn: sqlite3.Connection) -> set[int]:
+    """Every record derived (transitively) from a hidden one: its content is withheld from AI
+    callers, so a word or tag must not be able to find it either (pre-1.0 review)."""
+    if not has_links(conn):
+        return set()
+    found: set[int] = set()
+    for (hidden_id,) in conn.execute("SELECT id FROM records WHERE hidden = 1").fetchall():
+        found.update(derivatives_of(conn, int(hidden_id)))
+    return found
+
+
 def has_links(conn: sqlite3.Connection) -> bool:
     return conn.execute("SELECT 1 FROM links LIMIT 1").fetchone() is not None
 

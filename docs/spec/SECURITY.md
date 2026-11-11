@@ -66,7 +66,7 @@
 
 ### 敏感掃描
 
-`core/sensitivity.py` 是純函式：輸入文字，先做 NFKC，回傳命中的（類別，等級）清單，**不回傳也不記錄命中的文字**。有效等級＝AI 宣告、掃描、既有記錄三者最高；AI 只能調高，調低只能 `sensitivity set`（需 PIN）。回應的 `sensitivity_hint` 只含等級與類別。
+`core/sensitivity.py` 是純函式：輸入文字，先做 NFKC，回傳命中的（類別，等級）清單，**不回傳也不記錄命中的文字**。`save`／`amend` 連同 `source` 一起掃描（來源欄同樣會儲存並回傳；1.0 前審查）。有效等級＝AI 宣告、掃描、既有記錄三者最高；AI 只能調高，調低只能 `sensitivity set`（需 PIN）。回應的 `sensitivity_hint` 只含等級與類別。
 
 | 等級 | 類別與規則 |
 |---|---|

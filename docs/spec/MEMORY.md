@@ -27,7 +27,7 @@
 | 隱藏（預設的「刪除」） | `hidden=1`，搜尋與讀取看不到（只有 CLI `--include-hidden` 可查），只有使用者在終端機 `emlek unhide` 可恢復；對 AI 等同已刪除 |
 | 徹底清除 | 真正移除該記錄所有版本與索引，無法恢復；對話流程見 [AGENT_RULES](../AGENT_RULES.md) §3 |
 
-**衍生摘要失效**是計算值，不另存欄位：記錄的任一來源（經 `links` 遞移）處於隱藏，其衍生的 `ai_summary`、`inference` 即失效，重新產生前不得用於回答；`unhide` 後自動恢復。 MCP的get（含指定舊版本／offset）與search只回必要編號、類型、狀態及content_withheld=true，不交付本文、搜尋片段、source或個別標籤；CLI保留讀取。AI 不能讀取隱藏原文（D103）。
+**衍生摘要失效**是計算值，不另存欄位：記錄的任一來源（經 `links` 遞移）處於隱藏，其衍生的 `ai_summary`、`inference` 即失效，重新產生前不得用於回答；`unhide` 後自動恢復。 MCP的get（含指定舊版本／offset）與search只回必要編號、類型、狀態及content_withheld=true，不交付本文、搜尋片段、source或個別標籤；帶詞或標籤的搜尋找不到它，AI 對它的 amend／set_tags 回 `NOT_PERMITTED`（比對猜測的內文會讀回內容）；CLI保留讀取。AI 不能讀取隱藏原文（D103）。
 
 **徹底清除**：
 

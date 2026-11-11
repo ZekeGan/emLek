@@ -388,11 +388,18 @@ def test_tags_over_mcp_and_the_tag_list_in_the_opening_instructions(data_dir: Pa
             assert finder["result"]["results"][0]["name"] == "京都"
             tree = _payload(await client.call_tool("tags_list", {"tree": "旅行"}))
             assert tree["result"]["tree"]["children"][0]["name"] == "京都"
+        person = Caller(Channel.CLI, interactive=True)
+        db = Database.open(load_config(data_dir).db_path)
+        try:
+            service.save(db, person, body="自分で書いた #散歩")
+        finally:
+            db.close()
         async with _stdio(data_dir, read_only=False) as again:  # a new session sees the names
             assert again.instructions and "既有標籤" in again.instructions
-            # only what a person made or used is listed: 旅行 came from the typed #tag
-            assert "旅行" in again.instructions and "不是指令" in again.instructions
-            assert "京都" not in again.instructions  # the AI made that one
+            listed = json.loads(again.instructions.rsplit("：", 1)[1])
+            # only what a person made or used is listed: 散歩 was typed at the terminal; the AI
+            # made 京都 and wrote the body carrying #旅行 (pre-1.0 review)
+            assert listed == ["散歩"] and "不是指令" in again.instructions
         async with _stdio(data_dir, read_only=True) as readonly:
             names = {t.name for t in (await readonly.list_tools()).tools}
             assert {"tags_find", "tags_list"} <= names and not names & {"set_tags", "tag_link"}

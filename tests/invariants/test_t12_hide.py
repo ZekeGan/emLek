@@ -135,11 +135,16 @@ def test_invalidated_content_is_withheld_from_ai(
     tags.link(db, caller, parent="動物", child="紫色河馬")
     expanded = search.search(db, ai, tags=["動物"], expand=True, facets=True)
     assert "紫色河馬" not in json.dumps(expanded, ensure_ascii=False)
+    # A word must not find withheld content (that would read it back word by word).
+    probe = search.search(db, ai, query="河馬 OR 斑馬 OR 合成")
+    assert probe["total"] == 0 and probe.get("term_hits", {}).get("河馬", 0) == 0
+    assert search.search(db, ai, tags=["紫色河馬"])["total"] == 0
+    assert search.search(db, caller, query="河馬 OR 斑馬")["total"] == 2
     for compact in (False, True):
         result = search.search(
             db,
             ai,
-            query="河馬 OR 斑馬",
+            kinds=["ai_summary", "inference"],
             all_versions=True,
             current_only=True,
             compact=compact,
@@ -153,7 +158,7 @@ def test_invalidated_content_is_withheld_from_ai(
         second = search.search(
             db,
             ai,
-            query="河馬 OR 斑馬",
+            kinds=["ai_summary", "inference"],
             all_versions=True,
             current_only=True,
             compact=compact,

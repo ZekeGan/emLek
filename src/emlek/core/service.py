@@ -137,12 +137,14 @@ def _sensitivity_gate(
     declared: str | None,
     notice_token: str | None,
     automatic: bool = False,
+    source: str | None = None,
 ) -> _Gate:
-    """Reject credentials and inactive writes without issuing terms or accepting start tokens."""
+    """Reject credentials and inactive writes without issuing terms or accepting start tokens.
+    The source note is stored and returned like the body, so it is scanned with it."""
     declared = declared or "none"
     if declared not in scanner.LEVELS:
         raise EmlekError(ErrorCode.INVALID_INPUT, "sensitivity 必須是 none、medium 或 high")
-    level, categories = scanner.assess(body, declared)
+    level, categories = scanner.assess(body if not source else f"{body}\n{source}", declared)
     if level == "high":
         raise EmlekError(
             ErrorCode.NOT_PERMITTED, "密碼、金鑰等最高風險內容不予儲存，也不詢問是否存入"
@@ -170,21 +172,28 @@ def _tag_step(
     tags: Sequence[object] | None,
     allow_new: Sequence[str],
 ) -> dict[str, Any]:
-    """Hashtags the user typed (original text only), then the tags the caller asked for."""
+    """Hashtags in the original text, then the tags the caller asked for. A hashtag is the
+    user's only when typed at their own terminal: over MCP the AI wrote the body, so its new
+    names never gain the user provenance that lets a name into the opening text."""
     applied: list[str] = []
     pending: list[dict[str, Any]] = []
     skipped: list[str] = []
-    if kind == "original":
-        for name in tagmod.parse_hashtags(body):
-            try:  # a bad hashtag must never stop the text itself from being saved
-                done, _ = tagmod.attach(conn, record_id, [name], actor="user", allow_new=[name])
-            except EmlekError:
-                skipped.append(name)
-                continue
-            applied.extend(done)
+    actor = tagmod.actor_for(caller)
+    hashtags = tagmod.parse_hashtags(body) if kind == "original" else []
+    readable = tagmod.readable_counts(caller, conn) if hashtags or tags else None
+    for name in hashtags:
+        try:  # a bad hashtag must never stop the text itself from being saved
+            done, held = tagmod.attach(
+                conn, record_id, [name], actor=actor, allow_new=[name], readable=readable
+            )
+        except EmlekError:
+            skipped.append(name)
+            continue
+        applied.extend(done)
+        skipped.extend(item["name"] for item in held)  # e.g. a tag only hidden notes use
     if tags:
         done, pending = tagmod.attach(
-            conn, record_id, tags, actor=tagmod.actor_for(caller), allow_new=allow_new
+            conn, record_id, tags, actor=actor, allow_new=allow_new, readable=readable
         )
         applied.extend(done)
     return {
@@ -224,6 +233,7 @@ def save(
         declared=sensitivity,
         notice_token=notice_token,
         automatic=category is not None or caller.channel is Channel.MCP,
+        source=source,
     )
     now = utc_now_iso()
     with db.transaction() as conn:
@@ -295,6 +305,7 @@ def amend(
         declared=sensitivity,
         notice_token=notice_token,
         automatic=caller.channel is Channel.MCP,
+        source=source,
     )
     now = utc_now_iso()
     with db.transaction() as conn:
@@ -310,6 +321,9 @@ def amend(
         version, old_body, kind, old_event, old_precision, old_source, hidden, old_level = latest
         if hidden and not sees_hidden(caller):
             raise EmlekError(ErrorCode.NOT_FOUND, "找不到這筆記錄")
+        if not sees_hidden(caller) and versions.hidden_sources(conn, record_id):
+            # content withheld: comparing a guessed body would read it back
+            raise EmlekError(ErrorCode.NOT_PERMITTED, tagmod.WITHHELD_EDIT)
         if hidden:
             raise EmlekError(ErrorCode.CONFLICT, "這筆記錄已隱藏，請先 unhide 再修改")
         if expected_version is not None and expected_version != version:

@@ -47,11 +47,14 @@ def test_typed_hashtags_are_the_users_and_the_text_is_untouched(
     db: Database, caller: Caller
 ) -> None:
     body = "今日は #京都 で #抹茶 を飲んだ"
-    done = service.save(db, caller, body=body, tags=["お茶"])
+    person = Caller(Channel.CLI, interactive=True)
+    done = service.save(db, person, body=body, tags=["お茶"])
     assert service.get(db, caller, ref=done["ref"])["body"] == body  # byte for byte
     mark = _added_by(db, done["ref"])
-    assert mark["京都"] == "user" and mark["抹茶"] == "user"
-    assert mark["お茶"] == "ai"  # a script is not a person at a terminal
+    assert mark == {"京都": "user", "抹茶": "user", "お茶": "user"}
+    # pre-1.0 review: a hashtag in a body written by a script or the AI is not the user's
+    scripted = service.save(db, caller, body="#散歩 した", tags=["お茶"])
+    assert set(_added_by(db, scripted["ref"]).values()) == {"ai"}
 
 
 def test_who_counts_as_user_depends_on_the_entry_not_on_a_claim(db: Database) -> None:

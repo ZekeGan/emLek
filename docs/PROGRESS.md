@@ -6,12 +6,6 @@
 
 ## 待驗收
 
-- **W04** 後續驗證｜領域：tags,security,quality
-  T29、明標token、上限重查、日誌退路已做；Codex免費版無MCP，探針待付費。Q題庫三次：Haiku 3.80（D79 4.15，日期干擾），弱題見歷史。
-
-- **W03** AI不讀隱藏內容｜領域：security
-  D103：隱藏對AI即刪除；include_hidden與unhide只限終端機。
-
 ## 待決定
 
 - **W08** 1.0封版門檻未達｜領域：quality

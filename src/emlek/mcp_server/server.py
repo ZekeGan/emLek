@@ -150,16 +150,25 @@ def _slim_write(result: dict[str, Any], *, tags: list[str] | None = None) -> dic
     return slim
 
 
-_EMPTY_REPLY = "回覆：只說沒找到並列查過的詞；不邀請保存、不建議補存。"
+_EMPTY_REPLY = "換詞或日期欄位仍沒有時，回覆只說沒找到並列查過的詞；不邀請保存、不建議補存。"
+_UNDATED_RETRY = (
+    "有 {n} 筆沒有事件日期未列入；問某天做了或記了什麼，改用 date_field=created_at 再查，"
+    "仍沒有才說沒找到。"
+)
 _WITHHELD_REPLY = "回覆：命中的都已失效不可用，只說找不到可用內容；不寫欄位名稱、不建議重新寫入。"
 _READONLY_REPLY = "唯讀：不提保存或寫入。"
 
 
 def _reply_hints(result: dict[str, Any], *, read_only: bool) -> dict[str, Any]:
-    """Give the closing line the model should use where answers kept drifting (W07)."""
+    """Give the closing line the model should use where answers kept drifting (W07).
+
+    An empty page that left out undated notes is not a final "not found": a day question then
+    needs the record date (D15 regression in the full-bank run), so point there instead."""
     if result.get("next_cursor"):
         return result
-    if result.get("total") == 0:
+    if result.get("total") == 0 and result.get("undated"):
+        extra = [_UNDATED_RETRY.format(n=result["undated"])]
+    elif result.get("total") == 0:
         extra = [_EMPTY_REPLY]
     elif result.get("returned_count") and not result.get("content_count"):
         extra = [_WITHHELD_REPLY]

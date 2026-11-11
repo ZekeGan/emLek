@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +54,35 @@ def test_search_closing_hints_only_where_answers_drift() -> None:
     assert _reply_hints(found, read_only=True) is found
     paged = {"total": 0, "next_cursor": "c", "hints": []}
     assert _reply_hints(paged, read_only=False) is paged
+
+
+def test_empty_day_search_with_undated_notes_points_to_record_date(
+    data_dir: Path, db: Database
+) -> None:
+    """Full-bank D15: an event-date search for today skipped the undated note, and a "say not
+    found" closing line made Haiku stop instead of retrying with the record date."""
+    notice.acknowledge(db.conn)
+    service.save(db, PERSON, body="今天去了大阪。")
+    today = datetime.now().astimezone().date().isoformat()
+
+    async def scenario() -> None:
+        server = build_server(data_dir, read_only=False)
+        by_event = payload(
+            await server.call_tool(
+                "search", {"date_field": "event_time", "date_from": today, "date_to": today}
+            )
+        )
+        assert by_event["total"] == 0 and by_event["undated"] == 1
+        assert any("created_at" in h for h in by_event["hints"])
+        assert not any("只說沒找到" in h and "仍沒有時" not in h for h in by_event["hints"])
+        by_record = payload(
+            await server.call_tool(
+                "search", {"date_field": "created_at", "date_from": today, "date_to": today}
+            )
+        )
+        assert by_record["total"] == 1
+
+    asyncio.run(scenario())
 
 
 def payload(reply: Any) -> dict[str, Any]:

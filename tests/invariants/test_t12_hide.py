@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 
 import pytest
 
-from emlek.core import search, service, tags, versions
+from emlek.core import notice, purge, search, service, stats, tags, versions
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
 from emlek.core.permissions import Caller, Channel
@@ -213,3 +214,78 @@ def test_ai_cannot_read_hidden_notes(db: Database, channel: Channel) -> None:
     assert plain.value.code == ErrorCode.NOT_FOUND
     assert ref in _refs(db, person, "京都", include_hidden=True)
     assert service.get(db, person, ref=ref, include_hidden=True)["hidden"] is True
+
+
+def test_a_hidden_note_is_gone_for_an_ai(db: Database) -> None:
+    """D103: unhide is the terminal's; every AI action on a hidden note answers as if deleted."""
+    person = Caller(Channel.CLI)
+    ai = Caller(Channel.MCP)
+    notice.acknowledge(db.conn)  # past first consent, so only the hidden check can refuse
+    secret = str(service.save(db, person, body="被隱藏的原文", tags=["秘密"])["ref"])
+    visible = str(
+        service.save(db, person, body="可見筆記", links=[{"ref": secret, "relation": "supports"}])[
+            "ref"
+        ]
+    )
+    versions.hide(db, person, ref=secret)
+    attempts: tuple[Callable[[], object], ...] = (
+        lambda: versions.unhide(db, ai, ref=secret),
+        lambda: versions.hide(db, ai, ref=secret),
+        lambda: service.amend(db, ai, ref=secret, body="改寫"),
+        lambda: tags.set_tags(db, ai, ref=secret, add=["新標籤"]),
+        lambda: purge.preview(db, ai, [secret]),
+    )
+    codes = []
+    for attempt in attempts:
+        with pytest.raises(EmlekError) as found:
+            attempt()
+        codes.append(found.value.code)
+    assert codes[0] == ErrorCode.NOT_PERMITTED
+    assert codes[1:] == [ErrorCode.NOT_FOUND] * 4
+    assert service.get(db, ai, ref=visible)["links_out"] == []
+    shown = service.get(db, person, ref=visible)["links_out"]
+    assert [link["ref"] for link in shown] == [secret]
+    assert purge.preview(db, person, [secret])["records"][0]["hidden"] is True
+    assert versions.unhide(db, person, ref=secret)["changed"] is True
+
+
+@pytest.mark.parametrize("channel", [Channel.MCP, Channel.MCP_READONLY])
+def test_hidden_and_missing_look_the_same_to_an_ai(db: Database, channel: Channel) -> None:
+    """Re-review of D103: wording, derivative lists, preview counts and stats must not let an AI
+    tell a hidden note apart from one that never existed."""
+    person = Caller(Channel.CLI)
+    ai = Caller(channel)
+    notice.acknowledge(db.conn)
+    source = str(service.save(db, person, body="可見來源")["ref"])
+    summary = str(
+        service.save(
+            db,
+            person,
+            body="隱藏的摘要",
+            kind="ai_summary",
+            links=[{"ref": source, "relation": "summarizes"}],
+        )["ref"]
+    )
+    versions.hide(db, person, ref=summary)
+    missing = "r99"
+
+    def message(attempt: Callable[[], object]) -> tuple[ErrorCode, str]:
+        with pytest.raises(EmlekError) as found:
+            attempt()
+        return found.value.code, str(found.value).replace(summary, "rX").replace(missing, "rX")
+
+    assert message(lambda: service.get(db, ai, ref=summary)) == message(
+        lambda: service.get(db, ai, ref=missing)
+    )
+    if channel is Channel.MCP:
+        assert message(lambda: purge.preview(db, ai, [summary])) == message(
+            lambda: purge.preview(db, ai, [missing])
+        )
+        shown = purge.preview(db, ai, [source])
+        assert [item["ref"] for item in shown["records"]] == [source]
+        assert shown["revisions"] == 1 and "links" not in shown and "tags_removed" not in shown
+        assert summary not in json.dumps(versions.hide(db, ai, ref=source))
+        versions.unhide(db, person, ref=source)
+    counted = stats.stats(db, ai)
+    assert "hidden_records" not in counted and counted["revisions"] == counted["records"] == 1
+    assert stats.stats(db, person)["hidden_records"] == 1

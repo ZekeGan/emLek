@@ -13,7 +13,7 @@ from emlek.core import sensitivity as scanner
 from emlek.core import tags as tagmod
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
-from emlek.core.permissions import Caller, Channel, require
+from emlek.core.permissions import Caller, Channel, require, sees_hidden
 from emlek.core.refs import parse_ref
 from emlek.core.timeutil import infer_precision, is_valid_event_time, utc_now_iso
 
@@ -306,6 +306,8 @@ def amend(
         if latest is None:
             raise EmlekError(ErrorCode.NOT_FOUND, "找不到這筆記錄")
         version, old_body, kind, old_event, old_precision, old_source, hidden, old_level = latest
+        if hidden and not sees_hidden(caller):
+            raise EmlekError(ErrorCode.NOT_FOUND, "找不到這筆記錄")
         if hidden:
             raise EmlekError(ErrorCode.CONFLICT, "這筆記錄已隱藏，請先 unhide 再修改")
         if expected_version is not None and expected_version != version:
@@ -442,7 +444,7 @@ def get(
         "superseded_by": versions.superseded_by(conn, record_id, max_sensitivity=max_sensitivity),
         "linked_from": linked,
         "linked_from_truncated": linked_truncated,
-        "links_out": versions.links_out(conn, revision["id"]),
+        "links_out": versions.links_out(conn, revision["id"], include_hidden=sees_hidden(caller)),
         "tags": tagmod.tags_of(conn, record_id),
     }
 

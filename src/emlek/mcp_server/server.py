@@ -468,7 +468,11 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
             "既有筆記新增版本。tags_pending 仍已成功，改用 set_tags，不重送 amend。",
             write,
         ),
-        "hide": (hide, "隱藏記錄（可 unhide）。限使用者要求刪除時。", write),
+        "hide": (
+            hide,
+            "隱藏記錄，之後你就讀不到；恢復只能由使用者在終端機 emlek unhide。限使用者要求刪除時。",
+            write,
+        ),
         "unhide": (unhide, "恢復被隱藏的記錄。", write),
         "get": (
             get,

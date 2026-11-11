@@ -11,7 +11,7 @@
 ## 待驗收
 
 - **W03** AI不讀隱藏內容｜領域：security
-  D103：MCP移除include_hidden，非CLI拒絕。缺口：可寫MCP可unhide再get，待決定。
+  D103：隱藏對AI即刪除；include_hidden與unhide只限終端機。
 
 ## 待決定
 

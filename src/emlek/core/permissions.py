@@ -35,7 +35,7 @@ PERMISSIONS: dict[str, frozenset[Channel]] = {
     "save": _WRITERS,
     "amend": _WRITERS,
     "hide": _WRITERS,
-    "unhide": _WRITERS,
+    "unhide": _CLI,  # D103: restoring is the user's; to an AI a hidden note is gone
     "get": _ANY,
     "read_hidden": _CLI,  # W03: hidden notes are read only in the user's own terminal
     "search": _ANY,
@@ -129,6 +129,11 @@ PIN_REQUIRED = frozenset(
         "auto_config",
     }
 )
+
+
+def sees_hidden(caller: Caller) -> bool:
+    """D103: only the user's own terminal knows hidden notes exist; to any AI they are gone."""
+    return caller.channel is Channel.CLI
 
 
 def require(caller: Caller, operation: str) -> None:

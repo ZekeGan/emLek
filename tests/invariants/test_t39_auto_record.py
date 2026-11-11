@@ -208,7 +208,10 @@ def test_taking_back_hides_and_never_purges(on: Database) -> None:
     with pytest.raises(EmlekError) as info:
         service.get(on, AI, ref="r2")
     assert info.value.code is ErrorCode.NOT_FOUND
-    versions.unhide(on, AI, ref="r2")  # recoverable
+    with pytest.raises(EmlekError) as gone:  # D103: to an AI a hidden note is gone
+        versions.unhide(on, AI, ref="r2")
+    assert gone.value.code is ErrorCode.NOT_PERMITTED
+    versions.unhide(on, PERSON, ref="r2")  # recoverable, in the user's own terminal
     assert service.get(on, AI, ref="r2")["body"] == "自動一"
     assert auto.hide_since(on, PERSON, since="2999-01-01")["count"] == 0
     with pytest.raises(EmlekError):

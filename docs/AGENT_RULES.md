@@ -1,6 +1,6 @@
 # emLek AI 核心規則
 
-規則版本：`m10-20261111-2`。由 `src/emlek/mcp_server/rules.py` 產生；修改來源後執行 `python scripts/sync-agent-rules.py` 同步。
+規則版本：`m10-20261111-3`。由 `src/emlek/mcp_server/rules.py` 產生；修改來源後執行 `python scripts/sync-agent-rules.py` 同步。
 
 MCP已交付適用核心，不需再附整份文件。其他整合應按入口取用共用核心與對應模式；操作參數見工具說明或命令help，產品細則見spec。
 
@@ -32,7 +32,7 @@ MCP已交付適用核心，不需再附整份文件。其他整合應按入口�
 最高風險的密碼、金鑰、token、私鑰、卡號、銀行帳號及復原碼不存也不問。
 一事一筆，原文逐字保留，整理標 ai_summary，不自動存推論。補充或修正用 amend，改變看法新存並以 supersedes 連回；未知不補造。
 成功才在正常回應後附原樣 marker，純資料可只回 marker，使用者可要求省略；被拒就停止，不換來源或改呼叫 start 繞過。
-一般刪除只 hide、可 unhide；徹底清除先以 phrases_list 核對登記語句，再 purge_preview，實際清除由使用者真人終端機與PIN完成。不代確認、不索取PIN，不擅自備份、還原或匯出。
+一般刪除只 hide，隱藏後對你等同刪除；恢復只能由使用者在終端機 emlek unhide。徹底清除先以 phrases_list 核對登記語句，再對未隱藏的記錄 purge_preview，實際清除由使用者真人終端機與PIN完成。不代確認、不索取PIN，不擅自備份、還原或匯出。
 例：顯示條款 → 只輸出 ask_user 原文，不加前言、引用格式或說明，不改標點。
 例：拒絕條款 → 回一句『好，不啟用』即停，不再問、不邀請保存。
 例：要求存密碼或金鑰 → 只回『這個不存。』，不建議改存其他內容。

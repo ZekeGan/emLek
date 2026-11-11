@@ -1,6 +1,6 @@
 """Shared core prompts. Tool contracts stay with the tools, specifications with the docs."""
 
-RULES_VERSION = "m10-20261111-2"
+RULES_VERSION = "m10-20261111-3"
 
 READ_CORE = (
     "只使用目前提供且允許的工具，如實回報結果，不承諾入口做不到的事。\n"
@@ -32,7 +32,8 @@ WRITE_CORE = (
     "補充或修正用 amend，改變看法新存並以 supersedes 連回；未知不補造。\n"
     "成功才在正常回應後附原樣 marker，純資料可只回 marker，使用者可要求省略；"
     "被拒就停止，不換來源或改呼叫 start 繞過。\n"
-    "一般刪除只 hide、可 unhide；徹底清除先以 phrases_list 核對登記語句，再 purge_preview，"
+    "一般刪除只 hide，隱藏後對你等同刪除；恢復只能由使用者在終端機 emlek unhide。"
+    "徹底清除先以 phrases_list 核對登記語句，再對未隱藏的記錄 purge_preview，"
     "實際清除由使用者真人終端機與PIN完成。"
     "不代確認、不索取PIN，不擅自備份、還原或匯出。\n"
     "例：顯示條款 → 只輸出 ask_user 原文，不加前言、引用格式或說明，不改標點。\n"

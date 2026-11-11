@@ -86,7 +86,7 @@
 
 ### 隱藏內容只限終端機
 
-隱藏筆記只有使用者自己的終端機可讀（`emlek search／get --include-hidden`）。核心權限表的 `read_hidden` 只開給 CLI；MCP 沒有 include_hidden 參數，其他入口要求隱藏內容一律 `NOT_PERMITTED`，一般讀取回 `NOT_FOUND`（D103）。已知缺口：可寫 MCP 仍可 `unhide` 後再 `get`；唯讀 MCP 無此路徑。
+隱藏筆記只有使用者自己的終端機可讀（`emlek search／get --include-hidden`）。核心權限表的 `read_hidden` 只開給 CLI；MCP 沒有 include_hidden 參數，其他入口要求隱藏內容一律 `NOT_PERMITTED`，一般讀取回 `NOT_FOUND`（D103）。`unhide` 也只限 CLI，AI 對隱藏記錄的其他操作一律 `NOT_FOUND`，所以 AI 無法先恢復再讀；隱藏與不存在的錯誤措辭相同，統計與清除預覽也只算可見記錄。限制：編號連號，AI 看得出某段編號不存在，但分不出是隱藏或已清除，也讀不到內容。
 
 ### 讀取端的敏感度上限
 

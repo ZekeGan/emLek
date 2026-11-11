@@ -16,22 +16,22 @@
 | `status`（計算值） | `current`（沒人推翻）、`superseded`（被推翻）、`reaffirmed`（被推翻後又被確認）。`search` 與 `get` 都回傳；`current_only=true` 排除 `superseded` |
 | `linked_from` | 列出所有指向該記錄的連結（含關係、來源記錄、日期），預設不含隱藏的來源；最多 50 條，超過標 `truncated`；一層即可，AI 要完整時間線時逐筆 `get`，不做遞移展開 |
 | 衍生失效的遞移範圍 | 只沿 `derived`、`summarizes` 兩種關係向上追（來源是被隱藏的記錄則其衍生者失效），有深度保護與環保護；`supersedes`、`supports`、`supplements` **不**傳遞隱藏效果 |
-| 隱藏 | `hide`／`unhide` 對已隱藏／未隱藏者為冪等（不報錯）；隱藏不改動任何連結；搜尋預設不含隱藏者；只有使用者自己的終端機可用 `--include-hidden` 讓隱藏者照回傳並標 `hidden`，MCP 沒有這個參數，核心也拒絕非 CLI 的請求（`NOT_PERMITTED`，D103）。回應附被連帶失效的衍生記錄數量 |
-| `amend` | 參數：`ref`、`body`，可選 `expected_version`（與最新版不符回 `CONFLICT`，防止兩個 AI 同時改）、`event_time`／`event_time_precision`／`source`（省略＝沿用最新版；要清空用 `clear=["event_time","source"]`，因為 MCP 無法分辨省略與 null）、`links`。`kind` 沿用且不可更改（改變來源性質須另存新記錄並連結）。內文與最新版完全相同回 `INVALID_INPUT`（沒有變化）；已隱藏的記錄不可 `amend`（`CONFLICT`，須先 `unhide`）。重新掃描敏感度，只升不降 |
+| 隱藏 | `hide`／`unhide` 對已隱藏／未隱藏者為冪等（不報錯）；隱藏不改動任何連結；搜尋預設不含隱藏者；只有使用者自己的終端機可用 `--include-hidden` 讓隱藏者照回傳並標 `hidden`，MCP 沒有這個參數，核心也拒絕非 CLI 的請求（`NOT_PERMITTED`，D103）。對 AI 而言隱藏即刪除：`unhide` 只限 CLI，AI 對隱藏記錄的 hide／amend／set_tags／purge_preview 一律 `NOT_FOUND`，可見記錄的 `links_out` 不列隱藏目標。回應附被連帶失效的衍生記錄數量 |
+| `amend` | 參數：`ref`、`body`，可選 `expected_version`（與最新版不符回 `CONFLICT`，防止兩個 AI 同時改）、`event_time`／`event_time_precision`／`source`（省略＝沿用最新版；要清空用 `clear=["event_time","source"]`，因為 MCP 無法分辨省略與 null）、`links`。`kind` 沿用且不可更改（改變來源性質須另存新記錄並連結）。內文與最新版完全相同回 `INVALID_INPUT`（沒有變化）；已隱藏的記錄不可 `amend`（CLI 回 `CONFLICT`、須先在終端機 `unhide`；AI 回 `NOT_FOUND`）。重新掃描敏感度，只升不降 |
 | 版本與新記錄 | 改錯字、補充＝`amend`；改變看法或推翻結論＝`save` 新記錄加 `supersedes` 連結（沿用「資料模型」規則） |
 
 ## 刪除
 
 | 層級 | 行為 |
 |---|---|
-| 隱藏（預設的「刪除」） | `hidden=1`，搜尋與讀取看不到（只有 CLI `--include-hidden` 可查），可 `unhide` 恢復 |
+| 隱藏（預設的「刪除」） | `hidden=1`，搜尋與讀取看不到（只有 CLI `--include-hidden` 可查），只有使用者在終端機 `emlek unhide` 可恢復；對 AI 等同已刪除 |
 | 徹底清除 | 真正移除該記錄所有版本與索引，無法恢復；對話流程見 [AGENT_RULES](../AGENT_RULES.md) §3 |
 
 **衍生摘要失效**是計算值，不另存欄位：記錄的任一來源（經 `links` 遞移）處於隱藏，其衍生的 `ai_summary`、`inference` 即失效，重新產生前不得用於回答；`unhide` 後自動恢復。 MCP的get（含指定舊版本／offset）與search只回必要編號、類型、狀態及content_withheld=true，不交付本文、搜尋片段、source或個別標籤；CLI保留讀取。AI 不能讀取隱藏原文（D103）。
 
 **徹底清除**：
 
-- **入口**：MCP 只有 `purge_preview`（唯讀、**只回中繼資料**：記錄編號、版本數、日期、是否隱藏、會連帶移除的衍生記錄編號與類型、會移除的標籤、`purge_enabled`；**不回內容**，否則等於把想刪的文字再傳給雲端 AI；內容摘錄只出現在 CLI 預覽）。實際清除只有 `emlek purge r<id> [r<id> …]`（一次最多 20 個明確編號，沒有標籤、日期、批次選擇器），走 `INTERACTIVE_ONLY` ＋ `PIN_REQUIRED` 新操作 `purge`；沒有任何啟用中的 `purge` 語句時一律拒絕（fail closed）。
+- **入口**：MCP 只有 `purge_preview`（唯讀、**只回中繼資料**：記錄編號、版本數、日期、會連帶移除的衍生記錄編號與類型、`purge_enabled`；連結與標籤總數只在 CLI 預覽，AI 版不列隱藏記錄也不算進總數（D103）；**不回內容**，否則等於把想刪的文字再傳給雲端 AI；內容摘錄只出現在 CLI 預覽）。實際清除只有 `emlek purge r<id> [r<id> …]`（一次最多 20 個明確編號，沒有標籤、日期、批次選擇器），走 `INTERACTIVE_ONLY` ＋ `PIN_REQUIRED` 新操作 `purge`；沒有任何啟用中的 `purge` 語句時一律拒絕（fail closed）。
 - **流程**：真人終端機 → PIN → 預覽（含內容摘錄、連帶移除的衍生記錄、**保留但可能提到此內容的 `original` 記錄清單**、會移除的標籤）→ 固定句式「是否要從資料庫中完全刪除這筆資料？是 / 否（此操作無法再回復）」→ 答「是」→ 在交易內重算**指紋**（記錄、版本、連結、標籤編號）並與預覽比對，不同就中止並要求重跑（防止預覽後 AI 修改、補連結）；含糊或「否」不執行。第一個不可逆動作在「是」之後。
 - **連帶範圍**：被清除版本的衍生記錄＝所有 `kind` 為 `ai_summary` 或 `inference`、與被清除版本有**任何** relation（含空 relation、`supports`、`supplements`）連結者，遞移追蹤。`original` 記錄**永不連帶刪除**，只在預覽列出。
 - **單一交易（`secure_delete=ON` 先設定，`BEGIN IMMEDIATE`）**，僅供 `purge.py` 設定的連線層旗標暫時放行不可變觸發器；刪除順序：兩個方向的 `links` → `record_tags` → 該記錄建立且清除後使用次數為 0 的標籤（含 `tag_aliases`、`tag_links`、`tags_fts` 列，以及所有提到它們的 `tag_events`；其他變成未使用的標籤只列出）→ 涉及該記錄的 `tag_events` → `import_log`（`file_name` 改成 `purged:<log id>`、`record_id` 清空、`purged=1`，**保留 `content_hash` 當防復活守衛**）→ 符合的與已用／過期的 `confirm_tokens` → `revisions` → `records`；對 `revisions_fts` 與 `tags_fts` 執行 `optimize`（FTS 完整性檢查失敗則改 `rebuild`）；斷言刪除筆數等於預覽；寫 `purge_log`；設 `meta.purge_scrub_pending=1`；提交。
@@ -57,10 +57,10 @@
 | `amend` | 為既有記錄新增版本；重新掃描敏感內容並取較高等級；MCP回傳最終tags，空陣列表示目前無標籤 |
 | `search` | 見下方「搜尋規則」 |
 | `get` | 讀取指定記錄與版本；回傳 `status`、`invalidated`、`superseded_by`、`linked_from`、`links_out`；隱藏的記錄對 MCP 一律回 `NOT_FOUND`；只有 CLI `--include-hidden` 可讀；長內容分段（`offset`）；敏感度上限見 [SECURITY](SECURITY.md) |
-| `hide`／`unhide` | 隱藏與恢復（冪等；回傳被連帶失效的衍生記錄） |
+| `hide` | 隱藏（冪等；回傳被連帶失效的衍生記錄）。MCP 沒有 `unhide`，恢復只在使用者終端機（D103） |
 | `purge_preview` | 唯讀預覽徹底清除的範圍，只回中繼資料不回內容（實際清除只有 CLI `emlek purge`） |
 | `phrases_list` | 唯讀取得啟用語句（依 `kind` 分組） |
-| `stats` | 唯讀：記錄數（不含隱藏）、隱藏數、版本數、最早與最晚日期、上次備份時間 |
+| `stats` | 唯讀：記錄數（不含隱藏）、版本數、最早與最晚日期、上次備份時間；隱藏數只給 CLI，AI 看到的版本數與日期只算可見記錄（D103） |
 | 標籤工具 | `set_tags`、`tags_find`、`tags_list`（含階層目錄與共現）、`tag_link`、`tag_alias`，見 [DESIGN_TAGS](../DESIGN_TAGS.md)「M7 規格」 |
 
 僅 CLI（不開放 MCP）：`init`、`doctor`、`reindex`、`mcp`（啟動 MCP 伺服器）、`backup`、`restore`、`export`、`import`、`purge`、`pin set·change·reset`、`notice status·enable`、`sensitivity set`、`phrase add·set·remove`，以及標籤的 `tag merge·remove`、`tags audit`。

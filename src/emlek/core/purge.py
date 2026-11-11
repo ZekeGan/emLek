@@ -19,7 +19,7 @@ from typing import Any
 
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
-from emlek.core.permissions import Caller, Channel, require
+from emlek.core.permissions import Caller, Channel, require, sees_hidden
 from emlek.core.refs import parse_ref
 from emlek.core.timeutil import utc_now_iso
 
@@ -190,12 +190,25 @@ def preview(
     require(caller, "purge_preview")
     text = with_text and caller.channel is Channel.CLI
     conn = db.conn
-    plan = build_plan(conn, parse_refs(refs))
+    asked = parse_refs(refs)
+    if not sees_hidden(caller):  # D103: to an AI a hidden note is gone, worded like a missing one
+        gone = [
+            i
+            for i in asked
+            if (row := conn.execute("SELECT hidden FROM records WHERE id = ?", (i,)).fetchone())
+            is None
+            or row[0]
+        ]
+        if gone:
+            raise EmlekError(ErrorCode.NOT_FOUND, "找不到記錄：" + "、".join(f"r{i}" for i in gone))
+    plan = build_plan(conn, asked)
     items = []
     for record_id in plan.records:
         created, hidden = conn.execute(
             "SELECT created_at, hidden FROM records WHERE id = ?", (record_id,)
         ).fetchone()
+        if hidden and not sees_hidden(caller):
+            continue
         versions, kind = conn.execute(
             "SELECT count(*), max(kind) FROM revisions WHERE record_id = ?", (record_id,)
         ).fetchone()
@@ -214,6 +227,19 @@ def preview(
             ).fetchone()[0]
             item["excerpt"] = body[:EXCERPT_CHARS].replace("\n", " ")
         items.append(item)
+    if not sees_hidden(caller):
+        # The plan may include hidden derivatives; an AI gets only what it can already see, so
+        # whole-plan counts (links, tags) stay in the terminal preview (D103).
+        return {
+            "records": items,
+            "revisions": sum(int(item["versions"]) for item in items),
+            "kept_originals_that_may_mention_this": [
+                f"r{i}"
+                for i in plan.kept
+                if not conn.execute("SELECT hidden FROM records WHERE id = ?", (i,)).fetchone()[0]
+            ],
+            "purge_enabled": purge_enabled(conn),
+        }
     result: dict[str, Any] = {
         "records": items,
         "revisions": len(plan.revisions),

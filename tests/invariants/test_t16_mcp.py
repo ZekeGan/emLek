@@ -102,7 +102,6 @@ def test_tool_lists_follow_the_permission_table(data_dir: Path) -> None:
         "save",
         "amend",
         "hide",
-        "unhide",
         "get",
         "search",
         "stats",

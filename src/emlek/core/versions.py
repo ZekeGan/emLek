@@ -13,7 +13,7 @@ from typing import Any
 
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
-from emlek.core.permissions import Caller, require
+from emlek.core.permissions import Caller, require, sees_hidden
 from emlek.core.refs import parse_ref
 from emlek.core.timeutil import utc_now_iso
 
@@ -160,14 +160,18 @@ def linked_from(
     return items, len(rows) > MAX_LINKED_FROM
 
 
-def links_out(conn: sqlite3.Connection, revision_id: int) -> list[dict[str, Any]]:
+def links_out(
+    conn: sqlite3.Connection, revision_id: int, *, include_hidden: bool = True
+) -> list[dict[str, Any]]:
+    """Where a revision points. An AI reader never sees links to hidden notes (D103)."""
     return [
         {"ref": f"r{rec}", "revision_ref": f"r{rec}.v{ver}", "relation": relation}
         for rec, ver, relation in conn.execute(
             "SELECT tr.record_id, tr.version_no, l.relation FROM links l"
             " JOIN revisions tr ON tr.id = l.derived_from_revision_id"
-            " WHERE l.revision_id = ? ORDER BY l.id",
-            (revision_id,),
+            " JOIN records rec ON rec.id = tr.record_id"
+            " WHERE l.revision_id = ? AND (? OR rec.hidden = 0) ORDER BY l.id",
+            (revision_id, 1 if include_hidden else 0),
         )
     ]
 
@@ -249,7 +253,7 @@ def _set_hidden(db: Database, caller: Caller, ref: str, *, hide: bool) -> dict[s
     now = utc_now_iso()
     with db.transaction() as conn:
         row = conn.execute("SELECT hidden FROM records WHERE id = ?", (record_id,)).fetchone()
-        if row is None:
+        if row is None or (row[0] and not sees_hidden(caller)):
             raise EmlekError(ErrorCode.NOT_FOUND, "找不到這筆記錄")
         changed = bool(row[0]) != hide
         if changed:
@@ -257,7 +261,12 @@ def _set_hidden(db: Database, caller: Caller, ref: str, *, hide: bool) -> dict[s
                 "UPDATE records SET hidden = ?, hidden_at = ? WHERE id = ?",
                 (1 if hide else 0, now if hide else None, record_id),
             )
-        affected = derivatives_of(conn, record_id)
+        affected = [
+            rid
+            for rid in derivatives_of(conn, record_id)
+            if sees_hidden(caller)
+            or not conn.execute("SELECT hidden FROM records WHERE id = ?", (rid,)).fetchone()[0]
+        ]
     _log.info("%s record=%d changed=%s", "hide" if hide else "unhide", record_id, changed)
     return {
         "ref": f"r{record_id}",

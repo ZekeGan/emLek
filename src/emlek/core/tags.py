@@ -19,7 +19,7 @@ from emlek.core import sensitivity as scanner
 from emlek.core import versions
 from emlek.core.db import Database
 from emlek.core.errors import EmlekError, ErrorCode
-from emlek.core.permissions import Caller, Channel, require
+from emlek.core.permissions import Caller, Channel, require, sees_hidden
 from emlek.core.refs import parse_ref
 from emlek.core.timeutil import utc_now_iso
 
@@ -438,7 +438,8 @@ def set_tags(
     record_id, _ = parse_ref(ref)
     actor = actor_for(caller)
     with db.transaction() as conn:
-        if conn.execute("SELECT 1 FROM records WHERE id = ?", (record_id,)).fetchone() is None:
+        found = conn.execute("SELECT hidden FROM records WHERE id = ?", (record_id,)).fetchone()
+        if found is None or (found[0] and not sees_hidden(caller)):
             raise EmlekError(ErrorCode.NOT_FOUND, "找不到這筆記錄")
         applied, pending = attach(conn, record_id, add or [], actor=actor, allow_new=allow_new)
         removed = detach(conn, record_id, remove or [], actor)

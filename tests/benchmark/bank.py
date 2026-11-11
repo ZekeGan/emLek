@@ -118,7 +118,7 @@ SPECS: dict[str, Spec] = {
         "tags",
     ),
     "Q36": Spec(
-        "過去一週內到期但還沒完成的事有哪些",
+        "到昨天為止，過去一週內到期但還沒完成的事有哪些",
         facts("todo_overdue"),
         "set",
         "tags",
@@ -267,7 +267,7 @@ VAGUE_QUESTIONS = {
     "Q83": ("我吃過哪些甜點", "vague_sweets"),
     "Q84": ("我買過什麼電子產品", "vague_gadget"),
     "Q85": ("我看過什麼電影", "vague_film"),
-    "Q86": ("我有沒有花很多錢買東西", "vague_spend"),
+    "Q86": ("我有沒有亂花錢", "vague_spend"),
     "Q87": ("我學過哪些樂器", "vague_instrument"),
     "Q88": ("我跟家人有什麼互動", "vague_family"),
     "Q89": ("我有沒有為了工作煩惱", "vague_worry"),

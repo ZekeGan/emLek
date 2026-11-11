@@ -42,8 +42,11 @@ from emlek.mcp_server.rules import prompt_for
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "benchmark-output"
 EMLEK_EXE = ROOT / ".venv" / "Scripts" / "emlek.exe"
+PYTHON_EXE = ROOT / ".venv" / "Scripts" / "python.exe"
 RULES = prompt_for(read_only=False)
-TODAY_NOTE = "（今天是 2026-11-01，時區 UTC+9。）"
+# The answers are fixed to this day. The MCP clock is pinned to it (clock_mcp.py); the host's own
+# date cannot be, so the note says which one wins.
+TODAY_NOTE = "（今天是 2026-11-01，時區 UTC+9；此為測試設定，日期以此為準。）"
 
 
 def tool_names(*, read_only: bool, allow_record_changes: bool = False) -> list[str]:
@@ -77,7 +80,9 @@ def claude_exe() -> str:
 
 def write_config(vault: Path, name: str, *, read_only: bool) -> Path:
     args = ["--data-dir", str(vault), "mcp", *(["--read-only"] if read_only else [])]
-    config = {"mcpServers": {"emlek": {"command": str(EMLEK_EXE), "args": args}}}
+    # clock_mcp pins the server's reference time to the bank's day (see TODAY_NOTE).
+    launcher = [str(Path(__file__).with_name("clock_mcp.py")), *args]
+    config = {"mcpServers": {"emlek": {"command": str(PYTHON_EXE), "args": launcher}}}
     path = OUT / f"mcp-{name}.json"
     path.write_text(json.dumps(config), encoding="utf-8")
     return path

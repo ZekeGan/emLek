@@ -197,7 +197,7 @@ def test_vague_questions_are_answered_by_records_that_never_use_the_question_wor
         "vague_sweets": ("甜點", "點心", "dessert"),
         "vague_gadget": ("電子", "產品", "gadget"),
         "vague_film": ("電影", "movie", "film"),
-        "vague_spend": ("花很多錢", "買東西", "spend"),
+        "vague_spend": ("亂花錢", "花錢", "spend"),
         "vague_instrument": ("樂器", "instrument"),
         "vague_family": ("家人", "family"),
         "vague_worry": ("煩惱", "工作"),

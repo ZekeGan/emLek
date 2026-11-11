@@ -68,6 +68,7 @@ def test_backup_then_restore_into_a_clean_folder_is_identical(
     init_vault(PERSON, clean)
     result = restore_backup(PERSON, clean, backup)
     assert (result["records"], result["revisions"]) == (6, 6)
+    assert not list(clean.glob("emlek.db.restoring*"))  # no orphaned staging sidecars
 
     original, restored = _rows(populated.path), _rows(load_config(clean).db_path)
     assert restored["records"] == original["records"]

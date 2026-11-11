@@ -303,6 +303,9 @@ def restore_backup(
         for original, destination in reversed(moved):
             os.replace(destination, original)
         raise
+    # SQLite never reads the staged name's sidecars again once the file is renamed.
+    for leftover in _sidecars(staged):
+        leftover.unlink(missing_ok=True)
     return {
         "restored_from": str(restored_from or source),
         "records": result["records"],

@@ -355,7 +355,8 @@ VAGUE = {
     ),
     "vague_worry": (
         ("2025-05-08", "上司に企画を却下されて落ち込んだ"),
-        ("2025-10-14", "專案進度落後，壓力很大"),
+        # 2026, not 2025 H2: Q80 asks for last year's second-half anxiety (W04 bank audit).
+        ("2026-01-14", "專案進度落後，壓力很大"),
         ("2026-08-11", "Worried about the deadline for the quarterly report"),
     ),
 }

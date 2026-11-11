@@ -371,6 +371,8 @@ def get(
     """Read one revision. `max_chars` (set by the MCP adapter) cuts long bodies; read the rest
     with `offset`."""
     require(caller, "get")
+    if include_hidden:
+        require(caller, "read_hidden")
     record_id, ref_version = parse_ref(ref)
     wanted = version if version is not None else ref_version
     if wanted is not None and wanted < 1:

@@ -4,14 +4,15 @@
 
 ## 進行中
 
+- **W04** 後續驗證｜領域：tags,security,quality
+  M7 標籤／M10 核心完整交叉審查；全題庫每題三次、T29 無標點命令句及 Codex 沙箱探針。已完成的同意碼審查不重列，未做不得標通過。其餘方向見 ROADMAP，不進 M11。
+  使用者要求設計解法並用Codex免費版測試。
+
 ## 待驗收
+
+- **W03** AI不讀隱藏內容｜領域：security
+  D103：MCP移除include_hidden，非CLI拒絕。缺口：可寫MCP可unhide再get，待決定。
 
 ## 待決定
 
-- **W03** 隱藏內容查詢權限｜領域：security
-  既有 include_hidden=true 可讀隱藏片段；是否保留待使用者決定，本批不改安全邊界。
-
 ## 待排程
-
-- **W04** 後續驗證｜領域：tags,security,quality
-  M7 標籤／M10 核心完整交叉審查；全題庫每題三次、T29 無標點命令句及 Codex 沙箱探針。已完成的同意碼審查不重列，未做不得標通過。其餘方向見 ROADMAP，不進 M11。

@@ -112,9 +112,7 @@ def test_invalidated_content_is_withheld_from_ai(
     ai = Caller(channel)
     for ref in (derived, meta):
         for version in (None, 1):
-            result = service.get(
-                db, ai, ref=ref, version=version, offset=1, include_hidden=True, max_chars=1
-            )
+            result = service.get(db, ai, ref=ref, version=version, offset=1, max_chars=1)
             assert result["invalidated"] and result["content_withheld"]
             assert set(result) == {
                 "ref",
@@ -195,3 +193,23 @@ def test_hidden_records_are_not_counted_in_the_summary(db: Database, caller: Cal
 
 def versions_threshold() -> int:
     return search.AGGREGATE_THRESHOLD
+
+
+@pytest.mark.parametrize("channel", [Channel.MCP, Channel.MCP_READONLY])
+def test_ai_cannot_read_hidden_notes(db: Database, channel: Channel) -> None:
+    """W03: hidden notes stay readable only in the user's own terminal."""
+    person = Caller(Channel.CLI)
+    ref = str(service.save(db, person, body="隠したい記録 京都")["ref"])
+    versions.hide(db, person, ref=ref)
+    ai = Caller(channel)
+    with pytest.raises(EmlekError) as found:
+        search.search(db, ai, query="京都", include_hidden=True)
+    assert found.value.code == ErrorCode.NOT_PERMITTED
+    with pytest.raises(EmlekError) as read:
+        service.get(db, ai, ref=ref, include_hidden=True)
+    assert read.value.code == ErrorCode.NOT_PERMITTED
+    with pytest.raises(EmlekError) as plain:
+        service.get(db, ai, ref=ref)
+    assert plain.value.code == ErrorCode.NOT_FOUND
+    assert ref in _refs(db, person, "京都", include_hidden=True)
+    assert service.get(db, person, ref=ref, include_hidden=True)["hidden"] is True

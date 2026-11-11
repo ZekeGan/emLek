@@ -37,6 +37,7 @@ PERMISSIONS: dict[str, frozenset[Channel]] = {
     "hide": _WRITERS,
     "unhide": _WRITERS,
     "get": _ANY,
+    "read_hidden": _CLI,  # W03: hidden notes are read only in the user's own terminal
     "search": _ANY,
     "reindex": _CLI,
     "mcp": _CLI,

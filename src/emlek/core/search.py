@@ -460,6 +460,8 @@ def search(
     compact: bool = False,
 ) -> dict[str, Any]:
     require(caller, "search")
+    if include_hidden:
+        require(caller, "read_hidden")
     alternatives = parse_alternatives(query)
     terms = parse_terms(query)
     if kinds is not None and (not kinds or any(k not in KINDS for k in kinds)):

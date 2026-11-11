@@ -317,9 +317,7 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
     def unhide(ref: str) -> dict[str, Any]:
         return run("unhide", lambda db: versions.unhide(db, caller, ref=ref))
 
-    def get(
-        ref: str, version: int | None = None, include_hidden: bool = False, offset: int = 0
-    ) -> dict[str, Any]:
+    def get(ref: str, version: int | None = None, offset: int = 0) -> dict[str, Any]:
         return run(
             "get",
             lambda db: service.get(
@@ -327,7 +325,6 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
                 caller,
                 ref=ref,
                 version=version,
-                include_hidden=include_hidden,
                 offset=offset,
                 max_chars=MAX_GET_CHARS,
                 max_sensitivity=default_cap,
@@ -354,7 +351,6 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
         limit: int = 20,
         cursor: str | None = None,
         all_versions: bool = False,
-        include_hidden: bool = False,
         current_only: bool = False,
         max_sensitivity: Sensitivity | None = None,
         tags: list[str] | None = None,
@@ -380,7 +376,6 @@ def build_server(data_dir: Path, *, read_only: bool) -> MCPServer:
                     limit=min(limit, MAX_SEARCH_LIMIT),
                     cursor=cursor,
                     all_versions=all_versions,
-                    include_hidden=include_hidden,
                     current_only=current_only,
                     tags=tags,
                     match=match,

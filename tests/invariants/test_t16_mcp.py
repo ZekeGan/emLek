@@ -49,7 +49,6 @@ SEARCH_PARAMS = {
     "limit",
     "cursor",
     "all_versions",
-    "include_hidden",
     "current_only",
     "max_sensitivity",
     "tags",
@@ -145,7 +144,6 @@ def test_tool_contracts_are_stable(data_dir: Path) -> None:
     assert get_schema["required"] == ["ref"] and set(get_schema["properties"]) == {
         "ref",
         "version",
-        "include_hidden",
         "offset",
     }
     assert not tools["stats"].input_schema.get("properties")

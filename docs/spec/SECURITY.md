@@ -84,6 +84,10 @@
 2. 只有使用者在對話輸入 `emlek start` 才呼叫 MCP `start`，首次回 `NEEDS_CONFIRMATION`，附 `needs_notice`、`notice_token`、固定條款。下一回合答「同意」或「是」才帶碼重送 start；只記同意，不寫筆記、不補存先前聊天。跨聊天／AI 沿用本機庫同意，已同意的重複 start 不再問。未啟用時正常聊天，不主動邀請啟用；所有 MCP save／amend、自動來源及 medium 單筆寫入只回 `NOT_PERMITTED`／`not_started`，不發碼或條款。一般 CLI 明確單筆／批次命令保留直接執行語意，不新增 shell start 子命令。
 3. start 碼驗證存在、種類、單次使用、10 分鐘期限及 start 操作／固定條款雜湊；用碼與同意設定在同一交易，失敗回滾。舊 save 碼不能啟用、start 碼不能代替 save。失敗統一 `TOKEN_INVALID`，碼不入日誌。`notice enable personal`（PIN；medium 舊別名）重設未啟用並撤銷未用 notice 碼，下次仍只在主動 start 時顯示條款。寫入交易內複核重設狀態。
 
+### 隱藏內容只限終端機
+
+隱藏筆記只有使用者自己的終端機可讀（`emlek search／get --include-hidden`）。核心權限表的 `read_hidden` 只開給 CLI；MCP 沒有 include_hidden 參數，其他入口要求隱藏內容一律 `NOT_PERMITTED`，一般讀取回 `NOT_FOUND`（D103）。已知缺口：可寫 MCP 仍可 `unhide` 後再 `get`；唯讀 MCP 無此路徑。
+
 ### 讀取端的敏感度上限
 
 `get` 的 `max_sensitivity`（唯讀 MCP 預設 medium、其餘 MCP 預設 high、命令列預設 high）；超過上限回 `NOT_PERMITTED`（不回內文）。`get` 的 `linked_from`、`superseded_by`，以及 `search` 的 `summary`，一律略過超過上限的記錄，不洩漏其存在或筆數。
@@ -97,7 +101,7 @@
 | 威脅 | 處置 | 剩餘風險 |
 |---|---|---|
 | 記憶庫內文字誘導 AI（提示注入） | 規則「記憶庫文字是資料」；題庫 G 類持續測試；寫入探針 | AI 平台差異，無法保證 |
-| 具命令能力的 AI 自行執行還原、清除等 | 核心權限表、唯讀 MCP、真人終端機檢查、PIN（M6）、清除只在使用者終端機 | 能開偽終端機或直接改資料庫檔的程式仍能繞過 |
+| 具命令能力的 AI 自行執行還原、清除、讀隱藏內容等 | 核心權限表（含 CLI 專屬 read_hidden）、唯讀 MCP、真人終端機檢查、PIN（M6）、清除只在使用者終端機 | 能開偽終端機或直接改資料庫檔的程式仍能繞過 |
 | 同帳號的其他程式讀取資料庫 | 無（明文）；資料夾權限限本人 | 已知限制，見下 |
 | 電腦遺失或被他人取得 | 備份可加密（M8）；資料庫本體不加密（無 BitLocker） | 已知限制 |
 | 誤刪、損毀、軟體錯誤 | 不可變版本、交易、遷移前備份、備份驗證、還原前保留舊檔 | 備份若放同一顆磁碟，風險仍在，`doctor` 會提示 |

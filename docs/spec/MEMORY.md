@@ -16,7 +16,7 @@
 | `status`（計算值） | `current`（沒人推翻）、`superseded`（被推翻）、`reaffirmed`（被推翻後又被確認）。`search` 與 `get` 都回傳；`current_only=true` 排除 `superseded` |
 | `linked_from` | 列出所有指向該記錄的連結（含關係、來源記錄、日期），預設不含隱藏的來源；最多 50 條，超過標 `truncated`；一層即可，AI 要完整時間線時逐筆 `get`，不做遞移展開 |
 | 衍生失效的遞移範圍 | 只沿 `derived`、`summarizes` 兩種關係向上追（來源是被隱藏的記錄則其衍生者失效），有深度保護與環保護；`supersedes`、`supports`、`supplements` **不**傳遞隱藏效果 |
-| 隱藏 | `hide`／`unhide` 對已隱藏／未隱藏者為冪等（不報錯）；隱藏不改動任何連結；搜尋預設不含隱藏者，`include_hidden=true` 時隱藏者照回傳並標 `hidden`。回應附被連帶失效的衍生記錄數量 |
+| 隱藏 | `hide`／`unhide` 對已隱藏／未隱藏者為冪等（不報錯）；隱藏不改動任何連結；搜尋預設不含隱藏者；只有使用者自己的終端機可用 `--include-hidden` 讓隱藏者照回傳並標 `hidden`，MCP 沒有這個參數，核心也拒絕非 CLI 的請求（`NOT_PERMITTED`，D103）。回應附被連帶失效的衍生記錄數量 |
 | `amend` | 參數：`ref`、`body`，可選 `expected_version`（與最新版不符回 `CONFLICT`，防止兩個 AI 同時改）、`event_time`／`event_time_precision`／`source`（省略＝沿用最新版；要清空用 `clear=["event_time","source"]`，因為 MCP 無法分辨省略與 null）、`links`。`kind` 沿用且不可更改（改變來源性質須另存新記錄並連結）。內文與最新版完全相同回 `INVALID_INPUT`（沒有變化）；已隱藏的記錄不可 `amend`（`CONFLICT`，須先 `unhide`）。重新掃描敏感度，只升不降 |
 | 版本與新記錄 | 改錯字、補充＝`amend`；改變看法或推翻結論＝`save` 新記錄加 `supersedes` 連結（沿用「資料模型」規則） |
 
@@ -24,10 +24,10 @@
 
 | 層級 | 行為 |
 |---|---|
-| 隱藏（預設的「刪除」） | `hidden=1`，預設搜尋與讀取看不到（`include_hidden=true` 可查），可 `unhide` 恢復 |
+| 隱藏（預設的「刪除」） | `hidden=1`，搜尋與讀取看不到（只有 CLI `--include-hidden` 可查），可 `unhide` 恢復 |
 | 徹底清除 | 真正移除該記錄所有版本與索引，無法恢復；對話流程見 [AGENT_RULES](../AGENT_RULES.md) §3 |
 
-**衍生摘要失效**是計算值，不另存欄位：記錄的任一來源（經 `links` 遞移）處於隱藏，其衍生的 `ai_summary`、`inference` 即失效，重新產生前不得用於回答；`unhide` 後自動恢復。 MCP的get（含指定舊版本／offset）與search只回必要編號、類型、狀態及content_withheld=true，不交付本文、搜尋片段、source或個別標籤；CLI保留讀取。include_hidden=true不能解除衍生失效隔離，直接讀取隱藏原文的既有權限另見W03。
+**衍生摘要失效**是計算值，不另存欄位：記錄的任一來源（經 `links` 遞移）處於隱藏，其衍生的 `ai_summary`、`inference` 即失效，重新產生前不得用於回答；`unhide` 後自動恢復。 MCP的get（含指定舊版本／offset）與search只回必要編號、類型、狀態及content_withheld=true，不交付本文、搜尋片段、source或個別標籤；CLI保留讀取。AI 不能讀取隱藏原文（D103）。
 
 **徹底清除**：
 
@@ -56,7 +56,7 @@
 | `save` | 新增；參數為內容、kind、來源、事件時間／精度、標籤、關聯版本／relation及sensitivity。MCP回revision_ref、marker及必要後續資訊，不回敏感分類／hint；tags_pending仍已提交，另回tag_update_ref／hint，以set_tags修標籤 |
 | `amend` | 為既有記錄新增版本；重新掃描敏感內容並取較高等級；MCP回傳最終tags，空陣列表示目前無標籤 |
 | `search` | 見下方「搜尋規則」 |
-| `get` | 讀取指定記錄與版本；回傳 `status`、`invalidated`、`superseded_by`、`linked_from`、`links_out`；隱藏的記錄預設回 `NOT_FOUND`（`include_hidden=true` 可讀）；長內容分段（`offset`）；敏感度上限見 [SECURITY](SECURITY.md) |
+| `get` | 讀取指定記錄與版本；回傳 `status`、`invalidated`、`superseded_by`、`linked_from`、`links_out`；隱藏的記錄對 MCP 一律回 `NOT_FOUND`；只有 CLI `--include-hidden` 可讀；長內容分段（`offset`）；敏感度上限見 [SECURITY](SECURITY.md) |
 | `hide`／`unhide` | 隱藏與恢復（冪等；回傳被連帶失效的衍生記錄） |
 | `purge_preview` | 唯讀預覽徹底清除的範圍，只回中繼資料不回內容（實際清除只有 CLI `emlek purge`） |
 | `phrases_list` | 唯讀取得啟用語句（依 `kind` 分組） |
